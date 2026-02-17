@@ -103,3 +103,25 @@ RDF/Turtle format. Chinese high school biology curriculum.
 - Character span annotations `[[start, end]]` for textbook mentions
 
 **material.ttl** (3.6M) — related educational materials.
+
+### data/lcsh/ — Library of Congress Subject Headings (1 gzipped N-Triples file)
+
+~512,000 SKOS concepts spanning all fields of knowledge, curated by the Library of Congress. Downloaded from https://id.loc.gov/download/.
+
+**subjects.skosrdf.nt.gz** (95M compressed, ~1GB decompressed) — N-Triples RDF. Each subject heading is a `skos:Concept` with:
+- `skos:prefLabel` — canonical English label
+- `skos:altLabel` — variant forms
+- `skos:broader` / `skos:narrower` — hierarchical relations (~300k broader links)
+- `skos:related` — associative relations
+- `skos:inScheme` — all belong to `<http://id.loc.gov/authorities/subjects>`
+- `skos:changeNote` — provenance/revision metadata via blank nodes
+
+URI pattern: `http://id.loc.gov/authorities/subjects/sh{id}`
+
+### data/dbpedia/ — DBpedia Category Hierarchy (2 bzip2 Turtle files)
+
+Wikipedia's category graph extracted by DBpedia (2016-10 release). Downloaded from https://downloads.dbpedia.org/2016-10/core-i18n/en/.
+
+**skos_categories_en.ttl.bz2** (44M compressed) — ~1.47M SKOS categories with ~3.08M `skos:broader` edges. Each category is a `skos:Concept` with `skos:prefLabel` and `skos:broader` links to parent categories. URI pattern: `http://dbpedia.org/resource/Category:{Name}`
+
+**article_categories_en.ttl.bz2** (225M compressed) — maps Wikipedia articles to categories via `dcterms:subject`. URI pattern: `http://dbpedia.org/resource/{Article_Name}` → `http://dbpedia.org/resource/Category:{Category_Name}`
