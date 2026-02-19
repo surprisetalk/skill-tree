@@ -52,20 +52,6 @@ Key files:
 ```
 Top-level also has `attributions` array.
 
-### data/mooccubex/ — MOOCCubeX Concept Relations (3 JSONL files)
-
-CS/math/psychology concept-pair prerequisite predictions from Tsinghua. Files: `cs.json`, `math.json`, `psy.json`. One JSON object per line:
-```json
-{
-  "c1": "操作命令",
-  "c2": "重新启动",
-  "ground_truth": 1,
-  "text_predict": [0.015, 0.985],
-  "graph_predict": [0.003, 0.997]
-}
-```
-Concepts are in Chinese. `ground_truth`: 0=no relation, 1=prerequisite. `text_predict`/`graph_predict`: [P(no_relation), P(relation)].
-
 ### data/lecturebank/ — LectureBank NLP Education (6 files)
 
 - **lecturebank.tsv** — `ID, Title, URL, Topic_ID, Year, Author, Domain, Venue`. 1,352 lectures; domains: nlp, ml, ai, dl, ir
@@ -90,19 +76,6 @@ Maps 3M+ course syllabi to O*NET categories. Key files:
 - **top10_DWA_per_FOS.csv** — top 10 Detailed Work Activities per Field of Study
 - **field_name_and_code.csv** — field of study classification codes
 - **institution_fos_year.gzip** — institution × field × year data
-
-### data/edukg/ — Educational Knowledge Graph (2 TTL files)
-
-RDF/Turtle format. Chinese high school biology curriculum.
-
-**main.ttl** (16M) — namespace `http://edukg.org/knowledge/3.0/`. Entities have:
-- `rdfs:label` (Chinese name)
-- Class type (C82=concept, C262=tools, C69=cell types, C77=genetics)
-- Properties linking to XLore/Wikipedia instances
-- `ns1:temp` JSON metadata: ISBN, book, chapter, section, paragraph
-- Character span annotations `[[start, end]]` for textbook mentions
-
-**material.ttl** (3.6M) — related educational materials.
 
 ### data/lcsh/ — Library of Congress Subject Headings (1 gzipped N-Triples file)
 
