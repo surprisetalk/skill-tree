@@ -1,0 +1,5 @@
+* "Proof of the theorem":brouwers_fixed_point_theorem_proof
+* Some consequences of the theorem:
+** Every finite standard form game "has at least one Nash equilibrium":existence_of_nash_equilibrium.
+** Loopy belief propagation in a discrete graphical model "has at least one fixed point":loopy_bp_as_variational.
+ 

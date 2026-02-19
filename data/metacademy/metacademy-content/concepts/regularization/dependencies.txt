@@ -1,0 +1,11 @@
+tag: ridge-regression
+reason: Ridge regression is an instructive example of regularization.
+
+tag: lasso
+reason: LASSO is an instructive example of regularization.
+
+tag: optimization-problems
+reason: Regularized learning algorithms are usually formulated as optimization problems.
+
+tag: generalization
+reason: Regularization is a strategy for improving generalization performance.

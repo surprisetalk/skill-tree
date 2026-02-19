@@ -1,0 +1,2 @@
+* Orthogonal matrices can be characterized in terms of "eigenvalues":eigenvalues_and_eigenvectors having unit norm. 
+* Orthogonal matrices are used in the "spectral decomposition":spectral_decomposition of a symmetric matrix.

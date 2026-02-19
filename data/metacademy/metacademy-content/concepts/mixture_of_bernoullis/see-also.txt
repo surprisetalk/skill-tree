@@ -1,0 +1,4 @@
+* Other clustering methods include:
+** "mixture of Gaussians":gaussian_mixtures_vs_k_means, a probabilistic model for continuous data
+** "mixture of Bernoullis":mixture_of_bernoullis, a probabilistic model for discrete data
+** "spectral clustering":spectral_clustering, for when the clusters don't have nice convex shapes

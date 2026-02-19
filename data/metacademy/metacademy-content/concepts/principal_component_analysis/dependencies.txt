@@ -1,0 +1,8 @@
+tag: covariance-matrices
+reason: PCA is defined in terms of the covariance matrix.
+
+tag: spectral-decomposition
+reason: PCA is defined in terms of the spectral decomposition of the covariance matrix.
+
+tag: singular-value-decomposition
+reason: PCA can be seen as the truncated SVD of the covariance matrix.

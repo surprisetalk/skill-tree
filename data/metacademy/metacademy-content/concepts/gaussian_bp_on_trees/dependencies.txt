@@ -1,0 +1,9 @@
+tag: gaussian-mrfs
+reason: Gaussian BP is an inference algorithm for Gaussian graphical models
+
+tag: computations-on-multivariate-gaussians
+reason: Gaussian BP is defined in terms of common operations on multivariate Gaussians.
+
+tag: sum-product-on-trees
+
+tag: max-product-on-trees

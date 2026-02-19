@@ -1,0 +1,28 @@
+source: wolfram
+url: http://mathworld.wolfram.com/Vector.html      
+
+source: khan_academy_linear_algebra
+location: Lecture sequence "Vectors"  [https://www.khanacademy.org/math/linear-algebra/vectors_and_spaces/vectors] 
+location: Lecture "Linear combinations and spans" [https://www.khanacademy.org/math/linear-algebra/vectors_and_spaces/linear_combinations]
+core: 1
+
+source: strang
+edition: 4
+location: Section 1.1, pages 2-6
+core: 1
+
+source: beezer
+edition: 3
+location: Section "Vector operations" [section-VO.html]
+location: Section "Linear combinations" [section-LC.html]
+location: Section "Spanning sets" [section-SS.html]
+dependencies: linear_systems_as_matrices
+
+source: ocw_strang
+location: Lecture "The geometry of linear equations" [http://ocw.mit.edu/courses/mathematics/18-06sc-linear-algebra-fall-2011/ax-b-and-the-four-subspaces/the-geometry-of-linear-equations/]
+location: Lecture "An overview of key ideas" [http://ocw.mit.edu/courses/mathematics/18-06sc-linear-algebra-fall-2011/ax-b-and-the-four-subspaces/an-overview-of-key-ideas/]
+
+source: shifrin
+edition: 1
+location: Section 1.1, "Vectors in R^n", pages 1-6
+core: 1

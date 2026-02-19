@@ -1,0 +1,12 @@
+* We often want to do one of the following in Gaussian MRFs:
+** "answer conditional probability queries":inference_in_gaussian_mrfs
+** "learn the parameters":gaussian_mrf_parameter_learning
+* There are also "Gaussian Bayes nets":linear_gaussian_models, and the structure shows up in the Cholesky factorization of the covariance matrix.
+* Important special cases include
+** "Gauss-Markov processes":gauss_markov_processes
+** "grid-structured Gaussian MRFs":grid_structured_gaussian_mrfs
+* Gaussian conditional random fields (CRFs) are "useful in low-level image processing":crfs_image_processing.
+* Many algorithms which are inefficient or inexact for general MRFs are efficient and exact for Gaussian MRFs. Examples include:
+** inferring the mean with "loopy belief propagation":gaussian_loopy_belief_propagation
+** "learning the parameters:gaussian_mrf_parameter_learning
+

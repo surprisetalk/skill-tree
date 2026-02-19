@@ -1,0 +1,14 @@
+* Some techniques for estimating generalization error include:
+** "Cross-validation":cross_validation, a simple and widely applicable technique
+** The "Akaike information criterion":akaike_information_criterion (for probabilistic models)
+** The "C_p statistic":cp_statistic (for linear regression)
+* Here are some general strategies for controlling overfitting:
+** "model selection":model_selection
+** "feature selection":feature_selection
+** "regularization":regularization
+* Some theoretical concepts useful for understanding generalization include:
+** For linear regression, generalization error can be determined analytically, and "breaks down exactly into a sum of bias and variance terms":bias_variance_decomposition". This provides a useful intuition for other models as well.
+** "Probably Approximately Correct (PAC) learning":pac_learning, which analyzes whether an algorithm usually learns a good-enough model
+** "VC dimension":vc_dimension, a quantity which characterizes the complexity of a continuously-parameterized model
+** "Structural risk minimization":structural_risk_minimization, a way of controlling overfitting by defining a nested sequence of models of increasing complexity
+

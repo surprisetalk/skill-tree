@@ -1,0 +1,7 @@
+* We can answer conditional probability queries using:
+** "variable elimination":gaussian_variable_elimination
+** "belief propagation":gaussian_bp_on_trees
+* We can "learn the parameters":learning_linear_gaussian_models in a linear-Gaussian model using "linear regression":linear_regression.
+* "State-space models":linear_dynamical_systems are an important example of linear-Gaussian models. 
+* "Kalman smoothing":kalman_smoother can be "viewed":kalman_smoothing_as_bp" as belief propagation in a linear-Gaussian model.
+ 

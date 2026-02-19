@@ -1,0 +1,4 @@
+* The "variance of the importance weights":analyzing_importance_sampling depends on a Renyi divergence between the two distributions.
+* Importance sampling is ineffective except in simple situations. More sophisticated versions include:
+** "Sequential importance resampling (SIR)":sequential_importance_resampling
+** "particle filters":particle_filter

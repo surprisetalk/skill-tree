@@ -1,0 +1,8 @@
+source: bishop
+edition: 1
+location: Section 5.5.2, pages 259-261
+core: 1
+
+source: coursera_hinton
+location: Lecture "Overview of ways to improve generalization"
+core: 1

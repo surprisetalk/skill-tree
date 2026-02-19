@@ -1,0 +1,15 @@
+source: coursera_koller
+location: Lecture "Maximum likelihood estimation for Bayesian networks" [79]
+core: 1
+
+source: pgm
+edition: 1
+location: Section 17.2, "MLE for Bayesian networks," pages 722-728
+core: 1
+
+source: aima
+edition: 2
+location: Section 20.2, "Learning with complete data," subsections "Maximum likelihood parameter learning: discrete models" and "Naive Bayes models," pages 716-718
+
+source: coursera_domingos
+location: Lecture "Learning Bayesian networks" [255]

@@ -1,0 +1,13 @@
+source: degroot
+edition: 3
+location: Section 5.9, "The gamma distribution," pages 295-301
+core: 1
+
+source: ross
+edition: 7
+location: Section 5.6.1, "The gamma distribution," pages 237-239
+core: 1
+
+source: rice
+edition: 3
+location: Section 2.2.2, "The gamma density," pages 53-54

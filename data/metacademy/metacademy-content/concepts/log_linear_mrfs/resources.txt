@@ -1,0 +1,16 @@
+source: murphy
+edition: 1
+free: 1
+location: Section 19.3.2, "Representing potential functions," page 667 [http://www.cs.ubc.ca/~murphyk/MLbook/pml-print3-ch19.pdf#page=7]
+
+source: pgm
+edition: 1
+location: Section 4.4.1.2 and boxes 4.C and 4.D, pages 124-128
+core: 1
+
+source: coursera_koller
+location: Lecture "Log-linear models" [30]
+location: Lecture "Shared features in log-linear models" [36]
+dependencies: conditional_random_fields
+core: 1
+

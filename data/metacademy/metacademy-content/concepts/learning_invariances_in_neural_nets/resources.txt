@@ -1,0 +1,10 @@
+source: bishop
+edition: 1
+location: Section 5.5.3, pages 261-263
+core: 1
+
+source: coursera_hinton
+location: Lecture "Why object recognition is difficult"
+location: Lecture "Achieving viewpoint invariance"
+core: 1
+

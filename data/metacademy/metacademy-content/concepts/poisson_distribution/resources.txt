@@ -1,0 +1,33 @@
+source: boas_mm
+core: 1
+location:Ch 13.9 (p 728)
+edition:  2
+
+source: khan_academy_probability
+location: lecture sequence "poisson processes" [https://www.khanacademy.org/math/probability/random-variables-topic/poisson_process]
+core: 1
+
+source: degroot
+location: 5.4 (p 287)
+edition: 4
+core: 1
+
+source: wikipedia
+location: Article: Poisson Distribution [https://en.wikipedia.org/wiki/Poisson_distribution]
+
+source: wolfram
+url: http://mathworld.wolfram.com/PoissonDistribution.html
+
+source: ross
+edition: 7
+location: Section 4.7, "The poisson random variable," pages 160-173
+core: 1
+
+source: mathmonk_probability
+location: Lecture "Expectation of a Poisson random variable" [http://www.youtube.com/watch?v=GQ3cuZmbeRg&list=PL17567A1A3F5DB5E4&index=33]
+
+source: rice
+edition: 3
+location: Section 2.1.5, "The Poisson distribution," pages 42-47
+core: 1
+

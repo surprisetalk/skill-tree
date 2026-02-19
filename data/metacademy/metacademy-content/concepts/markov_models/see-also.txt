@@ -1,0 +1,5 @@
+* "N-gram language models":n_gram_langage_models are a commonly used application of Markov models, where the goal is to model the distribution over text.
+* "Hidden Markov models":hidden_markov_models are a widely used class of probabilistic models where the data are explained in terms of a latent Markov chain. 
+* "Brownian motion":brownian_motion is a kind of continuous Markov model. 
+
+

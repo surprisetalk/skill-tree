@@ -1,0 +1,6 @@
+tag: sum-product-on-trees
+reason: Loopy BP uses the same update rules as the tree-based version.
+
+tag: max-product-on-trees
+reason: Loopy BP uses the same update rules as the tree-based version.
+

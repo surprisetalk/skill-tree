@@ -1,0 +1,2 @@
+tag: matrix_multiplication
+reason: Linear regression is conveniently represented in terms of matrix-vector multiplication.

@@ -1,0 +1,14 @@
+source: murphy
+edition: 1
+location: Section 5.3, pages 155-165
+core: 1
+
+source: bishop
+edition: 1
+location: Section 3.4, pages 161-165
+
+source: mackay
+edition: 1
+location: Section 28.1, "Occam's razor," pages 343-349 [345.357.pdf#page=1]
+location: Section 28.2, "Example," pages 349-351 [345.357.pdf#page=9]
+core: 1

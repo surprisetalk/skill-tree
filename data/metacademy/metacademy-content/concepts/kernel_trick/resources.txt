@@ -1,0 +1,17 @@
+source: coursera_ng
+location: Lecture "Kernels I" [view?lecture_id=74]
+
+source: bishop
+edition: 1
+location: Sections 6-6.1, pages 291-294
+core: 1
+
+source: barber
+edition: 1-online
+location: Section 17.3, "The dual representation and kernels," pages 349-350 [#page=373]
+
+source: gpml
+edition: 1
+location: Section 2.1, pages 7-12 [RW2.pdf#page=1]
+core: 1
+

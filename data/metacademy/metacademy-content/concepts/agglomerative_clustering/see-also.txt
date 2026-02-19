@@ -1,0 +1,2 @@
+* Some other hierarchical clustering methods include:
+** "hierarchical mixture of Gaussians":hierarchical_mixture_of_gaussians, a probabilistic model

@@ -1,0 +1,20 @@
+source: murphy
+edition: 1
+location: Section 26.1, "Introduction" (of chapter 26, "Graphical model structure learning"), pages 907-908
+location: Section 26.4, "Learning DAG structures," pages 914-922
+
+source: pgm
+edition: 1
+location: Section 18.1, "Introduction" (of chapter 18, "Structure learning in Bayesian networks"), pages 783-785
+location: Section 18.3, "Structure scores," pages 790-807
+core: 1
+
+source: coursera_koller
+location: Lecture "Structure learning overview" [93]
+location: Lecture "Likelihood scores" [94]
+location: Lecture "BIC and asymptotic consistency" [95]
+location: Lecture "Bayesian scores" [96]
+core: 1
+
+source: coursera_domingos
+location: Lecture "Learning Bayesian network structure" [261]

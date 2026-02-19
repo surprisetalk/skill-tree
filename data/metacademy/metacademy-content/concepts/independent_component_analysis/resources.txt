@@ -1,0 +1,23 @@
+source: murphy
+edition: 1
+location: Sections 12.6-12.6.1, pages 407-411
+core: 1
+
+source: bishop
+edition: 1
+location: Section 12.4.1, pages 591-592
+
+source: esl
+edition: 2
+location: Section 14.7.2, "Independent component analysis," pages 560-565 [#page=579]
+dependencies: differential_entropy
+
+source: cs229
+location: Lecture notes 11: Independent Components Analysis [cs229-notes11.pdf]
+core: 1
+
+source: mackay
+edition: 1
+location: Section 34.1, "Latent variable models," page 437 [438.446.pdf#page=1]
+location: Section 34.2, "The generative model for independent component analysis," pages 437-440 [438.446.pdf#page=1]
+core: 1

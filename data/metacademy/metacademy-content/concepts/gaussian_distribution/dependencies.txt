@@ -1,0 +1,5 @@
+tag: random-variables
+
+tag: expectation_and_variance
+reason: The Gaussian distribution is parameterized in terms of expected value and variance.
+

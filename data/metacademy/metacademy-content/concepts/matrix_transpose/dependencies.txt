@@ -1,0 +1,3 @@
+tag: matrix_multiplication
+reason: The transpose of a product is the product of transposes, reversed.
+

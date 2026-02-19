@@ -1,0 +1,19 @@
+source: coursera_ng
+location: Lecture sequence "Dimensionality reduction" 
+core: 1
+
+source: murphy
+edition: 1
+location: Sections 12.2-12.2.1 (pages 387-389) and 12.2.3 (pages 392-395)
+core: 1
+
+source: bishop
+edition: 1
+location: Chapter 12 introduction and Section 12.1, pages 559-570
+dependencies: lagrange_multipliers
+core: 1
+
+source: esl
+edition: 2
+location: Section 14.5.1, "Principal components," pages 534-541 [#page=553]
+dependencies: lagrange_multipliers

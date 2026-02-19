@@ -1,0 +1,382 @@
+[
+  {
+    "identifier": "c5fb3436-d7cb-11e8-824f-0242ac160002",
+    "title": "Norm Webb's Depth of Knowledge [DOK] Levels of Cognitive Difficulty"
+  },
+  {
+    "identifier": "c6085394-d7cb-11e8-824f-0242ac160002",
+    "title": "PCG Compendium for ELA"
+  },
+  {
+    "identifier": "c608881b-d7cb-11e8-824f-0242ac160002",
+    "title": "Next Generation Science Standards"
+  },
+  {
+    "identifier": "c6496676-d7cb-11e8-824f-0242ac160002",
+    "title": "Common Core State Standards for Math"
+  },
+  {
+    "identifier": "c649a48e-d7cb-11e8-824f-0242ac160002",
+    "title": "Language Arts Florida Standards (LAFS)"
+  },
+  {
+    "identifier": "c6654b38-d7cb-11e8-824f-0242ac160002",
+    "title": "TCSG - MATH 1111 - College Algebra (version 201312L )"
+  },
+  {
+    "identifier": "4f37094a-cf04-11e7-b9f8-2ff5c05be24b",
+    "title": "AP Computer Science Principles"
+  },
+  {
+    "identifier": "4d6e8837-f280-11e8-9cff-0242ac140002",
+    "title": "PCG - Alabama Course of Study: English Language Arts"
+  },
+  {
+    "identifier": "4d6e896f-f280-11e8-9cff-0242ac140002",
+    "title": "PCG - Alabama Course of Study: Math"
+  },
+  {
+    "identifier": "6b7d9fc6-f297-11e8-9e27-fd060c845753",
+    "title": "Next Generation Science Standards"
+  },
+  {
+    "identifier": "2f697b40-f7f6-11e8-a867-0242ac190005",
+    "title": "North Carolina CTE Standards after Fall 2018-19 updates"
+  },
+  {
+    "identifier": "d655f2e0-684d-11e9-8fb9-97962282032c",
+    "title": "Praxis Mathematics: Content Knowledge (5161)"
+  },
+  {
+    "identifier": "cce30f14-6cf7-11e9-b701-85e5df9ceb11",
+    "title": "Praxis Special Education: Core Knowledge and Mild to Moderate Applications (5543)"
+  },
+  {
+    "identifier": "f0e7396a-7edd-11e9-86d4-23cb22a51e7e",
+    "title": "Center for Curriculum Redesign Competency Framework"
+  },
+  {
+    "identifier": "f67ec800-86f5-11e9-8b08-b70154aa49dd",
+    "title": "PCG Master Special Education Framework"
+  },
+  {
+    "identifier": "7feb667a-86f6-11e9-a33b-eb689b4392da",
+    "title": "GACE® Special Education Adapted Curriculum Assessment Test"
+  },
+  {
+    "identifier": "be892cc8-86f6-11e9-838c-5908bc596802",
+    "title": "GACE® Special Education General Curriculum Assessment Test"
+  },
+  {
+    "identifier": "832947b8-8704-11e9-8ead-41dd691d7fcf",
+    "title": "WEST–E Special Education (070)"
+  },
+  {
+    "identifier": "0ef60b38-9109-11e9-9ab3-ef46d22b49d8",
+    "title": "Normalized Data Schema"
+  },
+  {
+    "identifier": "c9a1c696-b3ca-11e9-8a14-270a808d5208",
+    "title": "Praxis Special Education: Core Knowledge and Severe to Profound Applications (5545)"
+  },
+  {
+    "identifier": "940e806c-ca88-11e9-9542-51394b765681",
+    "title": "Colorado Academic Standards: World Languages (Example)"
+  },
+  {
+    "identifier": "ce1282da-ca89-11e9-9bdc-7f841588a1a1",
+    "title": "Florida Next Generation World Languages Standards (Example)"
+  },
+  {
+    "identifier": "47f395ca-ca8b-11e9-a290-9f8254c7eb1f",
+    "title": "World-Readiness Standards for Language Learners (ACTFL - Example)"
+  },
+  {
+    "identifier": "a2b1f518-f1e3-11e9-aa27-2f25ccb5fd92",
+    "title": "CWI - Application Development with Swift"
+  },
+  {
+    "identifier": "8f5f7e60-f4d9-11e9-a7be-5355b138317c",
+    "title": "PCG Compendium for Computer Science"
+  },
+  {
+    "identifier": "4718f2ce-f6bb-11e9-aea4-45e8da77a084",
+    "title": "Algebra 1   (#1200310)"
+  },
+  {
+    "identifier": "dcb52ad2-0025-11ea-ae50-21a15a01fd7f",
+    "title": "MEGA Missouri Mild/Moderate Cross Categorical Special Education Test Design and Framework"
+  },
+  {
+    "identifier": "59edd562-0274-11ea-b417-b3820dcf6997",
+    "title": "Test Taking Success Factors"
+  },
+  {
+    "identifier": "2ee44254-6830-11e9-8266-0242ac1f0003",
+    "title": "Chicago Public Schools: Illinois Mathematics Standards (2010)"
+  },
+  {
+    "identifier": "c9313bb4-4e5e-11e9-8ec6-0242ac1e0003",
+    "title": "Chicago Public Schools: Illinois English Language Arts Standards (2010)"
+  },
+  {
+    "identifier": "95d4ca34-b302-11e9-9dc9-0242c0a82003",
+    "title": "Chicago Public Schools: Illinois Science Standards (2017)"
+  },
+  {
+    "identifier": "91406f18-b303-11e9-8e3e-0242c0a82003",
+    "title": "Chicago Public Schools: Illinois Social Studies Standards (2016)"
+  },
+  {
+    "identifier": "ea1df070-46c8-11ea-b0b0-c97bdf28fae1",
+    "title": "Massachusetts Curriculum Framework: Digital Literacy and Computer Science - 2016"
+  },
+  {
+    "identifier": "b2c698d8-648d-11ea-9e21-3795c20088de",
+    "title": "Kentucky Academic Standards: Social Studies (2019)"
+  },
+  {
+    "identifier": "0a532290-9627-11ea-913f-85006948b0ad",
+    "title": "AL.MTH - Alabama Math - Test"
+  },
+  {
+    "identifier": "38a5bee6-9627-11ea-aab5-1b3721ac1569",
+    "title": "AL.ELA - Alabama ELA - Test"
+  },
+  {
+    "identifier": "e71a1e58-96a5-11ea-9962-9706fb3d0c21",
+    "title": "AL.SS - Alabama Social Studies - Test"
+  },
+  {
+    "identifier": "905a2a58-96b0-11ea-9026-3fee1bf6593c",
+    "title": "AL.SC - Alabama Science - Test"
+  },
+  {
+    "identifier": "02edf17a-a1fc-11ea-ab44-4b32dc84267e",
+    "title": "Scope and Sequence Framework Template"
+  },
+  {
+    "identifier": "86717622-a5a6-11ea-ac27-29a20899b848",
+    "title": "Alabama Computer Science"
+  },
+  {
+    "identifier": "56a98ac7-8878-4212-a321-94b9890bca02",
+    "title": "Mathematics (B.E.S.T.)"
+  },
+  {
+    "identifier": "cb5997e8-b4b9-11ea-b878-0242c0a8e006",
+    "title": "PCG - Mathematics (B.E.S.T. - Effective starting 2022-2023)"
+  },
+  {
+    "identifier": "d7f741cd-422c-4f5f-b026-8638418dd382",
+    "title": "NRSG 426 Public Health Nursing for RNs"
+  },
+  {
+    "identifier": "bc8ac589-f2e5-11ea-9f9f-0242ac140002",
+    "title": "Indiana Academic Standards for Mathematics (2020)"
+  },
+  {
+    "identifier": "bc8acf55-f2e5-11ea-9f9f-0242ac140002",
+    "title": "Indiana Academic Standards for English/Language Arts (2020)"
+  },
+  {
+    "identifier": "91d8ef66-f8ff-11ea-85b5-bf148f25eca4",
+    "title": "Keystone Exams: Algebra I"
+  },
+  {
+    "identifier": "0cd5cbf8-fea5-11ea-8a85-e96dfd5eb0ea",
+    "title": "Keystone Exams: Algebra II"
+  },
+  {
+    "identifier": "c27bd472-ff25-11ea-b0d2-c327ec10fa1f",
+    "title": "Keystone Exams: Geometry"
+  },
+  {
+    "identifier": "69330b30-c53b-58d3-9639-6d83c7dab436",
+    "title": "SCED 8.0 Course Codes"
+  },
+  {
+    "identifier": "2a6ed566-543a-11eb-814c-dd3fa2a4bad0",
+    "title": "Ontario - Additional Courses"
+  },
+  {
+    "identifier": "8e41aeb0-543a-11eb-a5f7-a168649778ae",
+    "title": "Western and Northern Canadian Protocol Mathematics - Extra Courses"
+  },
+  {
+    "identifier": "90bd3abc-6243-11eb-b5bd-0242ac160003",
+    "title": "Five Pillars of Educational Equity"
+  },
+  {
+    "identifier": "406a1972-9a01-11eb-a6f4-e9146a86fcf2",
+    "title": "North Dakota CTE - Agriculture Education"
+  },
+  {
+    "identifier": "05e8ff44-d9f7-11eb-8082-0242ac140003",
+    "title": "5001 Elementary Education: Multiple Subjects"
+  },
+  {
+    "identifier": "0b749bac-115c-11ec-91ba-0242ac140003",
+    "title": "CASEL Standards"
+  },
+  {
+    "identifier": "ce998884-119a-11ec-829e-0242ac140003",
+    "title": "Deeper Learning Competencies"
+  },
+  {
+    "identifier": "ee36dc5e-11a0-11ec-83fb-0242ac140003",
+    "title": "21st Century Skills"
+  },
+  {
+    "identifier": "3c61ba70-130e-11ec-b796-0242ac140003",
+    "title": "Florida Math Scope and Sequence"
+  },
+  {
+    "identifier": "0cc3c11e-3078-11ec-a27a-0242ac140003",
+    "title": "Content - Khan Academy"
+  },
+  {
+    "identifier": "bf756b12-3741-11ec-9615-0242ac140003",
+    "title": "Executive Functioning IEP Goals"
+  },
+  {
+    "identifier": "ec3d59da-5112-11ec-a2ce-0242ac140003",
+    "title": "5002 Reading and Writing Subtest - Standards"
+  },
+  {
+    "identifier": "3f081d34-5114-11ec-92b0-0242ac140003",
+    "title": "5002 Reading and Writing Subtest - Content"
+  },
+  {
+    "identifier": "3f0195fe-52a9-11ec-95a9-0242ac140003",
+    "title": "5004 Social Studies Subtest - Standards"
+  },
+  {
+    "identifier": "1a358de6-52ab-11ec-b37a-0242ac140003",
+    "title": "5005 Science Subtest - Standards"
+  },
+  {
+    "identifier": "a832785c-52c4-11ec-abc1-0242ac140003",
+    "title": "5004 Social Studies Subtest - Content"
+  },
+  {
+    "identifier": "ebf6048e-5362-11ec-9f44-0242ac140003",
+    "title": "5005 Science Subtest - Content"
+  },
+  {
+    "identifier": "ab93fabb-6196-4eeb-a582-8af074227fe9",
+    "title": "GCPS AKS Mathematics 2022-2023"
+  },
+  {
+    "identifier": "8dc20044-fd05-4d09-bcfa-811255143b18",
+    "title": "GCPS AKS Language Arts 2021-2022"
+  },
+  {
+    "identifier": "e9ec8068-aaac-11ec-860a-0242ac140003",
+    "title": "Florida Science - Scope and Sequence (Grade 3)"
+  },
+  {
+    "identifier": "6f45a760-aaaf-11ec-b73a-0242ac140003",
+    "title": "Florida Science Standards - Grade 3"
+  },
+  {
+    "identifier": "77b8b904-ab78-11ec-a1b3-0242ac140003",
+    "title": "Florida Social Studies Standards - Grade 3"
+  },
+  {
+    "identifier": "757806a6-ab7b-11ec-af5d-0242ac140003",
+    "title": "Florida ELA Standards (LAFS) - 3rd Grade"
+  },
+  {
+    "identifier": "a97681bc-ab7b-11ec-8036-0242ac140003",
+    "title": "Florida ELA Standards (BEST) - 3rd Grade"
+  },
+  {
+    "identifier": "f3d68024-b1d2-11ec-bc0e-0242ac140003",
+    "title": "Florida Social Studies - Scope and Sequence"
+  },
+  {
+    "identifier": "581bf606-3e8a-11ed-9820-0242ac140003",
+    "title": "PCG - Georgia’s K-12 Mathematics Standards-Implementation SY2023-2024"
+  },
+  {
+    "identifier": "94ba4bdc-3f78-11ed-a600-0242ac140003",
+    "title": "Consultant Competencies"
+  },
+  {
+    "identifier": "3cb9aa72-450e-11ed-9edf-0242ac140006",
+    "title": "PCG - Georgia’s K-12 Mathematics Standards-Implementation SY2023-2024 - 2"
+  },
+  {
+    "identifier": "18f39bc2-ca90-11ed-998f-0242ac160003",
+    "title": "Oklahoma Academic Standards for Mathematics 2022"
+  },
+  {
+    "identifier": "d83e5bd4-e395-11ed-b2a0-0242ac1d0003",
+    "title": "Compendix"
+  },
+  {
+    "identifier": "67c54f46-e39c-11ed-8ad2-0242ac1d0003",
+    "title": "SA Items"
+  },
+  {
+    "identifier": "9116bea2-e39c-11ed-9907-0242ac1d0003",
+    "title": "Coursera Items"
+  },
+  {
+    "identifier": "2c92df7e-e39c-11ed-8682-0242ac1d0003",
+    "title": "General Items"
+  },
+  {
+    "identifier": "70dd2358-4dcb-11ee-bd41-0242c0a81003",
+    "title": "Kentucky Early Childhood Standards"
+  },
+  {
+    "identifier": "76673c2e-5cb6-11ee-a3bc-0242c0a84002",
+    "title": "Indiana Academic Standards for Mathematics (2023)"
+  },
+  {
+    "identifier": "a7ca5d7d-7888-4c7c-9918-d0d02ed9857f",
+    "title": "GCPS AKS Language Arts 2023 - 2024"
+  },
+  {
+    "identifier": "ae7580db-9b29-4d8a-9091-118ebf5e6e3d",
+    "title": "GCPS AKS Mathematics 2023-2024"
+  },
+  {
+    "identifier": "1f1f4802-601e-4dbf-b95c-7e7ca0a91813",
+    "title": "GCPS AKS Social Studies 2023-2024"
+  },
+  {
+    "identifier": "fb05445b-85ec-4b08-a643-c5b8af63405a",
+    "title": "GCPS AKS Science 2023-2024"
+  },
+  {
+    "identifier": "6aa63808-f8f2-11ee-9ab1-0242ac140003",
+    "title": "PCG - South Carolina 2023 College and Career Ready Mathematics Standards"
+  },
+  {
+    "identifier": "aa7ab56a-276b-11ef-8aff-0242ac140003",
+    "title": "Mathematics Standards of Learning for Virginia Public Schools 2023"
+  },
+  {
+    "identifier": "5a36e172-2802-11ef-ae34-0242ac1d0003",
+    "title": "English Standards of Learning for Virginia Public Schools 2024"
+  },
+  {
+    "identifier": "9c247248-60d3-11ef-8e40-0242ac140003",
+    "title": "UI - North Carolina Standard Course of Study: Social Studies"
+  },
+  {
+    "identifier": "8174b686-6652-11ef-bd1d-0242ac140003",
+    "title": "UI - North Carolina Standard Course of Study: Science 2009"
+  },
+  {
+    "identifier": "fafb6810-7c87-11ef-9d43-0242ac140003",
+    "title": "UI - North Carolina Standard Course of Study: Science 2023"
+  },
+  {
+    "identifier": "56e4b3d8-0a73-11f0-84c7-0242ac140003",
+    "title": "UI - Michigan K-12 Standards for Social Studies"
+  }
+]

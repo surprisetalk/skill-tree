@@ -1,0 +1,3 @@
+* Memorize the ten Bayes' ball "bouncing rules" (noting symmetries makes this easy).
+* You should be able to prove the validity of the bouncing rules using the definition of conditional probability.
+* Understand how "marking" the nodes depending on the direction the ball is traveling when visiting the node leads to a linear-time algorithm for determining the [conditional] independencies in a Bayes net.

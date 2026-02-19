@@ -1,0 +1,36 @@
+source: pgm
+edition: 1
+location: Sections 3.1-3.2.2, pages 45-60
+core: 1
+
+source: murphy
+edition: 1
+location: Sections 10.1-10.2.4, pages 307-318
+
+source: bishop
+edition: 1
+free: 1
+location: Sections 8-8.1.3, pages 359-369 [http://research.microsoft.com/en-us/um/people/cmbishop/prml/pdf/Bishop-PRML-sample.pdf#page=19]
+dependencies: linear_regression
+
+source: aima
+edition: 2
+location: Sections 14.1-14.2, pages 492-499
+core: 1
+
+source: coursera_koller
+location: Lecture "Semantics & factorization" [3]
+location: Lecture "Reasoning patterns" [4]
+location: Lecture "Naive Bayes" [20]
+location: Lecture "Application -- medical diagnosis" [6]
+core: 1
+
+source: coursera_domingos
+location: Lecture "Bayesian networks" [245]
+location: Lecture "Inference in Bayesian networks" [229]
+core: 1
+
+source: iit_eeuni_ai2
+location: Lecture - 22 Bayesian Networks (from 9:35 to 47:00) [http://www.youtube.com/watch?v=rFQsbArQE6Y&feature=youtu.be&t=9m35s]
+extra: Youtube comment from user "SiddharthBhaiVideos" provides a nice outline of the lecture
+core: 1

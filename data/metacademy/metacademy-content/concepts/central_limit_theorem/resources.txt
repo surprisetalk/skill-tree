@@ -1,0 +1,22 @@
+title: Stats.Stackexchange Question: What intuitive explanation is there for the central limit theorem?
+url: http://stats.stackexchange.com/questions/3734/what-intuitive-explanation-is-there-for-the-central-limit-theorem/3904#3904
+resource_type: forum
+free: 1
+location: answer from user 'whuber'
+
+source: ross
+edition: 7
+location: Section 8.3, "The Central Limit Theorem," pages 434-443
+core: 1
+
+source: degroot
+edition: 3
+location: Section 5.7, "The Central Limit Theorem," pages 282-290
+core: 1
+
+source: mathmonk_probability
+location: Lecture 5.5, "Law of large numbers and Central Limit Theorem" [http://www.youtube.com/watch?v=wadzsURQFT4&list=PL17567A1A3F5DB5E4&index=29]
+
+source: rice
+edition: 3
+location: Section 5.3, "Convergence in distribution and the Central Limit Theorem," pages 181-188

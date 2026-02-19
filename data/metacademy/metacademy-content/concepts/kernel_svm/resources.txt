@@ -1,0 +1,16 @@
+source: bishop
+edition: 1
+location: Section 7.1, up to 7.1.1, pages 326-331
+
+source: murphy
+edition: 1
+location: Section 14.5-14.5.2.2, pages 496-502
+
+source: esl
+edition: 2
+location: Section 12.3, "Support vector machines and kernels," up through and including 12.3.1, "Computing the SVM for classification," pages 423-425 [#page=442]
+core: 1
+
+source: coursera_ng
+location: Lecture "Kernels II" [view?lecture_id=75]
+

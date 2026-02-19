@@ -1,0 +1,28 @@
+source: pgm
+edition: 1
+location: Sections 10.1-10.2, pages 345-364
+dependencies: variable-elimination
+extra: This section describe the junction tree (or clique tree) algorithm, a way of applying BP to general graphs. The notation differs significantly from the more traditional formulation of BP on factor graphs.
+
+source: coursera_koller
+location: Lecture "Belief propagation" [49]
+location: Lecture "Properties of cluster graphs" [50]
+location: Lecture "Properties of belief propagation" [53]
+location: Lecture "Clique tree algorithm -- correctness" [54]
+location: Lecture "Clique tree algorithm -- computation" [55]
+dependencies: variable-elimination
+extra: These lectures describe the junction tree (or clique tree) algorithm, a way of applying BP to general graphs. The notation differs significantly from the more traditional formulation of BP on factor graphs.
+
+source: murphy
+edition: 1
+location: Section 20.2-20.2.2, pages 707-710
+
+source: bishop
+edition: 1
+free: 1
+location: Section 8.4.4, pages 402-411 [http://research.microsoft.com/en-us/um/people/cmbishop/prml/pdf/Bishop-PRML-sample.pdf#page=62]
+core: 1
+
+source: mackay
+edition: 1
+location: Section 26.2, "The sum-product algorithm," pages 336-339 [336.342.pdf#page=3]

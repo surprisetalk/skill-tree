@@ -1,0 +1,9 @@
+tag: basis-function-expansions
+reason: The kernel trick is a way of compactly representing very high-dimensional basis function expansions.
+
+tag: positive-definite-matrices
+reason: The definition of a kernel involves PSD matrices.
+shortcut: 1
+
+tag: ridge-regression
+reason: Kernel ridge regression is the standard example used to introduce kernels.

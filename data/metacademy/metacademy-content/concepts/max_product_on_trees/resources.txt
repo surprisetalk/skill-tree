@@ -1,0 +1,22 @@
+source: pgm
+edition: 1
+location: Sections 13.2-13.2.2 (pages 554-559) and 13.3 (pages 562-567)
+dependencies: junction-trees
+extra: This section describe the junction tree (or clique tree) algorithm, a way of applying BP to general graphs. The notation differs significantly from the more traditional formulation of BP on factor graphs.
+
+source: coursera_koller
+location: Lecture "Max-sum message passing" [61]
+location: Lecture "Finding a MAP assignment" [60]
+dependencies: junction-trees
+extra: These lectures describe the junction tree (or clique tree) algorithm, a way of applying BP to general graphs. The notation differs significantly from the more traditional formulation of BP on factor graphs.
+
+source: bishop
+edition: 1
+free: 1
+location: Section 8.4.5, pages 411-415 [http://research.microsoft.com/en-us/um/people/cmbishop/prml/pdf/Bishop-PRML-sample.pdf#page=71]
+core: 1
+
+source: mackay
+edition: 1
+location: Section 26.3, "The min-sum algorithm," pages 339-340 [336.342.pdf#page=6]
+dependencies: sum-product-on-trees

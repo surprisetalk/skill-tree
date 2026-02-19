@@ -1,0 +1,10 @@
+tag: independent_random_variables
+reason: The Chernoff bounds are statements about independent random variables.
+
+tag: moment-generating-functions
+reason: Chernoff bounds can be specified in terms of moment generating functions.
+
+tag: markov_and_chebyshev_inequalities
+reason: Markov's inequality is used to prove the bound.
+
+

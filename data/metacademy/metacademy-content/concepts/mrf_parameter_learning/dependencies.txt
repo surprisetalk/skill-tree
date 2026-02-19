@@ -1,0 +1,9 @@
+tag: markov_random_fields
+
+tag: maximum_likelihood
+reason: Maximum likelihood is a criterion for learning MRF parameters.
+
+tag: inference-in-mrfs
+reason: Inference is a necessary part of MRF parameter learning.
+
+tag: optimization_problems

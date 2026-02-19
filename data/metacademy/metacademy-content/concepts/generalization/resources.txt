@@ -1,0 +1,20 @@
+source: coursera_ng
+location: Lecture "The problem of overfitting" [view?lecture_id=39]
+location: Lecture "Model selection and train/validation/test sets" [view?lecture_id=61]
+location: Lecture "Diagnosing bias and variance" [view?lecture_id=62]
+core: 1
+
+source: esl
+edition: 2
+location: Section 7.2, "Bias, variance, and model complexity," pgs. 219-223 [#page=238]
+
+source: murphy
+edition: 1
+location: Sections 1.4.7-1.4.8, pgs. 22-24
+
+source: bishop
+edition: 1
+location: Section 1.1, pgs. 4-12
+core: 1
+
+

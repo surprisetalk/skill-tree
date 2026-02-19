@@ -1,0 +1,8 @@
+tag: random_variables
+reason: Bayes nets are a way of structuring information about random variables.
+
+tag: conditional_independence
+reason: Bayes nets can be viewed as encoding a set of conditional independence assumptions. 
+
+tag: bayes_rule
+reason: Bayes nets are used for forms of reasoning based on Bayes' Rule.

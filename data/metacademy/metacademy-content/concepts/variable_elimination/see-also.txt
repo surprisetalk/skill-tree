@@ -1,0 +1,2 @@
+* If we want to perform multiple queries, we go through lots of redundant calculations. "Belief propagation":sum_product_on_trees gives a way of reusing the computations.
+* In "Gaussian graphical models":gaussian_mrfs, variable elimination is "equivalent":gaussian_variable_elimination_as_gaussian_elimination to "Gaussian elimination":gaussian_elimination.

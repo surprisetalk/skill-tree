@@ -1,0 +1,21 @@
+source: bishop
+edition: 1
+location: Section 5.1, pages 227-232
+core: 1
+
+source: esl
+edition: 2
+location: Section 11.3, "Neural networks," pages 3392-395 [#page=411]
+
+source: aima
+edition: 2
+location: Section 20.5, pages 736-748
+core: 1
+
+source: coursera_ng
+location: Lecture series "Neural networks: representation"
+core: 1
+
+source: coursera_domingos
+location: Lecture "Multilayer perceptrons" [283]
+dependencies: gradient_descent, perceptron

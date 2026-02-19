@@ -1,0 +1,5 @@
+* The kernel SVM can be optimized with the "sequential minimal optimization (SMO) algorithm":sequential_minimal_optimization".
+* Techniques for "constructing kernels":constructing_kernels
+* Other examples of kernelized models include:
+** "kernel ridge regression":kernel_ridge_regression
+** "Gaussian process regression":gaussian_process_regression

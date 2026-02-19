@@ -1,0 +1,24 @@
+source: edwards_penney
+edition: 6
+location: Section 13.9, "Lagrange multipliers and constrained optimization," pages 918-924
+core: 1
+extra: Don't worry about the proofs as far as this node is concerned.
+
+source: shifrin
+edition: 1
+location: Section 5.4, "Lagrange multipliers," pages 216-222
+core: 1
+extra: Don't worry about the proofs as far as this node is concerned.
+
+source: ocw_auroux
+location: Session 39, "Statement of Lagrange multipliers and example" [http://ocw.mit.edu/courses/mathematics/18-02sc-multivariable-calculus-fall-2010/2.-partial-derivatives/part-c-lagrange-multipliers-and-constrained-differentials/session-39-statement-of-lagrange-multipliers-and-example]
+location: Session 41, "Advanced example" [http://ocw.mit.edu/courses/mathematics/18-02sc-multivariable-calculus-fall-2010/2.-partial-derivatives/part-c-lagrange-multipliers-and-constrained-differentials/session-41-advanced-example]
+
+resource_type: tutorial
+title: Lagrange multipliers without permanent scarring
+authors: Dan Klein
+location: Section 1, "Introduction," page 1; Section 2, "Trial by example," pages 2-6
+free: 1
+url: http://www.cs.berkeley.edu/~klein/papers/lagrange-multipliers.pdf
+level: introductory
+

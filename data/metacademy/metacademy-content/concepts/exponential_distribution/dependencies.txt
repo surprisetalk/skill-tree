@@ -1,0 +1,5 @@
+tag: random-variables
+
+tag: cumulative_distribution_function
+reason: The CDF is used in analyzing waiting times.
+shortcut: 1

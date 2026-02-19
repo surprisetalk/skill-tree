@@ -1,0 +1,15 @@
+tag: gamma-distribution
+reason: The Wishart distribution is a multivariate generalization of the gamma distribution.
+
+tag: positive-definite-matrices
+reason: The Wishart distribution is a distribution over positive definite matrices.
+shortcut: 1
+
+tag: expectation_and_variance
+reason: We would like to derive the mean of the distribution.
+
+tag: determinant
+reason: The probability density function includes a determinant.
+
+tag: matrix_inverse
+reason: The probability density function includes a matrix inverse.

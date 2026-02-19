@@ -1,0 +1,5 @@
+tag: covariance
+
+tag: positive-definite-matrices
+reason: The covariance matrix is a PSD matrix.
+shortcut: 1

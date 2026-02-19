@@ -1,0 +1,6 @@
+tag: random_variables
+reason: Multivariate distributions are a way of representing dependencies between random variables.
+
+tag: multiple_integrals
+reason: Multiple integrals are needed to compute probabilities associated with continuous multivariate distributions.
+

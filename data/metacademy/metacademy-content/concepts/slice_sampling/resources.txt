@@ -1,0 +1,21 @@
+source: murphy
+edition: 1
+location: Section 24.5.2, pages 864-866
+
+source: bishop
+edition: 1
+location: Section 11.4, pages 546-548
+
+source: mackay
+edition: 1
+location: Section 29.7, "Slice sampling," pages 374-378 [358.386.pdf#page=19]
+core: 1
+
+source: barber
+edition: 1-online
+location: Section 27.5.3, "Slice sampling," pages 557-558 [#page=581]
+ 
+source: mlss_murray
+location: Part 2, 22:58 to 39:44
+core: 1
+

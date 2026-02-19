@@ -1,0 +1,25 @@
+source: mathmonk_ml
+location: video lecture: (ML 14.6) Forward-Backward algorithm for HMMs [http://www.youtube.com/watch?v=7zDARfKVm7s]
+location: video lecture: (ML 14.7) Forward algorithm (part 1) [http://www.youtube.com/watch?v=M7afek1nEKM]
+location: video lecture: (ML 14.8) Forward algorithm (part 2) [http://www.youtube.com/watch?v=MPmrFu4jFk4]
+location: video lecture: (ML 14.9) Backward algorithm [http://www.youtube.com/watch?v=jwYuki9GgJo]
+core: 1
+
+source: murphy
+edition: 1
+location: Sections 17.4-17.4.3, pages 606-612
+core: 1
+
+source: bishop
+edition: 1
+location: Sections 13.2.2 (pages 618-625) and 13.2.4 (pages 627-629)
+dependencies: d_separation
+
+source: aima
+edition: 2
+location: Sections 15.2, up to "Finding the most likely sequence" (pages 541-547) and 15.3 (pages 549-551)
+core: 1
+
+source: barber
+edition: 1-online
+location: Sections 23.2-23.2.4, pages 458-462 [#page=482]

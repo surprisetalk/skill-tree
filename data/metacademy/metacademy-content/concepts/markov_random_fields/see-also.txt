@@ -1,0 +1,13 @@
+* "Factor graphs":factor_graphs provide a more fine-grained representation of the factorizations of Boltzmann distributions. 
+* The "Hammersley-Clifford theorem":hammersley_clifford shows that MRFs can be characterized in terms of conditional independencies. 
+* "Bayes nets":bayesian_networks are another graphical model formalism good for capturing generative processes and causal structure. 
+* Neither Bayes nets nor MRFs are "strictly more powerful":bayes_nets_vs_mrfs_representation than the other. 
+* Often, we are interested in:
+** "answering conditional probability queries":inference_in_mrfs
+** "learning the parameters of the distribution":mrf_parameter_learning
+* Some examples of MRFs include:
+** "Undirected trees":tree_graphical_models
+** "Ising models":ising_models
+** "Boltzmann machines":boltzmann_machines
+** "restricted Boltzmann machines (RBMs)":restricted_boltzmann_machines
+** "field of experts":field_of_experts

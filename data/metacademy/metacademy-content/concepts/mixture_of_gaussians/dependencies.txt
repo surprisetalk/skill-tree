@@ -1,0 +1,7 @@
+tag: multivariate_gaussian_distribution
+shortcut: 1
+
+
+# TODO: probability theory dependencies?
+
+

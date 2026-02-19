@@ -1,0 +1,35 @@
+source: coursera_ng
+location: Lecture "Optimization objective"  [view?lecture_id=71]
+location: Lecture "Large margin intuition" [view?lecture_id=72]
+location: Lecture "Mathematics behind large margin classification" [view?lecture_id=73]
+dependencies: logistic_regression
+
+source: bishop
+edition: 1
+location: Section 7.1, up to 7.1.1 (pages 326-331)
+dependencies: lagrange_duality
+core: 1
+
+source: aima
+edition: 2
+location: Section 20.6, pages 749-752
+
+source: boyd_convex_optimization
+edition: 1
+location: Section 8.6-8.6.1, up to "Approximate linear discrimination," pages 422-427 [#page=436]
+
+source: murphy
+edition: 1
+location: Section 14.5-14.5.2.2, pages 496-502
+core: 1
+
+source: esl
+edition: 2
+location: Section 4.5.2, "Optimal separating hyperplanes," pages 132-135 [#page=151]
+dependencies: lagrange_duality
+
+source: cs229
+location: Lecture notes 3, "Support vector machines," sections 1-4, pages 1-7 [cs229-notes3.pdf#page=1]
+core: 1
+
+

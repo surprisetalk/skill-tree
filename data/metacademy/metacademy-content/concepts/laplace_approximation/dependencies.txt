@@ -1,0 +1,15 @@
+tag: bayesian-parameter-estimation
+reason: The Laplace approximation is an approximation to Bayesian parameter estimation.
+
+tag: bayesian-model-comparison
+reason: The Laplace approximation is a method for Bayesian model comparison.
+
+tag: map_parameter_estimation
+reason: The Laplace approximation is a second-order Taylor expansion around the MAP estimate.
+
+tag: taylor_approximations
+reason: The Laplace approximation is a second-order Taylor expansion around the MAP estimate.
+
+tag: multivariate_gaussian_distribution
+reason: The posterior distribution is approximated with a multivariate Gaussian.
+shortcut: 1

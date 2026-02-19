@@ -1,0 +1,20 @@
+source: bishop
+edition: 1
+location: Chapter 11 intro, pages 523-526
+
+source: murphy
+edition: 1
+location: Section 2.7, pages 52-56
+core: 1
+
+source: coursera_koller
+location: Lecture "Simple sampling" [71]
+
+source: mackay
+location: Section 29.1, "The problems to be solved," pages 357-361 [358.386.pdf#page=2]
+core: 1
+
+source: mlss_murray
+location: up to 10:20
+core: 1
+

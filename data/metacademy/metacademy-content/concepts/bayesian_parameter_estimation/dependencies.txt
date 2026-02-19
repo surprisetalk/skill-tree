@@ -1,0 +1,14 @@
+tag: bayes-rule
+reason: Bayes' rule is an important conceptual component of Bayesian parameter estimation.
+
+tag: beta-distribution
+reason: The beta-Bernoulli distribution is an instructive example of Bayesian parameter estimation.
+
+tag: conditional-distributions
+reason: In Bayesian parameter estimation, we need to reason with the conditional distributions over parameters.
+
+tag: multivariate_distributions
+reason: In Bayesian parameter estimation, we need to marginalize out the parameters in order to make predictions.
+
+tag: expectation_and_variance
+reason: A common use of the predictive distribution is computing expectations.

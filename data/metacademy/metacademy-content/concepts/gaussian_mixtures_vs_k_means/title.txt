@@ -1,0 +1,1 @@
+comparing Gaussian mixtures and k-means

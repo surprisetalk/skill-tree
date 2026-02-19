@@ -1,0 +1,26 @@
+source: coursera_koller
+location: Lecture "Metropolis Hastings algorithm" [75]
+core: 1
+
+source: pgm
+edition: 1
+location: Section 12.3.4, pages 515-518
+
+source: bishop
+edition: 1
+location: Section 11.2, pages 537-542
+core: 1
+
+source: murphy
+edition: 1
+location: Section 24.3-24.3.6, pages 848-855
+core: 1
+
+source: mackay
+edition: 1
+location: Section 29.4, "The Metropolis-Hastings method," pages 365-370 [358.386.pdf#page=10]
+core: 1
+
+source: barber
+edition: 1-online
+location: Section 27.4, "Markov chain Monte Carlo," pages 550-553 [#page=574]

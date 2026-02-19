@@ -1,0 +1,22 @@
+* Examples of maximum likelihood estimation include:
+** "Linear regression":linear_regression_as_maximum_likelihood
+** "Logistic regression":logistic_regression
+** "Mixture of Gaussians modeling":mixture_of_gaussians
+* Maximum likelihood has some desirable "asymptotic properties":asymptotics_of_maximum_likelihood such as consistency and asymptotic normality.
+* The "Cramer-Rao bound":cramer_rao_bound implies that maximum likelihood estimation is asymptotically efficient.
+* For many commonly used distributions, we can find the global optimum because the "optimization problem is convex":convex_optimization. 
+* Other methods for estimating parameters include:
+** the "method of moments":method_of_moments
+** "Bayesian parameter estimation":bayesian_parameter_estimation
+* Maximum likelihood can be prone to "overfitting":generalization when there is not enough data to estimate the parameters.
+* Some techniques for avoiding overfitting include:
+** "Regularized maximum likelihood":regularization
+** "Bayesian parameter estimation":bayesian_parameter_estimation
+** "Model selection":model_selection
+** "Feature selection":feature_selection
+** "Early stopping":early_stopping
+* Some commonly used optimization algorithms for maximum likelihood estimation include:
+** "gradient descent":gradient_descent
+** "expectation-maximization (EM)":expectation_maximization
+** "second-order methods":second_order_optimization_methods
+* In "exponential family models":exponential_families, maximum likelihood "can be equivalently interpreted":maximum_likelihood_in_exponential_families as maximum entropy modeling.

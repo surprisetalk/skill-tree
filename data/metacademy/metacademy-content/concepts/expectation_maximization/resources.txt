@@ -1,0 +1,25 @@
+source: bishop
+edition: 1
+location: Sections 9.2.1-9.3.1, pages 432-443
+core: 1
+
+source: murphy
+edition: 1
+location: Sections 11.3-11.4.2.4, pages 345-352
+core: 1
+
+source: aima
+edition: 1
+location: Section 20.3, subsections "Unsupervised clustering: learning mixtures of Gaussians" (pages 725-727) and "The general form of the EM algorithm" (pages 731-732)
+
+source: barber
+edition: 1-online
+location: Sections 20.2-20.3.1, pages 402-409 [#page=426]
+dependencies: kl_divergence, lagrange_multipliers
+
+source: mathmonk_ml
+location: (ML 16.3) Expectation-Maximization (EM) algorithm [http://www.youtube.com/watch?v=AnbiNaVp3eQ]
+location: (ML 16.4) Why EM makes sense (part 1) [http://www.youtube.com/watch?v=6JZ-PKpx5Kc]
+location: (ML 16.5) Why EM makes sense (part 2) [http://www.youtube.com/watch?v=X9yF2djExhY]
+extra: The 16.4-16.5 sequence presents an EM justification by trying to analytically maximize the likelihood rather than the (more typical) justification that the EM algorithm maximizes a lower bound on the likelihood.
+

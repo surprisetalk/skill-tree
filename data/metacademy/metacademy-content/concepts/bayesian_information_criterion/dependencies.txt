@@ -1,0 +1,5 @@
+tag: bayesian_model_comparison
+reason: The BIC is an approximation to Bayesian model comparison.
+
+tag: laplace_approximation
+reason: The Laplace approximation is a way of justifying the BIC.

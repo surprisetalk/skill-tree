@@ -1,4 +1,15 @@
-data/mooccubex/psy.json
+# uncompressed large files (gzipped versions tracked in git)
+data/junyi/Log_Problem.csv
+data/junyi/Info_UserData.csv
+data/assistments/skill_builder_data.csv
+data/mooccubex/*.json
+!data/mooccubex/*.json.gz
 data/course-skill-atlas/manhattan_euclidean_distances_all.csv
-data/lcsh/
-data/dbpedia/
+data/course-skill-atlas/abilities_scores
+
+# too large even compressed
+data/junyi/Log_Problem.csv.gz
+data/dbpedia/article_categories_en.ttl.bz2
+
+# decompressed versions of files tracked as compressed
+data/lcsh/*.nt

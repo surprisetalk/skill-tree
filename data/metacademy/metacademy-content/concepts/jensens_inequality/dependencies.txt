@@ -1,0 +1,6 @@
+tag: convex_functions
+reason: Jensen's inequality applies to convex functions.
+shortcut: 1
+
+tag: expectation_and_variance
+reason: Jensen's inequality involves expectations.

@@ -1,0 +1,10 @@
+* Some examples of variational Bayes:
+** "Mixture of Gaussians":variational_mixture_of_gaussians
+** "linear regression":variational_linear_regression
+** "logistic regression":variational_logistic_regression
+* Variational Bayes is especially appropriate for "fitting exponential families":variational_exponential_family.
+* Other approximations to marginal likelihood include:
+** "Laplace approximation":laplace_approximation
+** "Bayesian information criterion (BIC)":bayesian_information_criterion
+** "Sampling algorithms":sampling_partition_function
+** "Tree-reweighted belief propagation":tree_reweighted_belief_propagation

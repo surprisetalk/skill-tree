@@ -1,0 +1,4 @@
+tag: multivariate-gaussian-distribution
+reason: Multivariate Gaussians are often used in nonparametric density modeling.
+shortcut: 1
+

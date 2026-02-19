@@ -1,0 +1,14 @@
+tag: principal-component-analysis
+
+tag: computations-on-multivariate-gaussians
+reason: Probabilistic PCA involves performing inference in a model involving multivariate Gaussians.
+
+tag: maximum-likelihood
+reason: Fitting probabilistic PCA is done using maximum likelihood.
+shortcut: 1
+
+tag: pca_proof
+reason: The maximum likelihood solution is derived using a variation of the proof of PCA correctness.
+
+tag: optimization_problems
+reason: Finding the maximum likelihood solution requires solving an optimization problem.

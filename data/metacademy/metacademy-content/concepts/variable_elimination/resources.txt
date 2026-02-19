@@ -1,0 +1,23 @@
+source: pgm
+edition: 1
+location: Sections 9.2-9.4.2, pages 292-310
+dependencies: bayesian-networks
+
+source: murphy
+edition: 1
+location: Section 20.3, pages 714-720
+core: 1
+
+source: aima
+edition: 2
+location: Section 14.4, pages 504-510
+core: 1
+dependencies: bayesian-networks
+
+source: coursera_koller
+location: Lecture "Variable elimination algorithm" [46]
+location: Lecture "Complexity of variable elimination" [47]
+location: Lecture "Graph-based perspective on variable elimination" [48]
+location: Lecture "Finding elimination orderings" [51]
+core: 1
+dependencies: bayesian-networks

@@ -1,0 +1,14 @@
+source: sudderth_thesis
+location: section 2.5 Dirichlet Processes [#page=95]
+core: 1
+
+resource_type: tutorial paper
+url: http://www.gatsby.ucl.ac.uk/~ywteh/research/npbayes/dp.pdf
+authors: Yee Whye Teh
+title: Dirichlet Process
+extra: assumes some familiarity with measure theory
+free: 1
+
+source: ywt_bnp_mlss
+location: part 2, from 0:00 - 10:33
+extra: DP is further discussed throughout the entire lecture

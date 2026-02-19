@@ -52,14 +52,6 @@ Key files:
 ```
 Top-level also has `attributions` array.
 
-### data/lecturebank/ — LectureBank NLP Education (6 files)
-
-- **lecturebank.tsv** — `ID, Title, URL, Topic_ID, Year, Author, Domain, Venue`. 1,352 lectures; domains: nlp, ml, ai, dl, ir
-- **taxonomy.tsv** — `id, topic_name, parent_topic, true_id`. Hierarchical topic tree
-- **208topics.csv** — `ID, Topic, Wiki_Page_URL`. 208 topics with Wikipedia links
-- **prerequisite_annotation.csv** — `Source_Topic_ID, Target_Topic_ID, If_prerequisite`. Binary 208×208 matrix
-- **vocabulary.txt** — 1,221 terms
-
 ### data/course-skill-atlas/ — Education-to-Employment Mapping (~10 files)
 
 Maps 3M+ course syllabi to O*NET categories. Key files:

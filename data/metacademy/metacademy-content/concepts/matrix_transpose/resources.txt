@@ -1,0 +1,17 @@
+source: strang
+edition: 4
+location: Section 2.7, up to "Permutation matrices," pages 107-110
+core: 1
+
+source: khan_academy_linear_algebra
+location: Lecture "Transpose of a matrix" [https://www.khanacademy.org/math/linear-algebra/matrix_transformations/matrix_transpose/v/linear-algebra--transpose-of-a-matrix]
+location: Lecture "Transpose of a matrix product"
+location: Lecture "Transposes of sums and inverses"
+location: Lecture "Transpose of a vector" 
+core: 1
+
+source: beezer
+location: Section "Matrix operations," subsection "Transposes and symmetric matrices" [section-MO.html]
+
+source: shifrin
+location: Section 1.4.2, "The transpose," pages 36-38

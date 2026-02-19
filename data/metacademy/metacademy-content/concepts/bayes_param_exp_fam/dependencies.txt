@@ -1,0 +1,6 @@
+tag: bayesian-parameter-estimation
+
+tag: exponential-families
+
+
+

@@ -1,0 +1,14 @@
+source:wolfram
+url: http://mathworld.wolfram.com/GammaFunction.html
+
+source: wikipedia 
+location: Article: Gamma Function [http://en.wikipedia.org/wiki/Gamma_function]
+
+source:degroot
+location: Definition 5.7.1 (p. 317)
+edition: 4
+
+source: princeton_companion
+edition: 1
+location: Section 3.31, "The gamma function," pages 213-214
+core: 1

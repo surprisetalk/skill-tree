@@ -1,0 +1,12 @@
+tag: random_variables
+
+tag: independent_random_variables
+reason: The data are generally assumed to be independent draws from a distribution.
+
+tag: optimization_problems
+reason: Maximum likelihood is formulated as an optimization problem.
+
+tag: gaussian-distribution
+reason: Fitting a Gaussian distribution is an instructive example of maximum likelihood estimation.
+
+

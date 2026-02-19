@@ -1,0 +1,18 @@
+source: enderton
+edition: 2
+location: Section 2.2, "Truth and models," up through subsection "Logical implication," pages 80-89
+core: 1
+
+source: barwise_etchemendy_fol
+edition: 3
+location: Chapter 11, "Advanced topics in FOL," up through subsection 11.3, "Truth and satisfaction, revisited," pages 258-268
+core: 1
+
+source: cohn_logic
+location: Section 8, "First-order semantics," pages 20-22 [#page=20]
+core: 1
+
+source: bell_machover
+edition: 1
+location: Section 2.1, "First-order semantics," pages 49-54
+core: 1

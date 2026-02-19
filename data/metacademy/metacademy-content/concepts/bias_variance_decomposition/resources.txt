@@ -1,0 +1,16 @@
+source: mathmonk_ml
+location: Lecture: bias-variance decomposition (ML 11.5) [http://www.youtube.com/watch?v=C3nIFH649wY&list=PLD0F06AA0D2E8FFBA&index=70]
+
+source: bishop
+location: Section 3.2
+core: 1
+
+source: murphy
+location: Section 6.4.4
+extra: not self-contained but provides some nice examples
+edition: 1
+
+source: esl
+location: Section 2.9, "Model selection and the bias-variance tradeoff," pages 37-38 [#page=56]
+edition: 2
+

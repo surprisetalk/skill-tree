@@ -1,0 +1,25 @@
+source: bishop
+edition: 1
+location: Section 4.3.2, pages 205-206
+
+source: murphy
+edition: 1
+location: Sections 8-8.3.2, pages 245-249
+
+source: cs229
+location: Chapter 1, section 5, pages 16-19 [cs229-notes1.pdf#page=16]
+core: 1
+
+source: coursera_ng
+location: Lecture "Hypothesis representation" [view?lecture_id=34]
+location: Lecture "Decision boundary" [view?lecture_id=35]
+location: Lecture "Cost function" [view?lecture_id=58]
+location: Lecture "Simplified cost function and gradient descent" [view?lecture_id=36]
+location: Lecture "Regularized logistic regression" [view?lecture_id=41]
+core: 1
+
+source: barber
+edition: 1-online
+location: Sections 17.4, "Linear parameter models for classification," up through 17.4.3, "Avoiding overconfident classification," pages 350-355 [#page=374]
+core: 1
+

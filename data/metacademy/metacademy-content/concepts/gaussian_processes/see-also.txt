@@ -1,0 +1,6 @@
+* Gaussian processes have a variety of uses in machine learning, including:
+** "regression":gaussian_process_regression
+** "classification":gaussian_process_classification
+** "black-box optimization":bayesian_optimization (where we only get to evaluate the function, and doing so is expensive)
+** "reinforcement learning":gaussian_processes_for_reinforcement_learning
+* Techniques for "constructing kernel functions":constructing_kernels

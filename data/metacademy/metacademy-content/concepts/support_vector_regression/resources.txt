@@ -1,0 +1,17 @@
+source: esl
+edition: 2
+location: Section 12.3.6, "Support vector machines for regression," pages 434-436 [#page=453]
+location: Section 12.3.6, pages 436-437 [#page=455]
+dependencies: kernel-svm
+core: 1
+
+source: bishop
+edition: 1
+location: Section 7.1.4, pages 339-343
+dependencies: kernel-svm
+core: 1
+
+source: murphy
+edition: 1
+location: Section 14.5.1, pages 497-498
+ 

@@ -1,0 +1,12 @@
+source: coursera_ng
+location: Lecture "Stochastic gradient descent" [view?lecture_id=105]
+location: Lecture "Mini-batch gradient descent" [view?lecture_id=106]
+location: Lecture "Stochastic gradient descent convergence" [view?lecture_id=107]
+dependencies: linear_regression
+core: 1
+
+source: wikipedia
+location: Article: Stochastic Gradient Descent [http://en.wikipedia.org/wiki/Stochastic_gradient_descent]
+
+source: coursera_domingos
+location: Stochastic gradient descent [281]

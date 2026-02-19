@@ -1,0 +1,12 @@
+source: shifrin
+edition: 1
+location: Section 5.3, "Quadratic forms and the second derivative test," pages 208-215
+core: 1
+
+source: edwards_penney
+edition: 6
+location: Section 13.10, "Critical points of functions of two variables," pages 927-933
+
+source: ocw_auroux
+location: Session 30, "Second derivative test" [http://ocw.mit.edu/courses/mathematics/18-02sc-multivariable-calculus-fall-2010/2.-partial-derivatives/part-a-functions-of-two-variables-tangent-approximation-and-optimization/session-30-second-derivative-test]
+location: Session 31, "Example" [http://ocw.mit.edu/courses/mathematics/18-02sc-multivariable-calculus-fall-2010/2.-partial-derivatives/part-a-functions-of-two-variables-tangent-approximation-and-optimization/session-31-example]

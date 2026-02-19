@@ -1,0 +1,9 @@
+* MDS is closely related to "kernel PCA":kernel_pca
+* MDS can be "generalized to metrics other than Euclidean":mds_non_euclidean
+* "Weighted MDS":weighted_mds gives a way to uncover meaningful axes by simultaneously modeling multiple similarity matrices
+* Other algorithms for learning nonlinear embeddings include:
+** "Isomap":isomap, which tries to model distances along a neighborhood graph
+** "locally linear embedding":locally_linear_embedding
+** "t-SNE":t_sne, an embedding which tries to model short distances and ignore long ones
+** "Gaussian process latent variable models":gaussian_process_latent_variable_model, a Bayesian model similar in spirit to MDS
+

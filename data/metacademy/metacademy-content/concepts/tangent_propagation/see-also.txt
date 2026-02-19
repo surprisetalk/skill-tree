@@ -1,0 +1,5 @@
+* Some other strategies for learning invariances:
+** building it explicitly into the architecture, as in "convolutional nets":convolutional_nets
+** "augmenting the training set":augmenting_training_set_warped with warped examples
+** "Tikhonov regularization":tikhonov_regularization, which penalizes instability with respect to noise
+

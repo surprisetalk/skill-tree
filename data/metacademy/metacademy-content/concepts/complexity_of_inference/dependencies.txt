@@ -1,0 +1,5 @@
+tag: inference_in_mrfs
+
+tag: np_completeness
+
+tag: sharp_p_completeness
