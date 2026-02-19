@@ -60,13 +60,6 @@ Top-level also has `attributions` array.
 - **prerequisite_annotation.csv** — `Source_Topic_ID, Target_Topic_ID, If_prerequisite`. Binary 208×208 matrix
 - **vocabulary.txt** — 1,221 terms
 
-### data/liang2017/ — CS Course Prerequisites (5 CSVs)
-
-- **cs_courses.csv** — `course_id, course_description`
-- **cs_edges.csv** — `source_course_id, target_course_id`. Prerequisite edges
-- **cs_preqs.csv** — alternate prerequisite source
-- **cs_annotations.tsv** — `course_id, skill_keyword, frequency`. Skills extracted from course descriptions
-
 ### data/course-skill-atlas/ — Education-to-Employment Mapping (~10 files)
 
 Maps 3M+ course syllabi to O*NET categories. Key files:
