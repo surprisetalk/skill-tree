@@ -444,16 +444,32 @@ async function parseAsn(): Promise<Result> {
   return { skills, prereqs: [], levels: [] }
 }
 
-// Merge skills with identical labels, accumulating ext_ids and rewriting prereqs
+// Merge skills with similar labels, accumulating ext_ids and rewriting prereqs
+
+function normalizeLabel(s: string): string {
+  let n = s.toLowerCase().trim()
+  // strip parentheticals at end: "repairing (manual/mechanical)" -> "repairing"
+  n = n.replace(/\s*\([^)]*\)\s*$/, "")
+  // strip all punctuation except internal apostrophes
+  n = n.replace(/[^a-z0-9' ]/g, " ")
+  // normalize whitespace
+  n = n.replace(/\s+/g, " ").trim()
+  // strip trailing 's for plurals: "square roots" -> "square root"
+  // but not for short words or words where removing s changes meaning
+  n = n.replace(/\b(\w{4,})s\b/g, "$1")
+  // strip leading articles
+  n = n.replace(/^(the |a |an )/, "")
+  return n
+}
 
 function mergeSkills(
   skills: Skill[], prereqs: Prereq[], levels: Level[]
 ): { skills: Skill[]; prereqs: Prereq[]; levels: Level[]; idMap: Map<string, string> } {
-  // Group by lowercase label
+  // Group by normalized label
   const byLabel = new Map<string, Skill[]>()
   for (const s of skills) {
-    const key = s.label.toLowerCase().trim()
-    if (!key) { byLabel.set(s.id, [s]); continue } // empty label: keep as-is
+    const key = normalizeLabel(s.label)
+    if (key.length < 3) { byLabel.set(`__${s.id}`, [s]); continue } // too short: keep as-is
     const arr = byLabel.get(key)
     if (arr) arr.push(s)
     else byLabel.set(key, [s])
