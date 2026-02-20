@@ -181,6 +181,78 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
       );
     },
   },
+  {
+    label: "asn CCSS math (JSON-LD)",
+    fn: async () => {
+      const dir = DATA + "asn";
+      await mkdir(dir);
+      await get(
+        "http://asn.desire2learn.com/resources/D10003FB_full.json",
+        dir + "/ccss-math.json",
+      );
+    },
+  },
+  {
+    label: "asn CCSS ELA (JSON-LD)",
+    fn: async () => {
+      const dir = DATA + "asn";
+      await mkdir(dir);
+      await get(
+        "http://asn.desire2learn.com/resources/D10003FC_full.json",
+        dir + "/ccss-ela.json",
+      );
+    },
+  },
+  {
+    label: "common standards project (all US state standards, unified JSON)",
+    fn: async () => {
+      const dir = DATA + "common-standards-project";
+      await mkdir(dir);
+      const indexFile = dir + "/jurisdictions.json";
+      const API = "http://api.commonstandardsproject.com/api/v1";
+      const headers = { "api-key": "s5mUcUq5X97vwBzgFBpeKcPW" };
+
+      // fetch jurisdiction list
+      type Jurisdiction = { id: string; title: string; type: string };
+      let jurisdictions: Jurisdiction[];
+      if (await exists(indexFile)) {
+        jurisdictions = JSON.parse(await Deno.readTextFile(indexFile));
+        console.log(`  ${jurisdictions.length} jurisdictions in cached index`);
+      } else {
+        console.log(`  GET ${API}/jurisdictions`);
+        const r = await fetch(`${API}/jurisdictions`, { headers });
+        if (!r.ok) throw new Error(`${r.status}: jurisdictions`);
+        const body = await r.json();
+        jurisdictions = body.data.map((j: Jurisdiction) => ({ id: j.id, title: j.title, type: j.type }));
+        await Deno.writeTextFile(indexFile, JSON.stringify(jurisdictions, null, 2));
+        console.log(`  indexed ${jurisdictions.length} jurisdictions`);
+      }
+
+      // fetch each jurisdiction's standard sets (states + CCSS)
+      const targets = jurisdictions.filter(j => j.type === "state" || j.type === "nation");
+      let fetched = 0;
+      for (const j of targets) {
+        const dest = `${dir}/${j.id}.json`;
+        if (await exists(dest)) continue;
+        console.log(`  [${++fetched}] ${j.title}`);
+        const r = await fetch(`${API}/jurisdictions/${j.id}`, { headers });
+        if (!r.ok) { console.log(`  WARN: ${r.status} for ${j.title}`); continue; }
+        const data = await r.json();
+
+        // fetch full standard sets for this jurisdiction
+        const sets = data.data?.standardSets ?? [];
+        const fullSets: Record<string, unknown>[] = [];
+        for (const s of sets) {
+          const sr = await fetch(`${API}/standard_sets/${s.id}`, { headers });
+          if (!sr.ok) { console.log(`    WARN: ${sr.status} for ${s.title}`); continue; }
+          fullSets.push((await sr.json()).data);
+        }
+
+        await Deno.writeTextFile(dest, JSON.stringify({ jurisdiction: data.data, standardSets: fullSets }, null, 2));
+      }
+      if (fetched === 0) console.log("  skip: all jurisdictions already downloaded");
+    },
+  },
 ];
 
 console.log(`Downloading ${steps.length} datasets to ${DATA}\n`);

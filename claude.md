@@ -165,8 +165,27 @@ Karin Hess's K-12 learning progressions aligned to Common Core:
 - **Math_LPF_KH11.pdf** — mathematics progressions
 - **LPF-for-CCSS-ELA.pdf** — English Language Arts progressions
 
-### data/asn/ — Achievement Standards Network (1 JSON-LD file)
+### data/asn/ — Achievement Standards Network (3 JSON-LD files)
 
-**ngss.json** (916K) — NGSS performance expectations from ASN (asn.desire2learn.com) as RDF/JSON-LD. Each standard is keyed by URI with properties including `rdf:type`, `dc:title`, `dc:description`, `skos:broader`/`skos:narrower`, `dcterms:subject`.
+ASN standards from asn.desire2learn.com as RDF/JSON-LD. Each standard is keyed by URI with properties including `rdf:type`, `dc:title`, `dc:description`, `skos:broader`/`skos:narrower`, `dcterms:subject`.
+
+- **ngss.json** (916K) — NGSS performance expectations (document D2601214)
+- **ccss-math.json** — Common Core State Standards for Mathematics (document D10003FB)
+- **ccss-ela.json** — Common Core State Standards for ELA & Literacy (document D10003FC)
 
 URI pattern: `http://asn.desire2learn.com/resources/S{id}`
+
+### data/common-standards-project/ — US State Standards (JSON)
+
+All US state + national standards from the Common Standards Project API (commonstandardsproject.com). Normalized and grouped by jurisdiction/subject/grade, derived from ASN but cleaned up.
+
+- **jurisdictions.json** — index of all jurisdictions with `id`, `title`, `type` (state/nation/organization/school)
+- **{jurisdiction_id}.json** — per-jurisdiction file containing:
+  - `jurisdiction` — metadata (id, title, type, standardSets index)
+  - `standardSets[]` — array of fully-expanded standard sets, each with:
+    - `id`, `title`, `subject`, `educationLevels`
+    - `document` — source document metadata (ASN document ID, title, valid date)
+    - `standards` — object keyed by standard ID, each with `description`, `statementNotation` (e.g. "CCSS.Math.Content.8.F.B.5"), `depth`, `position`, `listId`, `asnIdentifier`
+
+Coverage: 65 state/province jurisdictions, 323 organizations, 351 schools. ~38 standard sets for CCSS alone.
+
