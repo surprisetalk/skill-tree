@@ -129,6 +129,19 @@ K-12 math tutoring interactions from ASSISTments platform. ~346,860 interactions
 - **Info_UserData.csv.gz** (3M) — anonymized user profiles
 - **Log_Problem.csv** (2.8G, gitignored) — 26M+ interaction logs
 
+### data/khanacademy/ — Khan Academy Math Prerequisite Graph (1 TSV)
+
+Community-mapped prerequisite graph of 1,487 Khan Academy math exercises, from counting (K) through calculus (AP). Source: [Google Sheets data map](https://docs.google.com/spreadsheets/d/1YiRwrDAuLx7K2NmPySs1K1GpR7Kxzfk5KjDTxpvP0rM/).
+
+**khandata.tsv** — columns: `Code, Data Name, Prereq(s), H-Position, V-Position, Display Name, Link to Practice problem`
+
+- `Code` — numeric ID (1–1487)
+- `Data Name` — exercise slug (e.g. `counting-out-1-20-objects`)
+- `Prereq(s)` — semicolon-separated prerequisite references; mixed numeric Codes and Data Name slugs
+- `H-Position, V-Position` — layout coordinates for visualization (`x` = unpositioned)
+- `Display Name` — human-readable exercise title
+- `root` in Prereq(s) means no prerequisites
+
 ### data/opensalt/ — OpenSALT Standards Frameworks (96 CASE JSON files)
 
 95 K-12 standards frameworks from opensalt.net in 1EdTech CASE format. Includes CCSS Math, NGSS, state standards (Alabama, Georgia, Indiana, Virginia, Oklahoma, Florida, etc.), plus specialty frameworks (CASEL, 21st Century Skills, AP CS).

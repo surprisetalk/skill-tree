@@ -1,0 +1,1488 @@
+Code	Data Name	Prereq(s)	H-Position	V-Position	Display Name	Link to Practice problem
+						
+1	counting-out-1-20-objects	root	-40	3	Count with small numbers	
+2	which-has-more-	root	-40	10	Compare size	
+3	naming-shapes	root	-40	13	Name shapes 1	
+4	count-to-100	1	-38	-2	Numbers to 100	
+5	count-from-any-number	1	-38	-1	Missing numbers	
+6	counting-in-scenes	1	-38	0	Count in pictures	
+7	counting-objects	1	-38	1	Count in order	
+8	one-more--one-less	1	-38	2	Find 1 more or 1 less than a number	
+9	how-many-objects-1	1	-38	3	Count objects 1	
+10	compare-groups-through-10	1	-38	5	Compare numbers of objects 1	
+11	comparing-numbers-through-10	1	-38	6	Comparing numbers to 10	
+12	how-many-objects-2	9	-37	2	Count objects 2	
+13	making-five	9	-36	3	Making 5	
+14	put-together	9	-36	4	Add within 10	
+15	sort-groups-by-count	9; 10	-36	7	Compare numbers of objects 2	
+16	addition_1	13	-35	3	Add within 5	
+17	take-apart	14	-35	4	Subtract within 10	
+18	making-totals-in-different-ways-within-10	16	-34	1	Making small numbers in different ways	
+19	making-ten	16	-34	3	Make 10 (grids and number bonds)	
+20	naming-shapes-2	3	-34	13	Name shapes 2	
+21	subtraction_1	16	-33	1	Subtract within 5	
+22	addition-word-problems-within-10	19	-33	2	Addition word problems within 10	
+23	making-ten-2	19	-33	3	Make 10	
+24	teen-numbers-1	14	-33	6	Teen numbers	
+25	compare-shapes	20	-33	13	Compare shapes	
+26	relate-addition-and-subtraction	21	-32	0	Relate addition and subtraction	
+27	subtraction-word-problems-within-10	17	-32	4	Subtraction word problems within 10	
+28	compose-shapes	25	-32	14	Compose shapes	
+29	numbers-to-120	4	-27	-2	Numbers to 120	
+30	understanding-2-digit-numbers	16; 24	-27	5	2-digit place value challenge	
+31	order-by-length	2	-27	10	Order by length	
+32	attributes-of-shapes	9; 25	-27	16	Name shapes 3	
+33	addition_2	addition-and-subtraction-within-10	-26	2	Add within 20	
+34	groups-of-tens	30	-26	4	Groups of ten objects	
+35	tens-and-ones	30	-26	5	Tens and ones	
+36	comparing_whole_numbers	15; 30	-26	7	Compare 2-digit numbers	
+37	measuring-lengths-1	31	-26	10	Measure lengths 1	
+38	halves-and-fourths	28; 32	-26	17	Halves and fourths	
+39	subtraction_2	33	-25	2	Subtract within 20	
+40	comparing-two-digit-numbers-1	36	-25	7	Compare 2-digit numbers 2	
+41	meaning-of-equal-sign-1	39	-24	1	Equal sign	
+42	addition-and-subtraction-word-problems-within-20--level-1	22; 27; 33; 39	-23	-3	Addition and subtraction word problems 1	
+43	adding-three-numbers	42	-22	-4	Add 3 numbers	
+44	addition-and-subtraction-word-problems-within-20--level-2	42	-22	-3	Addition and subtraction word problems 2	
+45	addition-and-subtraction-word-problems-within-20--level-3	44	-21	-3	Word problems with \more\ and \fewer\ 1	
+46	breaking-apart-two-digit-addition-problems	35	-21	4	Break apart 2-digit addition problems	
+47	add-within-100--level-1	addition-and-subtraction-within-10	-21	5	Add 1 or 10	
+48	addition-and-subtraction-word-problems-within-20--level-4	45	-20	-3	Word problems with \more\ and \fewer\ 2	
+49	adding-1s-or-10s-to-two-digit-numbers	46; 47	-20	5	Add 1s or 10s (no regrouping)	
+50	solving-problems-with-bar-graphs-1	39	-20	12	Solve problems with bar graphs 1	
+51	regroup-two-digit-plus-one-digit	49	-19	4	Regroup when adding 1-digit numbers	
+52	add-within-100--level-2	49	-19	5	Add 2-digit numbers (no regrouping)	
+53	subtract-with-in-100-level-1	47	-18	6	Subtract 1 or 10	
+54	addition_3	33; 51; 52	-17	0	Add within 100	
+55	making-100	51; 52	-17	4	Add 2-digit numbers by making tens	
+56	subtracting-1s-or-10s	53	-17	6	Subtracting 1s or 10s (no regrouping)	
+57	hundreds--tens--and-ones	35	-17	8	Hundreds tens and ones	
+58	measuring-lengths-2	37	-17	17	Measure lengths 2	
+59	making-100-level-2	55	-16	4	Add 2-digit numbers by making tens 2	
+60	subtract-within-100-level-2	52; 56	-16	6	Subtract 2-digit numbers (no regrouping)	
+61	regroup-two-dig-minus-one-dig	56	-16	7	Subtract 1-digit numbers with regrouping	
+62	skip-counting-by-5s	57	-16	8	Skip-count by 5s	
+63	writing-numbers-to-1000	57	-16	9	3-digit place value challenge	
+64	solving-problems-with-picture-graphs-1	39	-16	13	Solve problems with picture graphs 1	
+65	solving-problems-with-line-plots-1	39	-16	14	Solve problems with line plots	
+66	estimating-lengths	58	-16	18	Estimate lengths	
+67	recognizing-shapes	32	-16	22	Name shapes 4	
+68	skip-counting-by-10s	62	-15	8	Skip-count by 10s	
+69	comparing-numbers-within-1000	63	-15	9	Compare 3-digit numbers	
+70	creating-line-plots-1	50; 58; 64; 65	-15	14	Make line plots	
+71	equal-parts-of-circles-and-rectangles	38	-15	23	Equal parts of circles and rectangles	
+72	subtraction_3	39; 54; 60	-14	2	Subtract within 100	
+73	add-sub-within-100-w-num-line	60	-14	4	Add and subtract using a number line	
+74	select-strategies-for-adding-within-100	59; 60	-14	5	Select strategies for adding within 100	
+75	skip-counting-by-100s	68	-14	8	Skip-counting by 100s	
+76	addition-and-subtraction-word-problems-within-100--level-1	42; 72	-13	-2	Add and subtract within 100 word problems 1	
+77	addition-and-subtraction-word-problems-within-100--level-2	76	-12	-2	Add and subtract within 100 word problems 2	
+78	repeated-addition	76	-12	-1	Repeated addition	
+79	find-the-missing-number-add-sub-within-100	72	-12	1	Find the missing number (add and subtract within 100)	
+80	addition-and-subtraction-word-problems-within-100--level-3	77	-11	-2	Add and subtract within 100 word problems 3	
+81	telling_time_0.5	54	-11	17	Tell time with a labeled clock	
+82	addition-and-subtraction-word-problems-within-100--level-4	80	-10	-2	Challenging add and subtract word problems (within 100)	
+83	break-apart-three-dig-add	57	-10	7	Break apart 3-digit addition problems	
+84	adding-and-subtracting-on-the-number-line-word-problems	42; 72; comparing-lengths	-10	14	Add and subtract on the number line word problems	
+85	telling_time	81	-10	17	Tell time without labels	
+86	meaning-of-multiplication	78	-9	1	Meaning of multiplication	
+87	counting-money--us-	72	-9	4	Count money (U.S.)	
+88	add-within-1000--level-1	52; 83	-9	6	Add 10s and 100s (no regrouping)	
+89	length-word-problems	37; 72; comparing-lengths	-9	10	Length word problems	
+90	solving-problems-with-bar-graphs-2	50; 72	-9	12	Solve problems with bar graphs 2	
+91	multiplying-by-3	meaning-of-multiplication	-8	0	Multiply by 3	
+92	multiplying-by-2	meaning-of-multiplication	-8	1	Multiply by 2	
+93	multiplying-by-0-or-1	meaning-of-multiplication	-8	2	Multiply by 0 or 1	
+94	add-within-1000--level-2	add-within-1000--level-1	-8	6	Add 2- and 3-digit numbers (no regrouping)	
+95	subtract-within-1000--level-1	add-within-1000--level-1subtract-within-100-level-2	-8	7	Subtract 10s and 100s (no regrouping)	
+96	multiplying-by-6	multiplying-by-3	-7	0	Multiply by 6	
+97	multiplying-by-4	multiplying-by-2	-7	1	Multiply by 4	
+98	multiplying-by-5	multiplying-by-2	-7	2	Multiply by 5	
+99	subtract-within-1000--level-2	add-within-1000--level-2subtract-within-1000--level-1	-7	7	Subtract 2- and 3-digit numbers (no regrouping)	
+100	that-s-not-fair-	equal-parts-of-circles-and-rectangles	-7	17	Cut shapes into equal parts	
+101	multiplying-by-7	multiplying-by-6	-6	-1	Multiply by 7	
+102	multiplying-by-9	multiplying-by-6	-6	0	Multiply by 9	
+103	multiplying-by-8	multiplying-by-4	-6	1	Multiply by 8	
+104	adding-and-subtracting-within-1000-using-a-number-line	add-within-1000--level-2subtract-within-1000--level-2	-6	6	Add and subtract on a number line	
+105	cutting-shapes-into-equal-parts	that-s-not-fair-	-6	16	Identify unit fractions	
+106	meaning-of-division	meaning-of-multiplication	-5	-2	Meaning of division	
+107	recognizing_fractions_0.5	cutting-shapes-into-equal-parts	-5	14	Recognize fractions	
+108	dividing-by-3	meaning-of-division	-4	-3	Divide by 3	
+109	dividing-by-2	meaning-of-division	-4	-2	Divide by 2	
+110	dividing-by-1	meaning-of-division	-4	-1	Divide by 1	
+111	dividing-by-6	dividing-by-3	-3	-3	Divide by 6	
+112	dividing-by-4	dividing-by-2	-3	-2	Divide by 4	
+113	dividing-by-5	dividing-by-2	-3	-1	Divide by 5	
+114	addition_4	select-strategies-for-adding-within-1000break-apart-three-dig-addmaking-100-and-1000	-2	-6	Add within 1000	
+115	dividing-by-7	dividing-by-6	-2	-4	Divide by 7	
+116	dividing-by-9	dividing-by-6	-2	-3	Divide by 9	
+117	dividing-by-8	dividing-by-4	-2	-2	Divide by 8	
+118	dividing-by-10	dividing-by-1dividing-by-5	-2	0	Divide by 10	
+119	multiplication_0.5	meaning-of-multiplication	-2	3	Basic multiplication	
+120	understanding-area	that-s-not-fair-	-2	23	Compare area with unit squares	
+121	making-100-and-1000	breaking-apart-two-digit-addition-problems	-1	-7	Add using groups of 10 and 100	
+122	subtraction_4	select-strategies-for-subtracting-within-1000break-apart-3-digit-subtraction-problemssubtract-on-a-number-line	-1	-6	Subtract within 1000	
+123	multiply-1-digit-number-by-10--100-1000	multiplication_0.5	-1	5	Multiply 1-digit numbers by 10 100 and 1000	
+124	converting_repeating_decimals_to_fractions_1		-1	24	Converting repeating decimals to fractions	
+125	find-the-missing-number--addition-and-subtraction-within-1000-	subtraction_4addition_4	0	-7	Find the missing number (add and subtract within 1000)	
+126	multiplication_1	multiplication_0.5	0	1	Multiply by tens	
+127	division_0.5	multiplication_0.5meaning-of-division	0	4	Basic division	
+128	multiply-1-digit-number-by-multiple-of-10-100-1000	multiply-1-digit-number-by-10--100-1000	0	5	Multiply 1-digit numbers by a multiple of 10 100 and 1000	
+129	writing-fractions-as-whole-numbers	recognizing_fractions_0.5	0	11	Write fractions as whole numbers	
+130	fractions_on_the_number_line_1	recognizing_fractions_0.5	0	12	Fractions on the number line	
+131	fractions-greater-than-one	recognizing_fractions_0.5	0	13	Recognize fractions greater than 1	
+132	recognizing_fractions	recognizing_fractions_0.5	0	14	Identify numerators and denominators	
+133	telling-time-to-the-nearest-minute	telling_time_0.5	0	19	Tell time to the nearest minute	
+134	area_1	understanding-area	0	25	Find area by counting unit squares	
+135	perimeter_1	multiplication_0.5addition_3	0	29	Find perimeter by counting unit squares	
+136	rounding-to-the-nearest-ten-or-hundred		1	-12	Round to nearest 10 or 100	
+137	patterns-in-the-addition-table-and-multiplication-table	multiplication_0.5	1	-2	Patterns in multiplication tables	
+139	multiply-by-tens-word-problems	multiplication_1	1	1	Multiply by tens word problems	
+140	division_1	division_0.5	1	4	Find missing divisors and dividends (1-digit division)	
+141	multiplying-tens	multiply-1-digit-number-by-multiple-of-10-100-1000multiplication_1	1	5	Multiplying 10s	
+142	multiplying-with-arrays	multiplication_0.5	1	7	Multiply with arrays	
+143	fractions_on_the_number_line_2	fractions_on_the_number_line_1	1	12	Unit fractions on the number line	
+144	equivalent-fraction-models-1	fractions-greater-than-one	1	13	Equivalent fraction models	
+145	naming-the-whole	recognizing_fractions_0.5	1	16	Compare fractions of different wholes	
+146	time-differences	telling-time-to-the-nearest-minute	1	21	Time differences (within the hour)	
+147	find-area-of-rectangles-by-counting-unit-squares	area_1	1	23	Create rectangles with a given area	
+148	measure-to-find-area	measuring-lengths-2understanding-area	1	24	Measure to find area	
+149	solving-problems-with-bar-graphs-3	multiplication_0.5	1	44	Read bar graphs and solve 1-step problems	
+150	solving-problems-with-picture-graphs-2	multiplication_0.5	1	46	Read picture graphs	
+151	commutative-property-of-multiplication	multiplication_0.5	2	1	Commutative property of multiplication	
+152	distributive-property-of-multiplication-	multiplication_0.5	2	2	Distributive property of multiplication	
+153	associative-property-of-multiplication-	multiplication_0.5	2	3	Associative property of multiplication	
+154	relate-division-to-multiplication	multiplication_0.5	2	4	Relate division to multiplication	
+155	dividing-with-visuals	meaning-of-division	2	5	Divide with visuals	
+156	letters-and-symbols-in-multiplication-and-division-equations	division_1	2	7	Letters and symbols in multiplication and division equations	
+157	finding-1-on-the-number-line	fractions_on_the_number_line_2relate-fractions-to-1	2	11	Find 1 on the number line	
+158	equivalent-fraction-models	fractions_on_the_number_line_2equivalent-fraction-models-1	2	14	Equivalent fractions on the number line	
+159	telling-time-word-problems-with-the-number-line	telling-time-to-the-nearest-minutetelling-time-on-the-number-line	2	20	Time word problems with number line	
+160	finding-area-by-multiplying	area_1find-area-of-rectangles-by-counting-unit-squaresmultiplication_0.5	2	25	Transition from unit squares to area formula	
+161	measure-to-find-perimeter	perimeter_1measuring-lengths-1	2	28	Measure to find perimeter	
+162	perimeter-2	perimeter_1	2	29	Find perimeter when given side lengths	
+163	categorize-quadrilaterals	recognizing-shapes	2	30	Analyze quadrilaterals	
+164	estimating-volume	estimating-lengths	3	-3	Estimate volume (milliliters and liters)	
+165	estimating-mass	estimating-lengths	3	-2	Estimate mass (grams and kilograms)	
+166	estimating-length--millimeters--centimeters--meters--kilometers-	estimating-lengths	3	-1	Estimating length (mm cm m km)	
+167	comparing-fractions-with-the-same-numerator-or-denominator	fractions-greater-than-one	3	17	Visually compare fractions 1	
+168	measuring-area-with-unit-squares	area_1	3	22	Find area with partial unit squares	
+169	area-of-squares-and-rectangles	finding-area-by-multiplyingmultiplication_0.5	3	23	Area of rectangles	
+170	find-a-missing-side-length-when-given-perimeter	perimeter-2	3	29	Find a missing side length when given perimeter	
+171	creating_bar_charts_1	solving-problems-with-bar-graphs-3	3	42	Create bar graphs	
+172	reading_bar_charts_2	solving-problems-with-bar-graphs-3	3	43	Read bar graphs (2-step problems)	
+173	creating-picture-and-bar-graphs-2	solving-problems-with-picture-graphs-2	3	45	Create picture graphs (picture more than 1)	
+174	reading_pictographs_2	solving-problems-with-picture-graphs-2	3	46	Read picture graphs (multi-step problems)	
+175	rounding-to-the-nearest-10-or-100-on-the-number-line	rounding-to-the-nearest-ten-or-hundred	4	-13	Round to nearest 10 or 100 on the number line	
+176	two-step-word-problems-with-addition--subtraction--multiplication--and-division	subtraction_4multiplication_1division_1	4	-5	2-step word problems	
+177	estimating-volume--cups--pints--quarts--and-gallons-	estimating-volume	4	-4	Estimating volume (cups pints quarts and gallons)	
+178	volume-word-problems-1	multiplication_0.5addition_4division_1estimating-volume	4	-3	Word problems with volume	
+179	estimating-mass--ounces-and-pounds-	estimating-mass	4	-2	Estimating mass (ounces and pounds)	
+180	estimating-length--inches--feet--yards--and-miles-	estimating-length--millimeters--centimeters--meters--kilometers-estimating-lengths	4	-1	Estimating length (in ft yd and mi)	
+181	patterns	commutative-property-of-multiplicationassociative-property-of-multiplication-	4	1	Math patterns 1	
+182	relate-division-to-multiplication-word-problems	relate-division-to-multiplication	4	5	Relate division to multiplication word problems	
+183	comparing_fractions_with_the_same_denominator	fractions_on_the_number_line_2recognizing_fractionscomparing-fractions-with-the-same-numerator-or-denominator	4	15	Compare fractions with the same denominator	
+184	comparing_fractions_with_the_same_numerator	fractions_on_the_number_line_2recognizing_fractionscomparing-fractions-with-the-same-numerator-or-denominator	4	16	Compare fractions with the same numerator	
+185	telling-time-word-problems	telling-time-word-problems-with-the-number-line	4	20	Telling time word problems (within the hour)	
+186	find-a-missing-side-length-when-given-area-of-a-rectangle	area-of-squares-and-rectangles	4	23	Find a missing side length when given area	
+187	area-and-the-distributive-property	area-of-squares-and-rectanglesdistributive-property-of-multiplication-	4	24	Area and the distributive property	
+188	decompose-figures-to-find-area-1	area-of-squares-and-rectangles	4	25	Decompose figures to find area 1	
+189	comparing-areas-by-multiplying	finding-area-by-multiplyingarea-of-squares-and-rectangles	4	26	Compare areas by multiplying	
+190	rounding-challenge	rounding-to-the-nearest-ten-or-hundred	5	-14	Rounding challenge	
+191	place_value	addition_4	5	-10	Intro to place value	
+192	converting-larger-units-to-smaller-units--cups--pints--quarts--and-gallons-	estimating-volume--cups--pints--quarts--and-gallons-	5	-4	Convert to smaller units (c pt qt & gal)	
+193	converting-larger-units-to-smaller-units--milliliters-and-liters-	estimating-volume	5	-3	Convert to smaller units (mL and L)	
+194	measure-mass	division_1multiplication_0.5estimating-mass	5	-2	Word problems with mass	
+195	converting-larger-units-to-smaller-units--millimeters--centimeters--meters--and-kilometers-	estimating-length--millimeters--centimeters--meters--kilometers-	5	-1	Convert to smaller units (mm cm m & km)	
+196	comparing_fractions_1	comparing_fractions_with_the_same_denominatorcomparing_fractions_with_the_same_numerator	5	16	Compare fractions with the same numerator or denominator	
+197	decompose-shapes-to-find-area	decompose-figures-to-find-area-1	5	25	Decompose figures to find area 2	
+198	comparing-area-and-perimeter	comparing-areas-by-multiplyingperimeter-2	5	27	Compare area and perimeter	
+199	perimeter-word-problems	find-a-missing-side-length-when-given-perimeter	5	29	Perimeter word problems	
+200	creating-line-plots-2	creating-picture-and-bar-graphs-2	5	46	Graph data on line plots	
+201	multiplying-by-10	multiplication_0.5	6	-7	Multiply whole numbers by 10	
+202	dividing-whole-numbers-by-10	division_1	6	-6	Divide whole numbers by 10	
+203	converting-larger-units-to-smaller-units--ounces-and-pounds-	estimating-mass--ounces-and-pounds-	6	-2	Convert to smaller units (oz and lb)	
+204	converting-larger-units-to-smaller-units--inches--feet--yards--and-miles-	estimating-length--inches--feet--yards--and-miles-	6	-1	Convert to smaller units (in ft yd & mi)	
+205	number_line	multiplication_0.5	6	4	Whole numbers on the number line	
+206	visualizing-equivalent-fractions	comparing_fractions_1	6	12	Equivalent fractions (fraction models)	
+207	understanding-whole-number-representations	place_value	7	-11	Whole number place value challenge	
+208	multiplying-and-dividing-by-10	place_valuemultiplying-by-10dividing-whole-numbers-by-10	7	-7	Multiply and divide by 10  	
+209	quotients-that-are-multiples-of-10	dividing-whole-numbers-by-10division_1	7	-6	Quotients that are multiples of 10	
+210	converting-larger-units-to-smaller-units--grams-and-kilograms-	estimating-mass	7	-2	Convert to smaller units (g and kg)	
+211	equivalent_fractions	visualizing-equivalent-fractions	7	12	Equivalent fractions	
+212	place-value-blocks	place_value	8	-11	Place value blocks	
+213	numbers-in-expanded-form	place_value	8	-10	Write whole numbers in expanded form	
+214	creating-largest-or-smallest-number	place_value	8	-9	Creating largest or smallest number	
+215	understanding-place-value-1	place_valuemultiplying-and-dividing-by-10	8	-7	Place value when multiplying and dividing by 10	
+216	cancelling-zeros-in-division	quotients-that-are-multiples-of-10division_1	8	-6	Cancel zeros when dividing	
+217	multi-digit-division-with-visual-models	quotients-that-are-multiples-of-10	8	-1	Divide by 1-digit numbers (visual models)	
+218	equivalent_fractions_2	equivalent_fractions	8	13	Equivalent fractions 2	
+219	different-wholes	equivalent_fractions	8	14	Equivalent fractions and different wholes	
+220	visually-comparing-fractions	equivalent_fractionscomparing-fractions-with-the-same-numerator-or-denominator	8	17	Visually compare fractions with unlike denominators	
+221	recognizing_rays_lines_and_line_segments		8	55	Identify rays lines & line segments	
+222	comparing-multi-digit-numbers	place_value	9	-11	Compare multi-digit numbers	
+223	numbers-in-written-form	numbers-in-expanded-form	9	-10	Write numbers in written form	
+224	zeros-in-the-dividend-no-remainders	division_1quotients-that-are-multiples-of-10multi-digit-division-with-visual-models	9	-1	Zeros in the dividend (no remainders)	
+225	zeros-in-the-quotient-no-remainders	division_1quotients-that-are-multiples-of-10multi-digit-division-with-visual-models	9	0	Zeros in the quotient (no remainders)	
+226	adding_fractions_with_common_denominators	equivalent_fractions	9	11	Add fractions with common denominators	
+227	measuring_angles	recognizing_rays_lines_and_line_segments	9	53	Measure angles	
+228	naming-angles	recognizing_rays_lines_and_line_segments	9	59	Name angles	
+229	comparing-multi-digit-numbers-pv-challenge	numbers-in-written-formcomparing-multi-digit-numbers	10	-10	Compare numbers:  place value challenge	
+230	multiplication-with-place-value-understanding	understanding-place-value-1	10	-7	Multiply using place value	
+231	multiplication_1.5	understanding-place-value-1multiplication_0.5	10	-5	Multiply without regrouping	
+232	multiplying-by-4-digit-numbers-with-visual-models	multiplication_0.5understanding-place-value-1	10	-4	Multiply 2- 3- and 4-digits by 1-digit with area models	
+233	division_1.5	division_1relate-division-to-multiplicationzeros-in-the-dividend-no-remainderszeros-in-the-quotient-no-remainders	10	-3	Divide by 1-digit numbers (no remainders)	
+234	equivalent-fractions-with-denominators-of-10-and-100-intuition	visualizing-equivalent-fractions	10	3	Equivalent fractions with fraction models (denominators 10 & 100)	
+235	multiplying-fractions-and-whole-numbers-intuition	adding_fractions_with_common_denominators	10	15	Multiply fractions and whole numbers intuition	
+236	area_of_squares_and_rectangles	finding-area-by-multiplying	10	27	Area of squares and rectangles	
+237	angles-in-circles	measuring_angles	10	51	Angles in circles	
+238	angle_types	measuring_angles	10	52	Angle types	
+239	drawing-angles	measuring_angles	10	53	Draw angles	
+240	drawing-lines	recognizing_rays_lines_and_line_segments	10	55	Draw rays lines & line segments	
+241	axis_of_symmetry	recognizing_rays_lines_and_line_segments	10	57	Identify lines of symmetry	
+242	rounding_whole_numbers	rounding-to-the-nearest-ten-or-hundred	11	-12	Round whole numbers	
+243	multiplication_2	multiplication_1.5multiplying-by-4-digit-numbers-with-visual-models	11	-6	Multiply with regrouping	
+244	multiplying-2-digit-numbers-with-area-models	multiplying-by-4-digit-numbers-with-visual-models	11	-4	Multiply 2-digit numbers with area models	
+245	division-with-remainders-1	division_1.5	11	-2	Divide with remainders (basic)	
+246	division-using-place-value-understanding	understanding-place-value-1division_1.5	11	-1	Divide using place value	
+247	equivalent-fractions-with-denominators-of-10-and-100	equivalent-fractions-with-denominators-of-10-and-100-intuition	11	3	Equivalent fractions (denominators 10 & 100)	
+248	multiplying-unit-fractions-and-whole-numbers	multiplying-fractions-and-whole-numbers-intuition	11	16	Multiply unit fractions and whole numbers	
+249	area-and-perimeter-of-rectangles-word-problems	area_of_squares_and_rectanglesperimeter-2	11	28	Area & perimeter of rectangles word problems	
+250	benchmark-angles	angle_types	11	52	Benchmark angles	
+251	drawing-lines-of-symmetry-and-symmetrical-figures	axis_of_symmetry	11	57	Draw lines of symmetry and symmetrical figures	
+252	recognizing-angles	naming-angles	11	59	Recognize angles	
+253	rounding-whole-numbers-2	rounding_whole_numbers	12	-13	Round whole numbers challenge	
+254	multiplication_3	multiplication_2multiplying-2-digit-numbers-with-area-models	12	-6	Multiply 2-digit numbers	
+255	division_2	division_1.5division-with-remainders-1	12	-2	Divide with remainders	
+256	decompose-fractions-with-denominators-of-100	equivalent-fractions-with-denominators-of-10-and-100	12	3	Decompose fractions with denominators of 100	
+257	adding_fractions_0.5	adding_fractions_with_common_denominatorsequivalent-fractions-with-denominators-of-10-and-100	12	4	Add fractions (denominators 10 & 100)	
+258	subtracting_fractions_with_common_denominators	adding_fractions_with_common_denominators	12	10	Subtract fractions with common denominators	
+259	understanding-multiplying-fractions-and-whole-numbers	multiplying-unit-fractions-and-whole-numbers	12	15	Equivalent unit fraction and whole number multiplication expressions	
+260	multiplying_fractions_by_integers	multiplying-unit-fractions-and-whole-numbers	12	17	Multiply fractions and whole numbers	
+261	measuring-time-word-problems	telling-time-word-problems	12	20	Time conversion word problems	
+262	identifying-triangles-by-angles	angle_types	12	54	Identify triangles by angles	
+263	recognizing-triangles	recognizing_rays_lines_and_line_segments	12	55	Identify triangles by side lengths	
+264	drawing-right--acute--and-obtuse-angles	angle_typesdrawing-anglesdrawing-linesrecognizing-angles	12	57	Draw right acute and obtuse angles	
+265	multi-step-word-problems-with-whole-numbers	division_1.5multiplication_3rounding_whole_numbers	13	-8	Multi-step word problems with whole numbers	
+266	comparing-with-multiplication	two-step-word-problems-with-addition--subtraction--multiplication--and-division	13	-5	Compare with multiplication	
+267	arithmetic_word_problems	two-step-word-problems-with-addition--subtraction--multiplication--and-division	13	-4	Multiplication and division word problems	
+268	math-patterns	patternsdivision_2	13	-2	Math patterns 2	
+269	decimal-intuition-with-grids	equivalent-fractions-with-denominators-of-10-and-100-intuition	13	0	Write decimal numbers shown in grids	
+270	decomposing-fractions	adding_fractions_with_common_denominatorssubtracting_fractions_with_common_denominators	13	12	Decompose fractions	
+271	multiplying-fractions-and-whole-numbers-word-problems	multiplying_fractions_by_integers	13	17	Multiply fractions and whole numbers word problems	
+272	unit-sense	measuring-time-word-problems	13	22	Estimating time (seconds minutes and hours)	
+273	decomposing-angles	drawing-right--acute--and-obtuse-angles	13	57	Decompose angles	
+274	multiplicative-comparison-word-problems	comparing-with-multiplication	14	-5	Compare with multiplication word problems	
+275	decimals-in-words	decimal-intuition-with-grids	14	0	Decimals in words	
+276	decimals_on_the_number_line_1	decimals-on-the-number-line-1	14	2	Decimals on the number line:  tenths	
+277	converting_mixed_numbers_and_improper_fractions	division_2equivalent_fractions	14	5	Rewrite mixed numbers and improper fractions	
+278	adding-and-subtracting-fractions-with-like-denominators-word-problems	adding_fractions_with_common_denominatorssubtracting_fractions_with_common_denominators	14	11	Add and subtract fractions word problems (same denominator)	
+279	recognizing-parallel-and-perpendicular-lines	recognizing_rays_lines_and_line_segments	14	56	Identify parallel and perpendicular lines	
+280	factor-pairs	division_1	15	-15	Factor pairs	
+281	decimals_on_the_number_line_2	decimals_on_the_number_line_1decimals-on-the-number-line--hundredths-0-1	15	2	Decimals on the number line:  hundredths	
+282	comparing_fractions_2	equivalent_fractions	15	6	Compare fractions with different numerators and denominators	
+283	common-denominators	equivalent_fractions	15	7	Common denominators	
+284	adding_subtracting_mixed_numbers_0.5	subtracting_fractions_with_common_denominatorsconverting_mixed_numbers_and_improper_fractions	15	8	Add and subtract mixed numbers (no regrouping)	
+285	measurement-units	unit-sense	15	22	Convert to smaller units (sec min & hr)	
+286	classifying-shapes-by-line-and-angle-types	recognizing-trianglesrecognizing-parallel-and-perpendicular-linesidentifying-triangles-by-angles	15	54	Classify shapes by line and angle types	
+287	drawing-parallel-and-perpendicular-lines	recognizing-parallel-and-perpendicular-lines	15	57	Draw parallel and perpendicular lines	
+288	identifying-factors-and-multiples	factor-pairs	16	-15	Identify factors and multiples	
+289	fraction-decimal-intuition	decimals_on_the_number_line_2decimals-in-words	16	0	Write number as a fraction and decimal	
+290	decimals-greater-than-one-intuition	decimals_on_the_number_line_2decimals-in-words	16	2	Place value for decimals greater than 1	
+291	comparing_improper_fractions_and_mixed_numbers	comparing_fractions_2converting_mixed_numbers_and_improper_fractions	16	5	Compare fractions and mixed numbers	
+292	adding-and-subtracting-mixed-numbers-with-like-denominators-2	adding_subtracting_mixed_numbers_0.5	16	8	Add and subtract mixed numbers (with regrouping)	
+293	measuring-and-converting-money-word-problems	measurement-units	16	23	Convert money word problems	
+294	interpreting-line-plots-with-fraction-addition-and-subtraction	adding-and-subtracting-fractions-with-like-denominators-word-problemscreating-line-plots-2	16	45	Interpret dot plots with fractions 1	
+295	composite_numbers	identifying-factors-and-multiples	17	-16	Identify composite numbers	
+296	prime_numbers	identifying-factors-and-multiples	17	-15	Identify prime numbers	
+297	converting_fractions_to_decimals_0.5	fraction-decimal-intuition	17	-1	Rewrite fractions as decimals (denominators of 10 & 100)	
+298	converting_decimals_to_fractions_1	fraction-decimal-intuition	17	0	Rewrite decimals as fractions	
+299	ordering_fractions	comparing_fractions_2	17	5	Order fractions	
+300	quadrilateral_types	classifying-shapes-by-line-and-angle-typescategorize-quadrilaterals	17	29	Quadrilateral types	
+301	estimating-with-subtracting-decimals		18	-13	Estimating with subtracting decimals	
+302	identifying-decimal-place-values	understanding-whole-number-representations	18	-6	Place value names	
+303	comparing-decimals-visually	converting_fractions_to_decimals_0.5	18	-2	Compare decimals visually	
+304	converting_decimals_to_fractions_2	converting_decimals_to_fractions_1	18	0	Rewriting decimals as fractions challenge	
+305	subtracting-decimals-without-the-standard-algorithm-1	estimating-with-subtracting-decimals	19	-13	Subtract decimals like 0.9-0.7	
+306	powers-of-ten	multiplying-by-10	19	-11	Powers of ten	
+307	fractions_as_division_by_a_multiple_of_10	converting_fractions_to_decimals_0.5	19	-4	Fractions as division by a multiple of 10	
+308	comparing_decimals_1	comparing-decimals-visually	19	-2	Compare decimals (tenths and hundredths)	
+309	common-fractions-and-decimals	converting_decimals_to_fractions_2converting_fractions_to_decimals_0.5	19	-1	Common fractions and decimals	
+310	understanding-multiplying-fractions-and-whole-numbers-2	understanding-multiplying-fractions-and-whole-numbers	19	11	Multiply fractions and whole numbers visually	
+311	volume_with_unit_cubes		19	24	Volume with unit cubes 1	
+312	subtracting-decimals-without-the-standard-algorithm-2	subtracting-decimals-without-the-standard-algorithm-1	20	-13	Subtract decimals like 1.6-0.3	
+313	estimating-with-adding-decimals	add-within-1000--level-1	20	-12	Estimating with adding decimals	
+314	decimals-in-written-form	identifying-decimal-place-values	20	-8	Decimals in written form	
+315	value-of-a-decimal-digit	identifying-decimal-place-values	20	-6	Value of a digit	
+316	cc-4th-comparing-decimals-and-fractions	comparing_decimals_1	20	-2	Compare decimals and fractions	
+317	graphing_points	math-patterns	20	2	Graph points	
+318	subtracting_fractions	subtracting_fractions_with_common_denominatorscommon-denominators	20	5	Subtracting fractions with unlike denominators	
+319	using-visuals-to-add-and-subtract-fractions-with-unlike-denominators-	common-denominators	20	7	Visually add and subtract fractions	
+320	adding_fractions	adding_fractions_with_common_denominatorscommon-denominators	20	8	Add fractions with unlike denominators	
+321	volume-formula-intuition	decompose-shapes-to-find-area	20	23	Volume formula intuition	
+322	subtracting-decimals-without-the-standard-algorithm-3	subtracting-decimals-without-the-standard-algorithm-2	21	-13	Subtract decimals like 78.4-3	
+323	adding-decimals-without-the-standard-algorithm-1	add-within-1000--level-1	21	-12	Add decimals like 0.7+0.5	
+324	comparing-decimal-place-value	value-of-a-decimal-digit	21	-4	Compare decimal place value	
+325	regrouping-whole-numbers	value-of-a-decimal-digit	21	-3	Regroup whole numbers	
+326	identify-coordinates	graphing_points	21	2	Identify coordinates	
+327	adding-and-subtracting-fractions-with-unlike-denominators	adding_fractionssubtracting_fractions	21	6	Add and subtract fractions challenge	
+328	adding_subtracting_mixed_numbers_1	adding_subtracting_mixed_numbers_0.5adding_fractionssubtracting_fractions	21	7	Add and subtract mixed numbers with unlike denominators (no regrouping)	
+329	adding-and-subtracting-fractions-with-unlike-denominators-word-problems	adding_fractionssubtracting_fractions	21	9	Add and subtract fractions word problems	
+330	fraction-multiplication-as-scaling	multiplying_fractions_by_integers	21	12	Fraction multiplication as scaling	
+331	volumes-with-unit-cubes	volume-formula-intuition	21	23	Compare volumes with unit cubes	
+332	properties-of-shapes	quadrilateral_types	21	29	Properties of shapes	
+333	expressions-with-parentheses	multi-step-word-problems-with-whole-numbers	22	-16	Evaluate expressions with parentheses	
+334	subtracting-decimals-without-the-standard-algorithm-4	subtracting-decimals-without-the-standard-algorithm-3	22	-13	Subtract decimals like 56.8-17.9	
+335	adding-decimals-without-the-standard-algorithm-2	adding-decimals-without-the-standard-algorithm-1	22	-12	Add decimals like 4+5.7	
+336	mult-div-whole-numbers-by-10-100-1000	multiplying-and-dividing-by-10	22	-10	Multiply and divide whole numbers by 10 100 and 1000	
+337	multiplying-and-dividing-decimals-by-10	multiplying-and-dividing-by-10value-of-a-decimal-digit	22	-9	Multiply and divide decimals by 10	
+338	writing-and-interpreting-decimals	value-of-a-decimal-digit	22	-6	Decimals in expanded form	
+339	regrouping-decimals	value-of-a-decimal-digit	22	-2	Regroup decimals	
+340	estimating-with-dividing-decimals	division_1.5	22	0	Estimating with dividing decimals	
+341	visualizing-and-interpreting-relationships-between-patterns	patternsmath-patternsgraphing_pointsgraph-a-2-variable-relationship	22	1	Relationships between 2 patterns	
+342	identifying-points	math-patternsidentify-coordinates	22	3	Identify points	
+343	adding-and-subtracting-mixed-numbers-with-unlike-denominators-2	adding_subtracting_mixed_numbers_1	22	7	Add and subtract mixed numbers with unlike denominators (regrouping)	
+344	understanding-fractions-as-division	fraction-multiplication-as-scaling	22	15	Fractions as division	
+345	volume_1	volumes-with-unit-cubes	22	23	Volume of rectangular prisms	
+346	translating-expressions-with-parentheses	expressions-with-parentheses	23	-18	Translate expressions with parentheses	
+347	creating-expressions-with-parenthesis	expressions-with-parentheses	23	-17	Create expressions with parentheses	
+348	subtracting-decimals-without-the-standard-algorithm-5	subtracting-decimals-without-the-standard-algorithm-4	23	-13	Subtract decimals like 0.75-0.56	
+349	adding-decimals-without-the-standard-algorithm-3	adding-decimals-without-the-standard-algorithm-2	23	-12	Add decimals like 40.1+7.6	
+350	mult-div-decimals-by-10-100-1000	mult-div-whole-numbers-by-10-100-1000multiplying-and-dividing-decimals-by-10	23	-10	Multiply and divide decimals by 10 100 and 1000	
+351	estimating-with-multiplying-decimals	multiplication_3	23	-9	Estimating with multiplying decimals	
+352	comparing_decimals_2	writing-and-interpreting-decimals	23	-5	Compare decimals through thousandths	
+353	rounding_numbers	rounding_whole_numbersvalue-of-a-decimal-digit	23	-3	Round decimals	
+354	dividing-decimals-without-the-standard-algorithm-1	division_1.5common-fractions-and-decimals	23	0	Divide whole numbers like 7÷5 to get a decimal	
+355	distance-between-points-in-first-quadrant-of-coordinate-plane	graphing_pointsidentifying-points	23	2	Distance between points in first quadrant	
+356	shapes-on-the-coordinate-plane	graphing_pointsidentifying-points	23	3	Shapes on the coordinate plane	
+357	coordinate-plane-word-problems--quadrant-1---basic-	identifying-pointsgraphing_points	23	4	Coordinate plane word problems (quadrant 1)	
+358	understanding-multiplying-fractions-by-fractions	understanding-multiplying-fractions-and-whole-numbers-2	23	9	Multiplying fractions with visuals	
+359	multiplying_fractions_0.5	multiplying_fractions_by_integers	23	10	Multiplying fractions	
+360	dividing-whole-numbers-by-unit-fractions-introduction	multiplying-unit-fractions-and-whole-numbers	23	12	Dividing whole numbers by unit fractions visually	
+361	dividing-fractions-by-whole-numbers-introduction	multiplying-unit-fractions-and-whole-numbers	23	14	Dividing unit fractions by whole numbers visually	
+362	understanding-fractions-as-division--word-problems	understanding-fractions-as-division	23	15	Fractions as division word problems	
+363	decompose-figures-to-find-volume	volume_1	23	22	Decompose figures to find volume	
+364	volume_2	volume_1	23	24	Volume word problems	
+365	subtracting-decimals-without-the-standard-algorithm-6	subtracting-decimals-without-the-standard-algorithm-5	24	-13	Subtract decimals like 0.6-0.43	
+366	adding-decimals-without-the-standard-algorithm-6	adding-decimals-without-the-standard-algorithm-3	24	-12	Add decimals like 0.76+0.21	
+367	multiplying-and-dividing-by-powers-of-10	mult-div-decimals-by-10-100-1000powers-of-ten	24	-10	Multiply and divide by powers of 10	
+368	multiplying-decimals-without-the-standard-algorithm-1		24	-9	Multiply decimals like 0.6x0.4	
+369	comparing-decimals-challenge	comparing_decimals_2	24	-6	Compare decimals challenge	
+370	ordering_decimals	comparing_decimals_2	24	-5	Order decimals	
+371	rounding-decimals-using-a-number-line	rounding_numbers	24	-2	Round decimals using a number line	
+372	dividing-decimals-without-the-standard-algorithm-2	dividing-decimals-without-the-standard-algorithm-1	24	0	Divide whole numbers like 63÷12 to get a decimal	
+373	coordinate-plane-word-problems-in-the-first-quadrant	coordinate-plane-word-problems--quadrant-1---basic-	24	4	Coordinate plane word problems (quadrant 1 - challenging)	
+374	dividing_fractions	dividing-whole-numbers-by-unit-fractions-introduction	24	12	Dividing whole numbers by unit fractions	
+375	dividing_fractions_0.5	dividing-fractions-by-whole-numbers-introduction	24	14	Dividing unit fractions by whole numbers	
+376	subtracting-decimals-without-the-standard-algorithm-7	subtracting-decimals-without-the-standard-algorithm-6	25	-13	Subtract decimals like 67.89-6	
+377	adding-decimals-without-the-standard-algorithm-4	adding-decimals-without-the-standard-algorithm-6	25	-12	Add decimals like 5.53+6.1	
+378	multiplying-decimals-without-the-standard-algorithm-2	multiplying-decimals-without-the-standard-algorithm-1	25	-9	Multiply decimals like 0.56x4	
+379	understanding_moving_the_decimal	multiplying-and-dividing-by-powers-of-10	25	-8	Understanding moving the decimal	
+380	rounding-decimals	rounding_numbers	25	-3	Round decimals challenge	
+381	dividing-decimals-without-the-standard-algorithm-3	dividing-decimals-without-the-standard-algorithm-2	25	0	Divide decimals like 1.86÷2	
+382	multiplying_mixed_numbers_1	multiplying_fractions_0.5	25	9	Multiply mixed numbers	
+383	multiplying-fractions-by-fractions-word-problems	multiplying_fractions_0.5fraction-multiplication-as-scaling	25	10	Multiply fractions word problems	
+384	area-of-rectangles-with-fractional-side-lengths	multiplying_fractions_0.5	25	11	Area of rectangles with fraction side lengths	
+385	subtracting-decimals-without-the-standard-algorithm-8	subtracting-decimals-without-the-standard-algorithm-7	26	-13	Subtract decimals like 15-7.45	
+386	adding-decimals-without-the-standard-algorithm-5	adding-decimals-without-the-standard-algorithm-4	26	-12	Add decimals like 47.75+11.98	
+387	multiplying-decimals-without-the-standard-algorithm-3	multiplying-decimals-without-the-standard-algorithm-2	26	-9	Multiply decimals like 1.7x0.12	
+388	multiplying-by-taking-out-factors-of-10	multiplication_1	26	-8	Multiply by taking out factors of 10	
+389	dividing-by-taking-out-factors-of-10	division_1.5multiplication_1	26	-6	Divide by taking out factors of 10	
+390	dividing-decimals-without-the-standard-algorithm-4	dividing-decimals-without-the-standard-algorithm-3	26	0	Divide decimals like 16.8÷40 by factoring out a 10	
+391	interpreting-line-plots-with-fraction-multiplication-and-division	multiplying-fractions-by-fractions-word-problems	26	10	Interpret dot plots with fraction operations	
+392	division-with-fractions-and-whole-numbers	dividing_fractions_0.5dividing_fractions	26	13	Divide fractions and whole numbers word problems	
+393	order_of_operations_2	order-of-operations--no-exponents-	27	-15	Order of operations	
+394	adding_decimals_0.5	adding-decimals-without-the-standard-algorithm-5	27	-11	Adding decimals:  tenths	
+395	subtracting_decimals_0.5	subtracting-decimals-without-the-standard-algorithm-8	27	-10	Subtracting decimals:  tenths	
+396	multiplying_decimals_0.5	multiplying-decimals-without-the-standard-algorithm-3	27	-9	Multiplying decimals like 4x0.6 (standard algorithm)	
+397	multiplication_4	multiplication_3	27	-7	Multi-digit multiplication	
+398	basic-multi-digit-division	dividing-by-taking-out-factors-of-10	27	-6	Basic multi-digit division	
+399	converting-units	measurement-unitsunderstanding_moving_the_decimalconverting-larger-units-to-smaller-units--grams-and-kilograms-converting-larger-units-to-smaller-units--milliliters-and-liters-converting-larger-units-to-smaller-units--millimeters--centimeters--meters--and-kilometers-	27	-4	Convert units (metrics)	
+400	dividing-decimals-without-the-standard-algorithm-5	dividing-decimals-without-the-standard-algorithm-4	27	0	Divide whole numbers like 80÷200 to get a decimal	
+401	adding_decimals	adding_decimals_0.5	28	-11	Adding decimals:  hundredths	
+402	subtracting_decimals	subtracting_decimals_0.5	28	-10	Subtracting decimals:  hundredths	
+403	multiplying_decimals_1	multiplying_decimals_0.5multiplication_1.5	28	-9	Multiplying decimals like 2.45x3.6 (standard algorithm)	
+404	division_3	division_2multiplication_4basic-multi-digit-division	28	-7	Division by 2-digits	
+405	converting-measurements-word-problems	converting-units	28	-4	Convert units multi-step word problems (metric)	
+406	converting-units--us-customary-	converting-larger-units-to-smaller-units--cups--pints--quarts--and-gallons-converting-larger-units-to-smaller-units--inches--feet--yards--and-miles-converting-larger-units-to-smaller-units--ounces-and-pounds-	28	-3	Convert units (US customary)	
+407	dividing-decimals-without-the-standard-algorithm-6	dividing-decimals-without-the-standard-algorithm-5	28	0	Divide decimals like 0.72÷0.08	
+408	writing-expressions-with-variables-1	creating-expressions-with-parenthesis	29	-22	Writing basic expressions with variables	
+409	evaluating_expressions_1	order_of_operations_2	29	-17	Evaluating expressions with one variable	
+410	dividing_decimals_0.5	multiplying_decimals_1division_3division_2	29	-7	Dividing whole numbers like 56÷35 to get a decimal	
+411	converting-units-word-problems--us-customary-	converting-units--us-customary-	29	-3	Convert units multi-step word problems (US customary)	
+412	dividing-decimals-without-the-standard-algorithm-7	dividing-decimals-without-the-standard-algorithm-6	29	0	Divide decimals and whole numbers by 0.1 or 0.01	
+413	reading_stem_and_leaf_plots	creating-line-plots-2	29	47	Reading stem and leaf plots	
+414	writing_expressions_1	writing-expressions-with-variables-1	30	-22	Writing expressions with variables	
+415	expression-value-intuition	evaluating_expressions_1	30	-18	Expression value intuition	
+416	positive_and_zero_exponents	powers-of-ten	30	-12	Exponents (basic)	
+417	dividing-decimals-without-the-standard-algorithm-8	dividing-decimals-without-the-standard-algorithm-7	30	0	Divide decimals like 1.32÷0.12	
+418	negative_number_word_problems		30	6	Interpreting negative numbers	
+419	area_of_parallelograms	area_of_squares_and_rectanglesproperties-of-shapes	30	32	Area of parallelograms	
+420	intro-to-simple-data	reading_bar_charts_2	30	43	Data set warm-up	
+421	evaluating_expressions_2	evaluating_expressions_1	31	-18	Evaluating expressions with multiple variables	
+422	evaluating-numerical-expressions-with-exponents	order_of_operations_2positive_and_zero_exponentswriting-expressions-3	31	-13	Order of operations challenge	
+423	powers-of-fractions	positive_and_zero_exponentsmultiplying_fractions_0.5	31	-11	Powers of fractions	
+424	greatest_common_divisor	identifying-factors-and-multiples	31	-7	Greatest common factor	
+425	least_common_multiple	identifying-factors-and-multiples	31	-6	Least common multiple	
+426	understanding-dividing-fractions-by-fractions	division-with-fractions-and-whole-numbers	31	-4	Understanding dividing fractions by fractions	
+427	adding_decimals_2	adding_decimals	31	-1	Adding decimals:  thousandths	
+428	subtracting_decimals_2	subtracting_decimals	31	0	Subtracting decimals:  thousandths	
+429	dividing_decimals_1	dividing_decimals_0.5dividing-decimals-without-the-standard-algorithm-8	31	1	Dividing decimals 1	
+430	multiplying_decimals	multiplication_4multiplying_decimals_1	31	2	Multiplying decimals like 0.847x3.54 (standard algorithm)	
+431	number_line_2	decimals_on_the_number_line_2negative_number_word_problems	31	6	Negative numbers on the number line	
+432	converting-between-fractions-and-percents	equivalent_fractions	31	18	Convert percents to fractions	
+433	representing-ratios	understanding-fractions-as-divisionequivalent_fractions	31	20	Basic ratios	
+434	area_of_triangles_1	area_of_parallelograms	31	33	Area of triangles	
+435	statistical-questions	intro-to-simple-data	31	42	Statistical questions	
+436	creating-frequency-tables	intro-to-simple-data	31	44	Creating frequency tables	
+437	creating-dot-plots	intro-to-simple-data	31	45	Creating dot plots	
+438	evaluating-expressions-in-two-variables-2	evaluating_expressions_2	32	-19	Evaluating expressions with multiple variables:  fractions & decimals	
+439	evaluating-expressions-3	evaluating_expressions_2	32	-17	Evaluating expressions with variables word problems	
+440	gcf-and-lcm-word-problems	greatest_common_divisorleast_common_multiple	32	-7	GCF & LCM word problems	
+441	simplifying_fractions	greatest_common_divisor	32	-6	Simplify fractions	
+442	dividing_fractions_1.5	understanding-dividing-fractions-by-fractions	32	-4	Dividing fractions	
+443	adding_and_subtracting_decimals_word_problems	adding_decimals_2subtracting_decimals_2	32	0	Adding & subtracting decimals word problems	
+444	dividing_decimals_2	dividing_decimals_1division_3	32	1	Dividing decimals 2	
+445	decimals_on_the_number_line_3	number_line_2	32	4	Negative decimals on the number line	
+446	number-opposites	number_line_2	32	5	Number opposites	
+447	identifying_points_1	number_line_2graphing_points	32	13	Points on the coordinate plane	
+448	converting_decimals_to_percents	understanding_moving_the_decimalconverting-between-fractions-and-percents	32	17	Convert decimals to percents	
+449	nets-of-3d-figures	area-and-perimeter-of-rectangles-word-problems	32	25	Nets of polyhedra	
+450	analyzing-with-dot-plots	creating-dot-plotscreating-frequency-tables	32	45	Reading dot plots & frequency tables	
+451	creating-histograms	creating-dot-plots	32	46	Create histograms	
+452	reading-histograms	creating-dot-plots	32	47	Read histograms	
+453	evaluating-basic-sigma-notation	comparing-features-of-functions-2	33	-24	Summation notation intro	
+454	distributive_property	order_of_operations_2	33	-16	Factor with the distributive property (no variables)	
+455	identifying-parts-of-expressions	order_of_operations_2	33	-13	Parts of algebraic expressions	
+456	prime_factorization	prime_numberscomposite_numbers	33	-7	Prime factorization	
+457	dividing-fractions-by-fractions-word-problems	dividing_fractions_1.5	33	-4	Dividing fractions word problems	
+458	division_4	division_3	33	0	Multi-digit division	
+459	dividing_decimals_3	dividing_decimals_2	33	1	Dividing decimals:  hundredths	
+460	number_line_3	number_line_2	33	3	Missing numbers on the number line	
+461	fractions_on_the_number_line_3	decimals_on_the_number_line_3	33	4	Rational numbers on the number line	
+462	opposites-on-the-number-line	number-opposites	33	5	Number opposites challenge	
+463	ordering-small-negative-numbers	number_line_2	33	7	Ordering small negative numbers	
+464	relative-position-on-the-coordinate-plane	identifying_points_1	33	11	Distance between points:  vertical or horizontal	
+465	reflecting-points	number-oppositesidentifying_points_1	33	12	Reflecting points in the coordinate plane	
+466	graphing_points_2	identifying_points_1	33	14	Quadrants on the coordinate plane	
+467	converting_percents_to_decimals	understanding_moving_the_decimalconverting-between-fractions-and-percents	33	18	Convert percents to decimals	
+468	ratio_word_problems	representing-ratios	33	20	Equivalent ratio word problems	
+469	solving-ratio-problems-with-tables	representing-ratios	33	21	Ratio tables	
+470	surface-area	nets-of-3d-figuresshaded_areas	33	25	Surface area using nets	
+471	area-of-triangles-2	area_of_triangles_1	33	34	Areas of shapes on grids	
+472	mean_median_and_mode	division_3	33	39	Mean median and mode	
+473	calculating-the-mean	intro-to-simple-data	33	42	Calculating the mean	
+474	calculating-the-median	intro-to-simple-data	33	44	Calculating the median	
+475	clusters--gaps--peaks--and-outliers	reading-histograms	33	48	Clusters gaps peaks & outliers	
+476	distributive-property-with-variables	distributive_property	34	-16	Distributive property with variables	
+477	combining-like-terms-0.5	identifying-parts-of-expressions	34	-13	Combining like terms	
+478	testing-solutions-of-equations-inequalities	evaluating_expressions_1	34	-10	Testing solutions to equations	
+479	divisibility_tests	prime_factorization	34	-7	Divisibility tests	
+480	divisibility	prime_factorization	34	-6	Divisibility	
+481	dividing_decimals	division_4dividing_decimals_3	34	1	Dividing decimals:  thousandths	
+482	writing-numerical-inequalities	fractions_on_the_number_line_3	34	3	Writing numerical inequalities	
+483	understanding-inequalities-and-the-number-line	fractions_on_the_number_line_3opposites-on-the-number-line	34	6	Negative numbers variables number line	
+484	ordering_negative_numbers	ordering-small-negative-numbers	34	7	Ordering negative numbers	
+485	find-area-and-perimeter-on-the-coordinate-plane	relative-position-on-the-coordinate-plane	34	10	Area & perimeter on the coordinate plane	
+486	coordinate-plane-word-problems	relative-position-on-the-coordinate-plane	34	11	Coordinate plane problems in all four quadrants	
+487	rate_problems_0.5	ratio_word_problems	34	21	Rate problems	
+488	surface-areas	surface-area	34	25	Surface area	
+489	volume_with_fractions	volume_1	34	29	Volume with fractions	
+490	dependent-and-independent-variables	testing-solutions-of-equations-inequalities	35	-11	Independent versus dependent variables	
+491	testing-solutions-of-inequalities	testing-solutions-of-equations-inequalities	35	-10	Testing solutions to inequalities	
+492	ordering-rational-numbers	ordering_negative_numbersunderstanding-inequalities-and-the-number-line	35	7	Compare rational numbers	
+493	comparing-rates	rate_problems_0.5	35	21	Comparing rates	
+494	areas_of_trapezoids_rhombi_and_kites	area_of_triangles_1	35	34	Area of trapezoids	
+495	find-a-missing-value-given-the-mean	calculating-the-mean	35	42	Missing value given the mean	
+496	effects-of-shifting-adding-removing-data-point	calculating-the-meancalculating-the-median	35	43	Effects of shifting adding & removing a data point	
+497	median-and-range-puzzlers	calculating-the-median	35	44	Median & range puzzlers	
+498	calculating-the-interquartile-range--iqr-	analyzing-with-dot-plotscalculating-the-median	35	47	Interquartile range (IQR)	
+499	calculating-the-mean-from-various-data-displays	reading-histogramscalculating-the-meananalyzing-with-dot-plots	35	51	Calculating the mean:  data displays	
+500	calculating-the-median-from-data-displays	reading-histogramscalculating-the-mediananalyzing-with-dot-plots	35	52	Calculating the median:  data displays	
+501	equivalent-forms-of-expressions-1	distributive_propertycombining-like-terms-0.5	36	-15	Equivalent expressions	
+502	combining-like-terms-with-distribution	distributive-property-with-variablescombining-like-terms-0.5	36	-14	Combining like terms with distribution	
+503	absolute_value	number-opposites	36	6	Finding absolute values	
+504	volume-word-problems-with-fractions	volume_2multiplying_decimalsvolume_with_fractions	36	29	Volume word problems:  fractions & decimals	
+505	area-of-quadrilaterals-and-polygons	area_of_parallelogramsareas_of_trapezoids_rhombi_and_kites	36	33	Area of composite shapes	
+506	calculating-the-mean-absolute-deviation--mad-	analyzing-with-dot-plotscalculating-the-mean	36	47	Mean absolute deviation (MAD)	
+507	comparing-data-displays	calculating-the-interquartile-range--iqr-calculating-the-meanreading-histograms	36	48	Comparing data displays	
+508	inequality-from-graph	number_line_2testing-solutions-of-equations-inequalities	37	-5	Inequality from graph	
+509	inequalities_on_a_number_line	number_line_2testing-solutions-of-inequalities	37	-4	Plotting inequalities	
+510	absolute-value-word-problems	absolute_value	37	6	Interpreting absolute value	
+511	comparing_absolute_values	absolute_value	37	7	Compare and order absolute values	
+512	finding_percents	ratio_word_problemsrate_problems_0.5converting_percents_to_decimals	37	20	Finding percents	
+513	polygons-in-the-coordinate-plane	coordinate-plane-word-problems	37	30	Quadrilateral problems on the coordinate plane	
+514	composing-and-decomposing-shapes	area-of-quadrilaterals-and-polygons	37	32	Area challenge	
+515	box-plots	calculating-the-median	37	46	Creating box plots	
+516	analyzing-data-with-box-plots	calculating-the-median	37	47	Reading box plots	
+517	writing-expressions-with-variables-word-problems	writing_expressions_1	38	-23	Writing basic expressions word problems	
+518	one_step_equations	evaluating_expressions_1	38	-20	One-step addition & subtraction equations	
+519	linear_equations_1	evaluating_expressions_1	38	-18	One-step multiplication & division equations	
+520	inequalities-in-one-variable-1	writing-numerical-inequalities	38	-3	Inequalities word problems	
+521	comparing-absolute-values-2	comparing_absolute_values	38	8	Comparing absolute values challenge	
+522	percentage_word_problems_1	finding_percents	38	21	Percent word problems	
+523	drawing-polygons	polygons-in-the-coordinate-plane	38	29	Drawing polygons with coordinates	
+524	interpreting-quartiles-on-box-plots	analyzing-data-with-box-plots	38	47	Interpreting quartiles	
+525	shape-of-distributions	analyzing-data-with-box-plotsreading-histograms	38	48	Shape of distributions	
+526	writing-basic-algebraic-expressions-word-problems-2	writing-expressions-with-variables-word-problemscalculating-the-mean	39	-24	Writing expressions word problems	
+527	one-step-add-sub-equations-2	one_step_equations	39	-20	One-step addition & subtraction equations:  fractions & decimals	
+528	one-step-mult-div-equations-2	linear_equations_1	39	-18	One-step multiplication & division equations:  fractions & decimals	
+529	find-the-mistake-in-solving-one-step-equations	one_step_equationslinear_equations_1	40	-19	Find the mistake in one-step equations	
+530	interpreting-expressions	writing-expressions-with-variables-word-problems	41	-23	Interpreting linear expressions	
+531	equations-in-one-variable-1	linear_equations_1one_step_equationstranslate-one-step-equations-and-solve--basic-	42	-19	Model with one-step equations	
+532	multiplying_and_dividing_negative_numbers	multiplication_0.5	42	-5	Multiplying negative numbers	
+533	rate_problems_1	understanding-fractions-as-divisionrate_problems_0.5	42	12	Rates with fractions	
+534	negative-number-word-problems-1	multiplying_and_dividing_negative_numbers	43	-6	Multiplying & dividing negative numbers word problems	
+535	multiplying_fractions	multiplying_and_dividing_negative_numbers	43	-4	Multiplying positive and negative fractions	
+536	dividing-integers	number-opposites	43	0	Dividing by zero	
+537	signs-of-sums	fractions_on_the_number_line_3	43	3	Signs of sums	
+538	adding_negative_numbers	fractions_on_the_number_line_3	43	4	Adding negative numbers	
+539	slicing-3d-figures	nets-of-3d-figures	43	27	Cross sections of 3D objects (basic)	
+540	radius_diameter_and_circumference	division_0.5	43	28	Radius and diameter	
+541	probability_1	percentage_word_problems_1	43	71	Simple probability	
+542	linear_equations_2	find-the-mistake-in-solving-one-step-equations	44	-18	Two-step equations	
+543	dividing_fractions_2	multiplying_fractions	44	-4	Dividing positive and negative fractions	
+544	converting_fractions_to_decimals	understanding-fractions-as-divisiondividing_decimals_0.5	44	-2	Converting fractions to decimals	
+545	adding_and_subtracting_negative_numbers	adding_negative_numbers	44	4	Subtracting negative numbers	
+546	rate_problems_2	rate_problems_1working-with-units	44	10	Rate problems 2	
+547	analyzing-and-identifying-proportional-relationships	rate_problems_1	44	13	Proportional relationships	
+548	identifying-supplementary-complementary-vertical	naming-angles	44	26	Identifying supplementary complementary and vertical angles	
+549	area_of_a_circle	radius_diameter_and_circumferencepositive_and_zero_exponents	44	30	Area of a circle	
+550	finding-probability	probability_1	44	40	Experimental probability	
+551	understanding-probability	probability_1	44	41	Comparing probabilities	
+552	using-probability-to-make-predictions	probability_1	44	42	Making predictions with probability	
+553	combining_like_terms_1	combining-like-terms-0.5adding_and_subtracting_negative_numbers	45	-8	Combining like terms with negative coefficients	
+554	order_of_operations	multiplying_and_dividing_negative_numbers	45	-6	Order of operations with negative numbers	
+555	multiply-and-divide-rational-numbers	multiplying_and_dividing_negative_numbers	45	-5	Signs of expressions challenge	
+556	adding-negative-numbers-on-the-number-line	adding_and_subtracting_negative_numbers	45	3	Adding negative numbers on the number line	
+557	integer-addition-and-subtraction	adding_and_subtracting_negative_numbers	45	4	Addition & subtraction:  find the missing value	
+558	negative-number-addition-and-subtraction--interpretation-problems	adding_and_subtracting_negative_numbers	45	5	Interpreting negative number statements	
+559	adding-negative-numbers-word-problems	adding_and_subtracting_negative_numbers	45	6	Negative number addition and subtraction:  word problems	
+560	writing_proportions	analyzing-and-identifying-proportional-relationships	45	14	Writing proportions	
+561	discount_tax_and_tip_word_problems	percentage_word_problems_1	45	17	Discount markup and commission word problems	
+562	complementary_and_supplementary_angles	measuring_anglesidentifying-supplementary-complementary-vertical	45	26	Complementary and supplementary angles (visual)	
+563	find-the-radius-or-diameter-of-a-circle-from-the-circumference-or-area	radius_diameter_and_circumferencelinear_equations_2	45	28	Circumference of a circle	
+564	area-and-circumference-of-parts-of-circles	area_of_a_circle	45	30	Area of parts of circles	
+565	constructing-triangles	recognizing-triangles	45	32	Constructing triangles	
+566	probability-models	finding-probability	45	41	Probability models	
+567	sample-spaces-for-compound-events	probability_1	45	75	Sample spaces for compound events	
+568	fundamental-counting-principle	probability_1	45	76	The counting principle	
+569	linear-equation-world-problems-2	linear_equations_2	46	-19	Two-step equations word problems	
+570	two-step-equations-with-decimals-and-fractions	linear_equations_2	46	-18	Two-step equations with decimals and fractions	
+571	find-the-mistake-two-step-equations	linear_equations_2	46	-17	Find the mistake:  two-step equations	
+572	combining_like_terms_2	combining-like-terms-with-distributioncombining_like_terms_1	46	-9	Combining like terms with negative coefficients & distribution	
+573	negative-signs-in-numerators-and-denominators	dividing_fractions_2	46	-4	Negative signs in fractions	
+574	absolute-value-to-find-distance	adding_and_subtracting_negative_numbers	46	0	Absolute value to find distance	
+575	understanding-addition-and-subtraction-on-the-number-line	adding-negative-numbers-on-the-number-line	46	1	Interpret negative number addition and subtraction expressions	
+576	negative-number-addition-and-subtraction--equations-and-number-lines	adding-negative-numbers-on-the-number-line	46	2	Number equations & number lines	
+577	integer-addition-and-subtraction-2	adding_and_subtracting_negative_numbers	46	5	Adding & subtracting negative numbers	
+578	analyzing-and-identifying-proportional-relationships-2	analyzing-and-identifying-proportional-relationships	46	11	Identify proportional relationships	
+579	proportions_1	writing_proportions	46	15	Solving proportions	
+580	markup_and_commission_word_problems	percentage_word_problems_1	46	17	Percent problems	
+581	quadrilateral_angles	complementary_and_supplementary_anglesquadrilateral_types	46	25	Quadrilateral angles	
+582	vertical_angles	complementary_and_supplementary_angles	46	27	Vertical angles	
+583	area-and-circumference-of-circles	radius_diameter_and_circumferencearea_of_a_circlearea-and-circumference-of-parts-of-circles	46	29	Area and circumference of circles challenge	
+584	shaded_areas	area-and-circumference-of-parts-of-circles	46	31	Shaded areas	
+585	triangle_inequality_theorem	constructing-triangles	46	33	Triangle side length rules	
+586	linear_equations_3	linear_equations_2	47	-23	Equations with variables on both sides	
+587	manipulating-linear-expressions-with-rational-coefficients	combining_like_terms_2	47	-8	Combining like terms with rational coefficients	
+588	factoring_linear_binomials	combining_like_terms_2	47	-7	Distributive property with variables (negative numbers)	
+589	dividing-mixed-numbers	converting_mixed_numbers_and_improper_fractionsnegative-signs-in-numerators-and-denominators	47	-5	Dividing mixed numbers with negatives	
+590	complex-fractions	negative-signs-in-numerators-and-denominators	47	-3	Simplify complex fractions	
+591	constructing-and-interpreting-absolute-value	absolute-value-to-find-distance	47	0	Absolute value to find distance challenge	
+592	understanding-addition-and-subtraction-with-negative-numbers	negative-number-addition-and-subtraction--equations-and-number-linesinteger-addition-and-subtraction	47	3	Ordering negative number expressions	
+593	negative-number-addition-and-subtraction-equivalent-expressions	integer-addition-and-subtraction	47	4	Equivalent expressions with negative numbers	
+594	integer-addition-and-subtraction-with-substitution	integer-addition-and-subtraction-2	47	5	Substitution with negative numbers	
+595	adding_and_subtracting_fractions	adding_fractionssubtracting_fractionsadding_and_subtracting_negative_numbers	47	7	Adding & subtracting negative fractions	
+596	interpreting-graphs-of-proportional-relationships	identify-proportional-relationships-from-graphs	47	11	Interpreting graphs of proportional relationships	
+597	writing-proportional-equations	analyzing-and-identifying-proportional-relationships	47	12	Writing proportional equations	
+598	find-missing-angles	vertical_anglescomplementary_and_supplementary_angles	47	26	Finding missing angles	
+599	triangle-angles-and-opposite-sides	triangle_inequality_theorem	47	34	Ordering triangle sides and angles	
+600	compound-events	sample-spaces-for-compound-eventsmultiplying-fractions-by-fractions-word-problems	47	75	Probabilities of compound events	
+601	multistep_equations_with_distribution	linear_equations_3	48	-24	Equations with parentheses	
+602	variables-on-both-sides-rational	linear_equations_3	48	-23	Equations with variables on both sides:  decimals & fractions	
+603	equiv-expressions-w-neg-and-dist	factoring_linear_binomialsmanipulating-linear-expressions-with-rational-coefficients	48	-8	Equivalent expressions:  negative numbers & distribution	
+604	properties-of-multiplication-with-negative-numbers	negative-signs-in-numerators-and-denominators	48	-4	Equivalent expressions with negative numbers (multiplication and division)	
+605	adding_and_subtracting_rational_numbers	adding_and_subtracting_fractions	48	8	Adding & subtracting rational numbers	
+606	constructing-proportions-to-solve-application-problems	proportions_1	48	15	Proportion word problems	
+607	valid-claims	finding_percents	48	69	Valid claims	
+608	integer_sums	multistep_equations_with_distribution	49	-25	Sums of consecutive integers	
+609	multi-step-equations-rational	multistep_equations_with_distributionvariables-on-both-sides-rational	49	-24	Equations with parentheses:  decimals & fractions	
+610	multistep-equations-without-variables	dividing_fractions_2	49	-1	Rational number word problems	
+611	interpreting-scale-drawings		49	14	Scale drawings	
+612	comparing-populations	valid-claims	49	69	Comparing distributions	
+613	making-inferences-from-random-samples	valid-claims	49	70	Making inferences from random samples	
+614	solutions-to-linear-equations	multi-step-equations-rational	50	-23	Number of solutions to equations	
+615	one_step_inequalities	one_step_equationsinequalities-in-one-variable-1	50	-14	One-step inequalities	
+616	exponents_1.5	positive_and_zero_exponentsmultiplying_and_dividing_negative_numbers	50	-8	Exponents with integer bases	
+617	comparing-rational-numbers	percentage_word_problems_1negative-signs-in-numerators-and-denominators	50	3	Order rational numbers	
+618	comparing-proportional-relationships	analyzing-and-identifying-proportional-relationships	50	12	Rates & proportional relationships	
+619	constructing-scale-drawings	interpreting-scale-drawingscoordinate-plane-word-problems	50	14	Construct scale drawings	
+620	solving-for-unknown-angles	vertical_angleslinear_equations_2	50	24	Unknown angle problems (with algebra)	
+621	solid_geometry	area_of_a_circlevolume_1	50	35	Volume and surface area of cylinders	
+622	interpreting-slope-and-y-intercept-of-lines-of-best-fit		50	40	Interpreting slope and y-intercept for linear models	
+623	complete-equations-according-to-solutions	solutions-to-linear-equations	51	-23	Number of solutions to equations challenge	
+624	solving-2-step-inequalities	one_step_inequalitieslinear_equations_2	51	-14	Two-step inequalities	
+625	exponents-with-negative-fractional-bases	exponents_1.5	51	-8	Exponents with negative fractional bases	
+626	graphing-proportional-relationships	graphing_points_2comparing-proportional-relationships	51	11	Graphing proportional relationships	
+627	volumes-of-cones--cylinders--and-spheres	area_of_a_circlevolume_1	51	35	Volume of cylinders	
+628	solving_for_a_variable	complete-equations-according-to-solutions	52	-23	Linear equations with unknown coefficients	
+629	proportions_2	proportions_1linear_equations_3	52	-21	Solving proportions 2	
+630	interpretting-solving-linear-inequalities	solving-2-step-inequalities	52	-14	Two-step inequality word problems	
+631	volume-word-problems-with-cones--cylinders--and-spheres	volumes-of-cones--cylinders--and-spheres	52	35	Solid geometry word problems	
+632	working-with-units	solving_for_a_variableappropriate-units	53	-23	Interpret units in formulas	
+633	exponents_2	exponents_1.5	53	-17	Negative exponents	
+634	linear_inequalities	interpretting-solving-linear-inequalitiesunderstanding-the-process-for-solving-linear-equationsmulti-step-equations-rational	53	-14	Multi-step linear inequalities	
+635	plugging_in_values	graphing-proportional-relationshipssolving_for_a_variable	53	12	Solutions to 2-variable equations	
+636	units	rate_problems_2	54	-23	Multiple units word problems	
+637	exponent_rules	exponents_2	54	-18	 Multiply & divide powers (integer exponents)	
+638	compound_inequalities	linear_inequalities	54	-14	Compound inequalities	
+639	graphing-solutions-to-two-variable-linear-equations	plugging_in_values	54	12	Complete solutions to 2-variable equations	
+640	linear-function-intercepts	graphing-solutions-to-two-variable-linear-equationsmatch-equations-to-coordinates-on-a-line	55	12	Intercepts from a graph	
+641	orders-of-magnitude	exponent_rules	56	-17	Multiplication and division with powers of ten	
+642	scientific_notation	scientific_notation_intuition	56	-13	Scientific notation	
+643	square_roots	exponents_1.5comparing-rational-numbers	56	-7	Square roots	
+644	intercepts-from-table	linear-function-interceptsanalyzing-and-identifying-proportional-relationships	56	12	Intercepts from a table	
+645	solving_for_the_x-intercept	linear_equations_2linear-function-intercepts	56	13	Intercepts from an equation	
+646	constructing-scatter-plots	identifying_points_1	56	68	Constructing scatter plots	
+647	approximating-with-orders-of-magnitude	orders-of-magnitude	57	-17	Approximating with powers of 10	
+648	multiplying_and_dividing_scientific_notation	scientific_notationexponent_rules	57	-15	Multiplying & dividing in scientific notation	
+649	adding-and-subtracting-in-scientific-notation	scientific_notation	57	-14	Adding & subtracting in scientific notation	
+650	recognizing-rational-and-irrational-numbers	square_roots	57	-11	Classify numbers:  rational & irrational	
+651	cube_roots	prime_factorizationsquare_roots	57	-4	Cube roots	
+652	slope-from-a-graph	linear-function-intercepts	57	11	Slope from graph	
+653	measuring_segments	absolute-value-word-problems	57	29	Measuring segments	
+654	making-good-scatter-plots	constructing-scatter-plots	57	69	Making appropriate scatter plots	
+655	two-way-frequency-tables	analyzing-with-dot-plots	57	71	Create two-way frequency tables	
+656	computing-in-scientific-notation	multiplying_and_dividing_scientific_notation	58	-15	Scientific notation word problems	
+657	identifying-whole--integer--and-rational-numbers	recognizing-rational-and-irrational-numbers	58	-11	Classify numbers	
+658	square_roots_2	square_roots	58	-8	Approximating square roots	
+659	roots-of-decimals-and-fractions	cube_rootssquare_rootsexponents-with-negative-fractional-bases	58	-7	Roots of decimals & fractions	
+660	equations-w-square-and-cube-roots	cube_rootssquare_roots	58	-5	Equations with square roots & cube roots	
+661	writing-fractions-as-repeating-decimals	converting_fractions_to_decimals	58	-2	Writing fractions as repeating decimals	
+662	slope-from-an-equation-in-slope-intercept-form	horizontal-and-vertical-lines	58	10	Slope-intercept intro	
+663	slope-from-two-points	slope-from-a-graph	58	11	Slope from two points	
+664	parallel_lines_1	complementary_and_supplementary_angles	58	25	Angle relationships with parallel lines	
+665	angles_1	vertical_angles	58	27	Finding angle measures between intersecting lines	
+666	congruent_segments	measuring_segments	58	29	Congruent segments	
+667	two-way-relative-frequency-tables	two-way-frequency-tables	58	71	Create two-way relative frequency tables	
+668	reading-two-way-frequency-tables	two-way-frequency-tables	58	72	Read two-way frequency tables	
+669	approximating-irrational-numbers-without-a-calculator	recognizing-rational-and-irrational-numbers	59	-10	Comparing irrational numbers	
+670	approximating-irrational-numbers	recognizing-rational-and-irrational-numbers	59	-9	Comparing irrational numbers with a calculator	
+671	more-square-and-cube-root-problems	equations-w-square-and-cube-roots	59	-6	Square and cube challenge	
+672	converting_repeating_decimals_to_fractions_2	converting_repeating_decimals_to_fractions_1	59	-1	Converting multi-digit repeating decimals to fractions	
+673	graph-from-slope-intercept-equation	slope-from-an-equation-in-slope-intercept-form	59	10	Graph from slope-intercept form	
+674	slope-from-an-equation-in-standard-form	converting_between_slope_intercept_and_standard_formconverting_between_point_slope_and_slope_intercept	59	11	Slope from equation	
+675	segment_addition	linear_equations_3	59	22	Equation practice with segment addition	
+676	angle_addition_postulate	linear_equations_3complementary_and_supplementary_angles	59	23	Equation practice with angle addition	
+677	vertical_angles_2	linear_equations_3vertical_angles	59	24	Equation practice with vertical angles	
+678	parallel_lines_2	parallel_lines_1	59	25	Equation practice with angles	
+679	angles_2	angles_1	59	27	Finding angle measures using triangles	
+680	points_lines_and_planes	recognizing_rays_lines_and_line_segments	59	31	Points lines and planes	
+681	frequencies-of-bivariate-data	valid-claimstwo-way-relative-frequency-tables	59	70	Interpreting two-way tables	
+682	reading-two-way-relative-frequency-tables	two-way-relative-frequency-tables	59	72	Reading two-way relative frequency tables	
+683	slope-intercept-equation-from-graph	graph-from-slope-intercept-equation	60	10	Slope-intercept equation from graph	
+684	graph-from-standard-form-equation	slope-intercept-equation-from-two-points	60	11	Graph from linear standard form	
+685	converting_between_slope_intercept_and_standard_form	graph-from-standard-form-equation	60	12	Convert linear equations to standard form	
+686	midpoint_of_a_segment	segment_addition	60	22	Equation practice with midpoints	
+687	properties-of-integer-exponents	exponent_rules	61	-22	Properties of exponents challenge (integer exponents)	
+688	functions_1	evaluating_expressions_1	61	6	Evaluate functions	
+689	slope-intercept-equation-from-two-points	slope-intercept-equation-from-graph	61	10	Slope-intercept from two points	
+690	pythagorean_theorem_1	square_roots	61	27	Use Pythagorean theorem to find right triangle side lengths	
+691	positive-and-negative-linear-correlations-from-scatter-plots	constructing-scatter-plots	61	69	Positive and negative linear associations from scatter plots	
+692	evaluate-functions-from-their-graph	functions_1	62	6	Evaluate functions from their graph	
+693	converting_between_point_slope_and_slope_intercept	slope-intercept-equation-from-two-points	62	10	Point-slope form	
+694	pythagorean-theorem-word-problems	pythagorean_theorem_1	62	27	Pythagorean theorem challenge	
+695	distance_formula	pythagorean_theorem_1	62	28	Distance between two points	
+696	pythagorean_theorem_2	pythagorean_theorem_1	62	29	Special right triangles	
+697	plotting_the_line_of_best_fit	slope-intercept-equation-from-graph	62	69	Eyeballing the line of best fit	
+698	interpreting-scatter-plots	constructing-scatter-plots	62	70	Describing trends in scatter plots	
+699	functions_2	evaluate-functions-from-their-graph	63	5	Evaluate function expressions	
+700	functions_matching_inputs_outputs	functions_2	63	6	Function inputs & outputs:  equation	
+701	interpreting-tables	interpret-features-func-2writing-the-equation-of-a-line-in-any-form	63	8	Linear equations word problems:  tables	
+702	writing-the-equation-of-a-line-in-any-form	slope-from-an-equation-in-standard-form	63	11	Linear equations in any form	
+703	pythagorean-theorem-in-3d	pythagorean_theorem_1	63	28	Pythagorean theorem in 3D	
+704	linear-models-of-bivariate-data	graphing_linear_equationsinterpreting-scatter-plotsplotting_the_line_of_best_fit	63	71	Estimating slope of line of best fit	
+705	function-notation-in-context	match-inputs-to-outputs-from-a-graph	64	5	Function notation word problems	
+706	match-inputs-to-outputs-from-a-graph	functions_matching_inputs_outputs	64	6	Function inputs & outputs:  graph	
+707	interpreting-linear-graphs	interpreting-tables	64	10	Linear equations word problems:  graphs	
+708	verifying-solutions-to-systems-of-equations	writing-the-equation-of-a-line-in-any-form	64	17	Solutions of systems of equations	
+709	classifying-lines-as-parallel--perpendicular--or-neither	slope-intercept-equation-from-graphslope-intercept-equation-from-two-points	64	26	Parallel & perpendicular lines from graph	
+710	equations-of-lines-of-best-fit-to-make-predictions	linear-models-of-bivariate-data	64	71	Estimating equations of lines of best fit and using them to make predictions	
+711	independent_probability	sample-spaces-for-compound-eventsmultiplying-fractions-by-fractions-word-problems	64	77	Independent probability	
+712	interpreting-features-of-linear-functions	interpreting-linear-graphs	65	10	Linear equations word problems	
+713	graphing_systems_of_equations	verifying-solutions-to-systems-of-equationsgraph-from-standard-form-equationgraph-from-slope-intercept-equation	65	17	Systems of equations with graphing	
+714	performing-translations-on-the-coordinate-plane	polygons-in-the-coordinate-planeidentify-transformations	65	41	Translate points	
+715	correlation-coefficient-intuition	linear-models-of-bivariate-data	65	69	Correlation coefficient intuition	
+716	adding_and_subtracting_polynomials	combining_like_terms_2	66	-27	Add polynomials (intro)	
+717	domain_and_range_0.5	function-notation-in-context	66	6	Domain and range from graph	
+718	comparing-features-of-functions-0-5	interpreting-features-of-linear-functions	66	10	Compare linear functions	
+719	graphical-solutions-to-systems		66	16	Number of solutions to a system of equations graphically	
+720	systems_of_equations_with_substitution	graphing_systems_of_equations	66	17	Systems of equations with substitution	
+721	systems_of_equations_with_elimination_0.5	graphing_systems_of_equations	66	18	Systems of equations with elimination	
+722	understanding-solution-methods-to-systems-of-equations	systems_of_equations_with_elimination	66	19	Equivalent systems of equations	
+723	writing-equations-for-parallel-or-perpendicular-lines	classifying-lines-as-parallel--perpendicular--or-neither	66	24	Write equations of parallel & perpendicular lines	
+724	line_relationships	converting_between_point_slope_and_slope_interceptrecognizing-parallel-and-perpendicular-linesclassifying-lines-as-parallel--perpendicular--or-neither	66	26	Parallel & perpendicular lines from equation	
+725	performing-rotations-on-the-coordinate-plane	measuring_anglesidentifying_points_1performing-translations-on-the-coordinate-plane	66	40	Rotate points	
+726	translations	performing-translations-on-the-coordinate-plane	66	41	Translate shapes	
+727	subtract-polynomials	adding_and_subtracting_polynomials	67	-28	Subtract polynomials (intro)	
+728	add---subtract-polynomials-challenge	subtract-polynomials	67	-25	Add & subtract polynomials	
+729	domain-of-algebraic-functions	domain_and_range_0.5interpretting-solving-linear-inequalities	67	6	Determine the domain of functions	
+730	recog-func-2	domain_and_range_0.5	67	7	Recognize functions from graphs	
+731	comparing-features-of-functions-1	comparing-features-of-functions-0-5	67	10	Comparing linear functions word problems	
+732	systems_of_equations_with_elimination	systems_of_equations_with_elimination_0.5	67	18	Systems of equations with elimination challenge	
+733	distance_between_point_and_line	line_relationshipspythagorean_theorem_1	67	26	Distance between point & line	
+734	performing-reflections-on-the-coordinate-plane	writing-the-equation-of-a-line-in-any-formidentifying_points_1performing-rotations-on-the-coordinate-plane	67	39	Reflect points	
+735	rotations-1	performing-rotations-on-the-coordinate-planetranslations	67	40	Rotate shapes	
+736	defining-translations	translations	67	41	Determine translations	
+737	describing-subsets-of-sample-spaces	compound-events	67	74	Subsets of sample spaces	
+738	permutations_1		67	75	Permutations	
+739	interpreting-domain	domain-of-algebraic-functionsfunction-notation-in-context	68	6	Function domain word problems	
+740	graphing-linear-functions-word-problems	comparing-features-of-functions-1	68	10	Graphing linear relationships word problems	
+741	constructing-consistent-and-inconsistent-system	systems_of_equations_with_eliminationsystems_of_equations_with_substitution	68	16	Number of solutions to a system of equations algebraically	
+742	performing-dilations	distance_formulaidentifying_points_1performing-reflections-on-the-coordinate-plane	68	38	Dilate points	
+743	reflections-1	performing-reflections-on-the-coordinate-planerotations-1	68	39	Reflect shapes	
+744	defining-rotations	defining-translationsperforming-rotations-on-the-coordinate-plane	68	40	Determine rotations	
+745	standard_deviation_of_a_population	square_rootsmean_median_and_mode	68	66	Standard deviation of a population	
+746	variance	square_rootsmean_median_and_mode	68	67	Variance	
+747	types-of-statistical-studies	mean_median_and_mode	68	70	Types of statistical studies	
+748	adding-probability	describing-subsets-of-sample-spaces	68	73	Adding probabilities	
+749	combinations_1	permutations_1	68	75	Combinations	
+750	constructing-probability-distributions	compound-events	68	76	Constructing probability distributions	
+751	add---subtract-polynomials--find-the-error	add---subtract-polynomials--two-variables-challenge	69	-29	Add & subtract polynomials:  find the error	
+752	adding-and-subtracting-polynomials-2	add---subtract-polynomials-challenge	69	-27	Add & subtract polynomials:  two variables (intro)	
+753	add---subtract-polynomials--two-variables-challenge	adding-and-subtracting-polynomials-2	69	-25	Add & subtract polynomials:  two variables	
+754	positive_and_negative_parts_of_functions	domain_and_range_0.5	69	4	Positive and negative intervals	
+755	recognize-maxima-and-minima	domain_and_range_0.5	69	5	Relative maxima and minima	
+756	recognizing_functions	recog-func-2interpreting-domain	69	7	Recognize functions from tables	
+757	constructing-linear-functions-word-problems	graphing-linear-functions-word-problems	69	10	Writing linear functions word problems	
+758	checking-solutions-to-two-var-inequalities	verifying-solutions-to-systems-of-equationsinterpretting-solving-linear-inequalities	69	12	Solutions of inequalities:  algebraic	
+759	dilations	reflections-1dilations-center	69	38	Dilate triangles	
+760	defining-reflections	determine-reflections	69	39	Determine reflections (advanced)	
+761	standard_deviation	variancestandard_deviation_of_a_population	69	67	Sample and population standard deviation	
+762	hypothesis-testing-with-simulations	types-of-statistical-studies	69	70	Simple hypothesis testing	
+763	trends-in-categorical-data	types-of-statistical-studies	69	71	Trends in categorical data	
+764	dependent_probability	probability_1independent_probability	69	73	Dependent probability	
+765	identifying-dependent-and-independent-events	independent_probabilitydescribing-subsets-of-sample-spaces	69	74	Dependent and independent events	
+766	permutations_and_combinations_2	combinations_1	69	75	Permutations & combinations	
+767	expected_value	constructing-probability-distributions	69	76	Expected value	
+768	factors-and-divisibility	greatest_common_divisormultiply-monomials-challenge	70	-28	Factors & divisibility	
+769	finding-the-product-of-two-monomials	combining_like_terms_2add---subtract-polynomials-challenge	70	-27	Multiply monomials intro	
+770	significant_figures_1	measurement-precision	70	-6	Significant figures	
+771	increasing-decreasing-intervals-of-functions	positive_and_negative_parts_of_functions	70	4	Increasing and decreasing intervals	
+772	recognize-absolute-maxima-and-minima	recognize-maxima-and-minima	70	5	Absolute maxima and minima	
+773	evaluating-piecewise-functions	graphs-of-absolute-value-functions	70	7	Evaluate piecewise functions	
+774	constructing-and-interpreting-linear-functions	constructing-linear-functions-word-problems	70	10	Linear models word problems	
+775	graphically-check-solutions-to-inequalities	checking-solutions-to-two-var-inequalities	70	12	Solutions of inequalities:  graphical	
+776	systems_of_equations	constructing-consistent-and-inconsistent-system	70	17	Linear systems of equations capstone	
+777	defining-dilations-2	performing-dilations	70	38	Dilations:  scale factor	
+778	empirical_rule	standard_deviation	70	66	Empirical rule	
+779	z_scores_1	standard_deviation	70	67	Calculating z-scores	
+780	hypothesis-testing-in-experiments	hypothesis-testing-with-simulationsdividing_decimals	70	70	Hypothesis testing in experiments	
+781	basic_set_notation	dependent_probability	70	73	Basic set notation	
+782	multiplying-dependent-probabilities	identifying-dependent-and-independent-eventsdependent_probability	70	74	Multiplying dependent probabilities	
+783	probability_with_perm_comb	permutations_and_combinations_2compound-events	70	75	Probability with permutations and combinations	
+784	expected-value-with-empirical-probabilities	expected_value	70	76	Expected value with empirical probabilities	
+785	interpreting-and-comparing-data-distributions	mean_median_and_modestandard_deviation	70	78	Comparing data distributions	
+786	factoring-monomials	factors-and-divisibility	71	-28	Factor monomials	
+787	multiply-monomials-challenge	finding-the-product-of-two-monomials	71	-26	Multiply monomials	
+788	avg-rate-of-change	avg-rate-of-change-graphs-tables	71	3	Average rate of change	
+789	interpret-features-func-2	recognize-maxima-and-minimaincreasing-decreasing-intervals-of-functionsinterpreting-domain	71	4	Graph interpretation word problems	
+790	evaluate-step-functions-from-their-graph	evaluating-piecewise-functions	71	7	Evaluate step functions	
+791	understanding-systems-of-equations-word-problems	age_word_problems	71	17	Systems of equations word problems	
+792	analyze-sequences-of-transformations	defining-dilations-2	71	39	Sequences of transformations	
+793	qualitatively-defining-rigid-transformations	defining-reflections	71	40	Defining transformations	
+794	z_scores_2	z_scores_1	71	67	Normal distribution:  Area above or below a point	
+795	using-probability-to-make-fair-decisions	probability_with_perm_combmultiplying-dependent-probabilities	71	74	Using probability to make fair decisions	
+796	expected-value-with-calculated-probabilities	expected-value-with-empirical-probabilitiesprobability_with_perm_comb	71	76	Expected value with calculated probabilities	
+797	factoring-polynomials	greatest-common-factor-of-monomials	72	-28	Factor polynomials:  common factor	
+798	multiply-monomials-by-polynomials-intuition	distributive-property-with-variablesmultiply-monomials-challenge	72	-27	Multiply monomials by polynomials:  area model	
+799	average-rate-of-change-word-problems	avg-rate-of-change	72	3	Average rate of change word problems	
+800	piecewise-graphs-linear	evaluate-step-functions-from-their-graph	72	7	Piecewise functions graphs	
+801	checking-solutions-to-systems-of-inequalities	graphically-check-solutions-to-inequalities	72	10	Solutions of systems of inequalities	
+802	graphs_of_inequalities	graphing_inequalities_2	72	12	Two-variable inequalities from their graphs	
+803	age_word_problems	systems_of_equationsconstructing-and-interpreting-linear-functions	72	17	Age word problems	
+804	symmetry-of-two-dimensional-shapes	axis_of_symmetryqualitatively-defining-rigid-transformations	72	40	Symmetry of 2D shapes	
+805	z_scores_3	z_scores_2	72	67	Normal distribution:  Area between two points	
+806	making-decisions-with-expected-values	expected-value-with-calculated-probabilities	72	76	Making decisions with expected values	
+807	finding-the-product-of-a-monomial-and-a-polynomial	multiply-monomials-by-polynomials-intuition	73	-27	Multiply monomials by polynomials	
+808	graphing_inequalities_2	graphically-check-solutions-to-inequalities	73	12	Graphs of inequalities	
+809	linear-non-linear-functions	constructing-and-interpreting-linear-functions	73	16	Linear & nonlinear functions	
+810	exploring-rigid-transformations-and-congruence	qualitatively-defining-rigid-transformations	73	35	Congruence & transformations	
+811	multiplying_expressions_0.5	multiply-binomials-area-model	74	-27	Multiply binomials intro	
+812	understanding-fractional-exponents	exponents_2square_rootsproperties-of-integer-exponentscube_roots	74	3	Unit-fraction exponents	
+813	graphing_systems_of_inequalities_2	graphs_of_inequalities	74	10	Systems of inequalities graphs	
+814	modeling-constraints	graphing_inequalities_2constructing-and-interpreting-linear-functions	74	12	Two-variable inequalities word problems	
+815	interpreting-graphs-of-linear-and-nonlinear-functions	linear-non-linear-functions	74	16	Interpreting graphs of functions	
+816	multiply-binomials-coefficient	multiplying_expressions_0.5	75	-28	Multiply binomials	
+817	exponents_3	understanding-fractional-exponents	75	3	Fractional exponents	
+818	modeling-systems-of-linear-inequalities	graphing_systems_of_inequalities_2modeling-constraints	75	10	Systems of inequalities word problems	
+819	multiplying_polynomials	multiply-binomials-coefficientadding-and-subtracting-polynomials-2	76	-27	Multiply binomials by polynomials	
+820	simplifying_radicals	simplify-radicals-and-exponentials	76	4	Simplify square roots	
+821	congruent_triangles_1		76	35	Determine congruent triangles	
+822	factoring_polynomials_1	multiplying_polynomialsfactoring-polynomialsfactor-quadratics-sp	77	-27	Factoring quadratics intro	
+823	multiplying_expressions_1	multiply-binomials-coefficient	77	-26	Special products of binomials intro	
+824	multiplying_radicals	simplifying_radicals	77	4	Simplify square roots (variables)	
+825	absolute_value_equations	writing-the-equation-of-a-line-in-any-form	77	11	Solve absolute value equations	
+826	arithmetic_sequences_1	comparing-features-of-functions-0-5	77	16	Extend arithmetic sequences	
+827	congruent_triangles_2	congruent_triangles_1	77	35	Find angles in congruent triangles	
+828	factoring_polynomials_by_grouping_1	factoring_polynomials_1	78	-27	Factor quadratics by grouping	
+829	finding-special-products	multiplying_expressions_1	78	-26	Special products of binomials	
+830	exponents_4	manipulating-fractional-exponents	78	2	Properties of exponents (rational exponents)	
+831	adding_and_subtracting_radicals	multiplying_radicals	78	4	Simplify square-root expressions	
+832	graphs-of-absolute-value-functions	stretch-and-shrink-absolute-value-graphs	78	11	Graph absolute value functions	
+833	geometric_sequences_1	explicit-and-recursive-formulas-of-arithmetic-sequences	78	14	Extend geometric sequences	
+834	arithmetic_sequences_2	arithmetic_sequences_1	78	16	Use arithmetic sequence formulas	
+835	geometric-definitions	recognizing-anglesrecognizing-parallel-and-perpendicular-linesrecognizing_rays_lines_and_line_segments	78	31	Geometric definitions	
+836	triangle_angles_1	linear_equations_2congruent_triangles_2	78	35	Find angles in triangles	
+837	expressions_with_unknown_variables	multiplying_polynomialsfactoring-polynomials	79	-34	Evaluate expressions using structure	
+838	factoring_polynomials_2	factoring_polynomials_by_grouping_1	79	-27	Factor polynomials:  quadratic methods	
+839	simplify-radicals-and-exponentials	exponents_4	79	2	Evaluate radical expressions challenge	
+840	geometric_sequences_2	geometric_sequences_1	79	14	Use geometric sequence formulas	
+841	explicit-formulas-for-arithmetic-sequences	arithmetic_sequences_2	79	16	Explicit formulas for arithmetic sequences	
+842	geometry-problems-on-the-coordinate-plane	pythagorean_theorem_1identifying_points_1multiplying_radicalsgeometric-definitions	79	30	Points inside/outside/on a circle	
+843	midpoint_formula	coordinate-plane-word-problems	79	31	Midpoint formula	
+844	find-angles-in-isosceles-triangles	triangle_angles_1	79	35	Find angles in isosceles triangles	
+845	angles_of_a_polygon	triangle_angles_1	79	36	Angles of a polygon	
+846	factoring_difference_of_squares_1	finding-special-productsfactoring_polynomials_by_grouping_1	80	-26	Difference of squares intro	
+847	manipulating-fractional-exponents	exponents_3	80	2	Rational exponents challenge	
+848	sequences-as-functions	geometric_sequences_2	80	14	Explicit formulas for geometric sequences	
+849	recursive-formulas-for-arithmetic-sequences	arithmetic_sequences_2	80	16	Recursive formulas for arithmetic sequences	
+850	arithmetic_series	arithmetic_sequences_2	80	18	Arithmetic series	
+851	coordinate-plane-word-problems-with-polygons	geometry-problems-on-the-coordinate-planecoordinate-plane-word-problemsfind-area-and-perimeter-on-the-coordinate-plane	80	30	Coordinate plane word problems:  polygons	
+852	dividing-line-segments	midpoint_formula	80	31	Divide line segments	
+853	line-and-angle-proofs	angles_2exploring-rigid-transformations-and-congruence	80	39	Proofs with transformations	
+854	structure-in-expressions-1	systems_of_equations_with_substitution	81	-34	Manipulate expressions using structure	
+855	factoring-perfect-squares	intro-to-factoring-perfect-squares	81	-27	Perfect squares	
+856	solving_quadratics_by_taking_the_square_root	solve-quadratics-by-taking-square-roots-intro	81	-2	Quadratics by taking square roots	
+857	geometric-series--1	recursive_explicitevaluating-basic-sigma-notationarithmetic_series	81	13	Finite geometric series	
+858	recursive-formulas-for-geometric-sequences	geometric_sequences_2	81	15	Recursive formulas for geometric sequences	
+859	explicit-and-recursive-formulas-of-arithmetic-sequences	recursive-formulas-for-arithmetic-sequencesexplicit-formulas-for-arithmetic-sequences	81	16	Converting recursive & explicit forms of arithmetic sequences	
+860	writing-finite-arithmetic-series-in-sigma-notation	explicit-formulas-for-arithmetic-sequencesevaluating-basic-sigma-notationarithmetic_series	81	18	Arithmetic series in sigma notation	
+861	exploring-angle-preserving-transformations-and-similarity	dilations	81	36	Similarity & transformations	
+862	compare-expressions-with-unknown-variables-word-problems	modeling-constraintsstructure-in-expressions-1	82	-34	Analyzing structure with linear inequalities	
+863	factoring_difference_of_squares_2	factoring_difference_of_squares_1	82	-24	Difference of squares	
+864	understanding-the-equation-solving-process	solving_quadratics_by_taking_the_square_root	82	-3	Quadratics by taking square roots:  strategy	
+865	solving_quadratics_by_factoring	quadratics-by-taking-square-roots-with-steps	82	-1	Quadratics by factoring (intro)	
+866	geometric-series	geometric-series--1	82	12	Finite geometric series word problems	
+867	writing-finite-geometric-series-in-sigma-notation	sequences-as-functionsevaluating-basic-sigma-notation	82	13	Finite geometric series in sigma notation	
+868	explicit-and-recursive-formulas-of-geometric-sequences	recursive-formulas-for-geometric-sequencessequences-as-functions	82	15	Converting recursive & explicit forms of geometric sequences	
+869	rotate-2d-shapes-to-make-3d-objects	points_lines_and_planes	82	30	Rotate 2D shapes in 3D	
+870	cross-sections-of-3d-shapes	slicing-3d-figurespoints_lines_and_planes	82	31	Cross sections of 3D objects	
+871	surface-and-volume-density-word-problems	volume-word-problems-with-cones--cylinders--and-spherescomparing-proportional-relationships	82	32	Density word problems	
+872	factoring_difference_of_squares_3	factoring_difference_of_squares_2factoring-perfect-squares	83	-26	Factor polynomials:  special product forms	
+873	imaginary_unit_powers	properties-of-integer-exponents	83	-10	Powers of the imaginary unit	
+874	solving_quadratics_by_factoring_2	solving_quadratics_by_factoring	83	-1	Quadratics by factoring	
+875	determine-if-an-infinite-geometric-series	writing-finite-geometric-series-in-sigma-notation	83	13	Convergent & divergent geometric series	
+876	recursive_explicit	explicit-and-recursive-formulas-of-geometric-sequencesrecursive-formulas-for-geometric-sequences	83	16	Sequences word problems	
+877	arc-measure	angles_1area_of_a_circle	83	28	Arc measure	
+878	similar_triangles_2		83	35	Determine similar triangles:  SSS	
+879	similar_triangles_1		83	37	Determine similar triangles:  AA	
+880	simplify-square-roots-of-negative-numbers	imaginary_unit_powers	84	-10	Simplify roots of negative numbers	
+881	evaluating-sequences-in-recursive-form	explicit-and-recursive-formulas-of-geometric-sequences	84	15	Evaluate sequences in recursive form	
+882	arc-measure-with-equations	arc-measurelinear_equations_2	84	27	Arc measure with equations	
+883	solving_similar_triangles_1	similar_triangles_2similar_triangles_1congruent_triangles_2	84	36	Solve similar triangles (basic)	
+884	real-and-imaginary-parts-of-complex-numbers	simplify-square-roots-of-negative-numbers	85	-10	Parts of complex numbers	
+885	completing_the_square_in_quadratic_expressions	factoring_polynomials_by_grouping_1factoring-perfect-squaressolving_quadratics_by_factoring_2	85	-2	Completing the square (intro)	
+886	recognizing-rational-and-irrational-expressions	recognizing-rational-and-irrational-numbers	85	4	Rational vs. irrational expressions	
+887	areas_of_circles_and_sectors	proportions_1area_of_a_circlemeasuring_anglesarc-measure	85	28	Area of a sector	
+888	circles_and_arcs	radius_diameter_and_circumferenceproportions_1measuring_angles	85	29	Arc length	
+889	solving_similar_triangles_2	solving_similar_triangles_1	85	36	Solve similar triangles (advanced)	
+890	the-imaginary-unit-and-complex-numbers	real-and-imaginary-parts-of-complex-numbers	86	-10	Classify complex numbers	
+891	completing_the_square_1	completing_the_square_in_quadratic_expressions	86	-2	Completing the square (intermediate)	
+892	construct-basic-exponential-functions-from-table-or-graph	graphs-of-basic-exponential-functions	86	13	Exponential functions from tables & graphs	
+893	inscribed_angles_1	circles_and_arcs	86	32	Inscribed angles	
+894	angle_bisector_theorem	solving_similar_triangles_2find-angles-in-isosceles-triangles	86	36	Solve triangles:  angle bisector theorem	
+895	adding_and_subtracting_complex_numbers	adding_and_subtracting_polynomialsthe-imaginary-unit-and-complex-numbers	87	-10	Add & subtract complex numbers	
+896	the_complex_plane	the-imaginary-unit-and-complex-numberscoordinate-plane-word-problems	87	-9	Plot numbers on the complex plane	
+897	completing_the_square_2	completing_the_square_1	87	-2	Completing the square	
+898	graphs-of-basic-exponential-functions	exponential-growth-vs-decay	87	13	Graphing exponential growth & decay	
+899	central--inscribed--and-circumscribed-angles	inscribed_angles_1	87	30	Tangents of circles problems	
+900	inscribed-angle-problem-solving	inscribed_angles_1	87	31	Inscribed shapes	
+901	solving-problems-with-similar-and-congruent-triangles	angle_bisector_theorem	87	36	Use similar & congruent triangles	
+902	multiply-complex-numbers-by-real-or-imaginary-numbers	adding_and_subtracting_complex_numbers	88	-10	Multiply complex numbers (basic)	
+903	complex_plane_operations	the_complex_planeadding_and_subtracting_complex_numbers	88	-9	Graphically add & subtract complex numbers	
+904	quadratic_equation	completing_the_square_2	88	-2	Quadratic formula	
+905	trigonometry_1	solving-problems-with-similar-and-congruent-trianglespythagorean_theorem_1triangle_inequality_theorem	88	34	Trigonometric ratios in right triangles	
+906	multiplying_complex_numbers	multiplying_expressions_1multiply-complex-numbers-by-real-or-imaginary-numbers	89	-10	Multiply complex numbers	
+907	determine-the-number-of-solutions-of-a-quadratic-equation	quadratic_equation	89	-2	Number of solutions of quadratic equations	
+908	trigonometry_2	trigonometry_1	89	34	Solve for a side in right triangles	
+909	identifying-and-using-quadratic-forms	graph-quadratic-functions-in-factored-formgraphing_parabolas_0.5graphing_parabolas_1	90	-1	Features of quadratic functions:  strategy	
+910	understanding-linear-and-exponential-models	exponential-vs-linear-growth	90	13	Exponential  vs. linear models	
+911	solve-for-an-angle-in-a-right-triangle	trigonometry_2	90	34	Solve for an angle in right triangles	
+912	rewriting-expressions-to-reveal-information	identifying-and-using-quadratic-forms	91	-1	Features of quadratic functions	
+913	comparing-growth-rates-of-exponentials-and-polynomials	graphing-exponential-growth-intro	91	13	Exponential vs. linear growth over time	
+914	degrees_to_radians	congruent_triangles_2	91	31	Radians & degrees	
+915	applying-right-triangles	solve-for-an-angle-in-a-right-triangle	91	34	Right triangle word problems	
+916	law_of_sines	solve-for-an-angle-in-a-right-triangle	91	35	Solve triangles using the law of sines	
+917	compare-properties-quadratic-functions	graphing_parabolas_2	92	-1	Compare quadratic functions	
+918	equivalent-forms-of-expressions-with-variable-exponents	properties-of-integer-exponentsmanipulating-fractional-exponents	92	11	Equivalent forms of exponential expressions	
+919	cc-radians-and-arc-length	degrees_to_radians	92	30	Radians & arc length	
+920	law_of_cosines	law_of_sines	92	35	Solve triangles using the law of cosines	
+921	binomial-theorem	factoring_polynomials_with_two_variables	93	-14	Expand binomials	
+922	divide-polynomials-by-monomials	multiplying_polynomialsfinding-special-products	93	-12	Divide polynomials with remainders:  monomial divisors	
+923	graphing_parabolas_0.5	determine-the-number-of-solutions-of-a-quadratic-equation	93	-2	Graph quadratics in standard form	
+924	key-features-quadratics	graphing_parabolas_0.5	93	0	Quadratic word problems (standard form)	
+925	rewrite-exponential-expressions	equivalent-forms-of-expressions-with-variable-exponents	93	11	Rewrite exponential expressions	
+926	law-of-sines-and-cosines-word-problems	law_of_cosinesapplying-right-triangles	93	35	General triangle word problems	
+927	polynomial-identities	factoring_polynomials_2factoring_difference_of_squares_3factoring_polynomials_with_two_variables	94	-14	Prove polynomial identities	
+928	divide-polynomials-by-binomials	divide-polynomials-by-monomials	94	-12	Divide polynomials with remainders:  binomial divisors	
+929	graph-quadratic-functions-in-factored-form	zero-product-property	94	-2	Graph quadratics in factored form	
+930	solve-exponential-equations-using-properties-of-exponents--basic-	rewrite-exponential-expressions	94	11	Solve exponential equations using exponent properties	
+931	evaluate-composite-functions-from-formulas	functions_2	94	25	Evaluate composite functions	
+932	equivalent-forms-of-expressions-with-complex-numbers	polynomial-identitiesmultiplying_complex_numbers	95	-14	Factor polynomials:  complex numbers	
+933	dividing-polynomials-with-remainders	divide-polynomials-by-binomials	95	-12	Divide polynomials with remainders	
+934	graphing_parabolas_1	graph-quadratic-functions-in-factored-formquadratics-by-taking-square-roots-with-steps	95	-2	Graph quadratics in vertex form	
+935	solve-exponential-equations-using-properties-of-exponents-advanced	solve-exponential-equations-using-properties-of-exponents--basic-	95	11	Solve exponential equations using exponent properties (advanced)	
+936	evaluate-composite-functions-from-graphs-and-tables	evaluate-composite-functions-from-formulas	95	25	Evaluate composite functions:  graphs & tables	
+937	circles-and-pythagorean-identities	degrees_to_radianstrigonometry_1	95	31	Use the Pythagorean identity	
+938	trigonometric-functions-of-special-angles	pythagorean_theorem_2degrees_to_radianstrigonometry_1	95	32	Trig values of special angles	
+939	quadratic-formula-with-complex-solutions	quadratic_equationequivalent-forms-of-expressions-with-complex-numbers	96	-14	Solve quadratic equations:  complex solutions	
+940	remainder-theorem-of-polynomials	factoring_polynomials_2dividing-polynomials-with-remainders	96	-12	Use the Polynomial Remainder Theorem	
+941	graphing_parabolas_2	rewriting-expressions-to-reveal-information	96	-2	Graph parabolas in all forms	
+942	modeling-with-exponential-functions	solve-exponential-equations-using-properties-of-exponents-advanced	96	12	Interpret change in exponential models	
+943	compose-functions	evaluate-composite-functions-from-graphs-and-tables	96	25	Find composite functions	
+944	combining-functions-with-arithmetic-operations	constructing-and-interpreting-linear-functionskey-features-quadratics	96	26	Model with function combination	
+945	midline-of-trig-functions	trigonometric-functions-of-special-anglescircles-and-pythagorean-identities	96	32	Midline of sinusoidal functions from graph	
+946	find-the-zeros-of-polynomials	remainder-theorem-of-polynomialsquadratic-formula-with-complex-solutions	97	-13	Finding zeros of polynomials	
+947	rewriting-and-interpreting-exponential-functions	modeling-with-exponential-functions	97	12	Interpret time in exponential models	
+948	understanding-inverse-functions	functions_2domain_and_range_0.5	97	23	Evaluate inverse functions	
+949	shift-functions	compose-functionsgraphs-of-absolute-value-functionsgraphing_parabolas_2	97	24	Shift functions	
+950	modeling-with-composite-functions	compose-functionscombining-functions-with-arithmetic-operations	97	25	Model with composite functions	
+951	amplitude-of-trig-functions	midline-of-trig-functions	97	31	Amplitude of sinusoidal functions from graph	
+952	find-midline-of-a-sinusoid-from-formula	midline-of-trig-functions	97	32	Midline of sinusoidal functions from equation	
+953	using-zeros-to-graph-polynomials	find-the-zeros-of-polynomials	98	-13	Zeros of polynomials & their graphs	
+954	interpret-rate-of-change-of-exponential-models-with-manipulation	rewriting-and-interpreting-exponential-functions	98	11	Interpret change in exponential models:  with manipulation	
+955	construct-exponential-models-according-to-rate-of-change	rewriting-and-interpreting-exponential-functions	98	12	Construct exponential models	
+956	interpret-rate-of-change-of-exponential-models-for-a-different-unit	rewriting-and-interpreting-exponential-functions	98	13	Interpret change in exponential models:  changing units	
+957	algebraically-finding-inverses	understanding-inverse-functions	98	23	Find inverse functions	
+958	shifting_and_reflecting_functions	shift-functions	98	24	Transforming functions	
+959	find-amplitude-of-a-sinusoid-from-formula	amplitude-of-trig-functionsfind-midline-of-a-sinusoid-from-formula	98	31	Amplitude of sinusoidal functions from equation	
+960	period-of-trig-functions	midline-of-trig-functions	98	32	Period of sinusoidal functions from graph	
+961	positive-and-negative-intervals-of-polynomials	using-zeros-to-graph-polynomials	99	-13	Positive & negative intervals of polynomials	
+962	distinguish-between-linear-and-exponential-growth-from-tables	construct-exponential-models-according-to-rate-of-change	99	12	Linear vs. exponential growth:  from data	
+963	logarithms_1	algebraically-finding-inversessolve-exponential-equations-using-properties-of-exponents-advanced	99	17	Evaluate logarithms	
+964	inverses_of_functions	algebraically-finding-inversescompose-functions	99	23	Verify inverse functions	
+965	find-period-of-a-sinusoid-from-formula	period-of-trig-functionsfind-amplitude-of-a-sinusoid-from-formula	99	31	Period of sinusoidal functions from equation	
+966	determine-the-end-behavior-of-polynomials	positive-and-negative-intervals-of-polynomials	100	-13	End behavior of polynomials	
+967	logarithms_1.5	logarithms_1	100	17	Evaluate logarithms (advanced)	
+968	inverse-domain-range	inverses_of_functions	100	23	Determine if a function is invertible	
+969	graphs_of_sine_and_cosine	find-period-of-a-sinusoid-from-formulashifting_and_reflecting_functions	100	32	Graph sinusoidal functions	
+970	even_and_odd_functions	determine-the-end-behavior-of-polynomials	101	-13	Even & odd functions	
+971	simplifying_rational_expressions_1	factoring_polynomials_with_two_variablesfactoring_polynomials_by_grouping_1	101	-7	Simplify rational expressions:  common monomial factors	
+972	understanding-logs-as-inverse-exponentials	logarithms_1.5	101	16	Relationship between exponentials & logarithms	
+973	logarithms_2	logarithms_1.5	101	17	Use the properties of logarithms	
+974	restrict-the-domains-of-functions	inverse-domain-range	101	23	Restrict domains of functions to make them invertible	
+975	construct-sinusoidal-functions	graphs_of_sine_and_cosine	101	32	Construct sinusoidal functions	
+976	determine-if-a-polynomial-is-even-or-odd	even_and_odd_functions	102	-13	Even & odd polynomials	
+977	simplifying_rational_expressions_2	simplifying_rational_expressions_1	102	-7	Simplify rational expressions:  common binomial factors	
+978	evaluate-logarithms-using-the-change-of-base-rule	logarithms_2	102	17	Evaluate logarithms:  change of base rule	
+979	inverse_trig_functions	construct-sinusoidal-functionsrestrict-the-domains-of-functions	102	30	Evaluate inverse trig functions	
+980	modeling-with-periodic-functions	construct-sinusoidal-functions	102	32	Modeling with sinusoidal functions	
+981	solve-square-root-equations-basic	manipulating-fractional-exponentsusing-zeros-to-graph-polynomials	103	-17	Solve square-root equations (basic)	
+982	simplifying_rational_expressions_3	simplifying_rational_expressions_2	103	-7	Simplify rational expressions (advanced)	
+983	rewrite-logarithmic-expressions-using-the-change-of-base-rule	evaluate-logarithms-using-the-change-of-base-rule	103	17	Use the logarithm change of base rule	
+984	using-logarithms-to-solve-exponential-equations	logarithms_2	103	18	Solve exponential equations using logarithms:  base-10 and base-e	
+985	solve-basic-sinusoidal-equations	inverse_trig_functions	103	30	Solve sinusoidal equations (basic)	
+986	trig_addition_identities	circles-and-pythagorean-identitiesconstruct-sinusoidal-functions	103	34	Using the trig angle addition identities	
+987	solve-square-root-equations-advanced	solve-square-root-equations-basic	104	-17	Solve square-root equations	
+988	multiplying_and_dividing_rational_expressions_1	simplifying_rational_expressions_3	104	-7	Multiply & divide rational expressions (basic)	
+989	solve-exponential-equations-using-logarithms-base-2	using-logarithms-to-solve-exponential-equationsrewrite-logarithmic-expressions-using-the-change-of-base-rule	104	18	Solve exponential equations using logarithms:  base-2 and other bases	
+990	solve-advanced-sinusoidal-equations	solve-basic-sinusoidal-equations	104	30	Solve sinusoidal equations	
+991	applying-angle-addition-formulas	trig_addition_identities	104	34	Find trig values using angle addition identities	
+992	extraneous-solutions-to-radical-equations	solve-square-root-equations-advanced	105	-18	Extraneous solutions of radical equations	
+993	graphs-of-radical-functions	shifting_and_reflecting_functionssolve-square-root-equations-advanced	105	-17	Radical functions & their graphs	
+994	multiplying_and_dividing_rational_expressions_2	multiplying_and_dividing_rational_expressions_1	105	-7	Multiply & divide rational expressions	
+995	graphs-of-exponential-functions	shifting_and_reflecting_functionsdistinguish-between-linear-and-exponential-growth-from-tablessolve-exponential-equations-using-logarithms-base-2	105	15	Graphs of exponential functions	
+996	exponential-models-word-problems	solve-exponential-equations-using-logarithms-base-2	105	18	Exponential model word problems	
+997	inverse-trig-word-problems	solve-advanced-sinusoidal-equationsmodeling-with-periodic-functions	105	30	Sinusoidal models word problems	
+998	multiplying_and_dividing_rational_expressions_3	multiplying_and_dividing_rational_expressions_2	106	-8	Multiply & divide rational expressions (advanced)	
+999	adding_and_subtracting_rational_expressions	multiplying_and_dividing_rational_expressions_2	106	-6	Add & subtract rational expressions:  like denominators	
+1000	graphs-of-exponentials-and-logarithms	graphs-of-exponential-functions	106	15	Graphs of logarithmic functions	
+1001	equivalent-vectors	pythagorean_theorem_1slope-intercept-equation-from-two-points	107	-20	Equivalent vectors	
+1002	linear_equations_4	multiplying_and_dividing_rational_expressions_2	107	-8	Equations with one rational expression	
+1003	adding_and_subtracting_rational_expressions_2	adding_and_subtracting_rational_expressions	107	-6	Add & subtract rational expressions:  unlike denominators	
+1004	graph-a-circle-according-to-its-features	radius_diameter_and_circumferencepythagorean_theorem_1coordinate-plane-word-problems	107	31	Graph a circle from its features	
+1005	fitting-functions-to-scatter-plots	interpreting-scatter-plotslogarithms_1graphs-of-exponentials-and-logarithms	107	72	Fitting quadratic and exponential functions to scatter plots	
+1006	scaling_vectors	equivalent-vectors	108	-21	Scalar multiplication	
+1007	components_of_vectors	equivalent-vectors	108	-20	Components of vectors	
+1008	solving_rational_equations_2	linear_equations_4	108	-8	Equations with one rational expression (advanced)	
+1009	adding_and_subtracting_rational_expressions_3	adding_and_subtracting_rational_expressions_2least_common_multiple	108	-6	Add & subtract rational expressions:  factored denominators	
+1010	find-conjugates-of-complex-numbers	multiplying_complex_numberscomplex_plane_operationsequivalent-forms-of-expressions-with-complex-numbers	108	5	Complex number conjugates	
+1011	find-the-features-of-a-circle-from-its-graph	graph-a-circle-according-to-its-features	108	31	Features of a circle from its graph	
+1012	understanding-scalar-multiplication	scaling_vectors	109	-22	Analyze scalar multiplication	
+1013	unit-vector	scaling_vectors	109	-21	Unit vectors	
+1014	magnitude-of-vectors	components_of_vectors	109	-20	Magnitude of vectors	
+1015	graphically-adding-and-subtracting-vectors	equivalent-vectors	109	-19	Graphically add & subtract vectors	
+1016	adding_and_subtracting_rational_expressions_5	adding_and_subtracting_rational_expressions_3	109	-6	Add & subtract rational expressions	
+1017	dividing_complex_numbers	find-conjugates-of-complex-numbers	109	5	Divide complex numbers	
+1018	equation_of_a_circle_1	find-the-features-of-a-circle-from-its-graphcoordinate-plane-word-problems-with-polygons	109	31	Features of a circle from its standard equation	
+1019	combined-vector-operations	scaling_vectorsgraphically-adding-and-subtracting-vectors	110	-22	Combined vector operations	
+1020	adding_vectors	graphically-adding-and-subtracting-vectors	110	-19	Add & subtract vectors	
+1021	rational-equations-3	solving_rational_equations_2adding_and_subtracting_rational_expressions_5	110	-8	Equations with two rational expressions	
+1022	direct_and_inverse_variation	constructing-proportions-to-solve-application-problemslinear_equations_4	110	-7	Recognize direct & inverse variation	
+1023	nested-fractions	adding_and_subtracting_rational_expressions_5	110	-5	Nested fractions	
+1024	find-the-angle-of-complex-numbers	dividing_complex_numberssolve-basic-sinusoidal-equations	110	4	Angle of complex numbers	
+1025	absolute_value_of_complex_numbers	dividing_complex_numbersrelative-position-on-the-coordinate-plane	110	6	Absolute value of complex numbers	
+1026	graphing_circles	equation_of_a_circle_1	110	31	Graph a circle from its standard equation	
+1027	converting-from-magnitude-and-direction-form-to-component-form	magnitude-of-vectors	111	-21	Vector components from magnitude & direction	
+1028	end-behavior-of-rational-functions	rational-equations-3direct_and_inverse_variationdetermine-the-end-behavior-of-polynomialsgraphs-of-basic-exponential-functions	111	-7	End behavior of rational functions	
+1029	partial_fraction_expansion_1	nested-fractions	111	-5	Partial fraction expansion	
+1030	find-complex-numbers-according-to-absolute-value-and-angle	find-the-angle-of-complex-numbersabsolute_value_of_complex_numbers	111	5	Complex numbers from absolute value & angle	
+1031	distance-and-midpoint-on-the-complex-plane	absolute_value_of_complex_numbers	111	7	Distance of complex numbers	
+1032	write-the-equation-of-a-circle	graphing_circles	111	31	Write standard equation of a circle	
+1033	points-of-discontinuity-of-rational-functions	end-behavior-of-rational-functions	112	-7	Rational function points of discontinuity	
+1034	find-the-midpoint-of-two-complex-numbers	distance-and-midpoint-on-the-complex-plane	112	7	Midpoint of complex numbers	
+1035	equation_of_a_circle_2	write-the-equation-of-a-circle	112	31	Features of a circle from its expanded equation	
+1036	adding-vectors-in-magnitude-and-direction-form	adding_vectorsinverse_trig_functionsconverting-from-magnitude-and-direction-form-to-component-form	113	-21	Add vectors:  magnitude & direction to component	
+1037	direction-angles	adding_vectors	113	-20	Direction of vectors	
+1038	analyze-vertical-asymptotes-of-rational-functions	points-of-discontinuity-of-rational-functions	113	-7	Analyze vertical asymptotes of rational functions	
+1039	rectangular-and-polar-forms-of-complex-numbers	find-complex-numbers-according-to-absolute-value-and-angle	113	5	Polar & rectangular forms of complex numbers	
+1040	range_of_a_function	domain_and_range_0.5graphing_parabolas_2	113	19	Range of quadratic functions	
+1041	domain_of_a_function	domain_and_range_0.5domain-of-algebraic-functions	113	21	Domain of advanced functions	
+1042	systems-of-nonlinear-equations	graphing_parabolas_2graphing_systems_of_equationsgraphs-of-exponentials-and-logarithms	113	23	Interpret equations graphically	
+1043	graphing_circles_2	equation_of_a_circle_2	113	31	Graph a circle from its expanded equation	
+1044	adding-vectors-in-magnitude-and-direction-form-2	adding-vectors-in-magnitude-and-direction-form	114	-21	Add vectors:  magnitude & direction	
+1045	graphs-of-rational-functions	analyze-vertical-asymptotes-of-rational-functions	114	-7	Graphs of rational functions	
+1046	multiplying_and_dividing_complex_number_polar_forms	rectangular-and-polar-forms-of-complex-numbers	114	5	Multiply & divide complex numbers in polar form	
+1047	determine-the-domain-of-advanced-piecewise-functions	domain_of_a_functiondomain-and-range-piecewise	114	21	Domain of advanced piecewise functions	
+1048	intersecting-functions	systems-of-nonlinear-equations	114	23	Solve equations graphically	
+1049	equation-of-parabola-from-focus-and-directrix	graphing_circles_2graphing_parabolas_2	114	30	Equation of a parabola from focus & directrix	
+1050	center-and-radii-of-an-ellipse-and-its-graph	graphing_circles_2	114	32	Graph & features of ellipses	
+1051	vector-word-problems	adding-vectors-in-magnitude-and-direction-formscaling_vectors	115	-24	Vector word problems	
+1052	powers_of_complex_numbers_1	multiplying_and_dividing_complex_number_polar_forms	115	5	Powers of complex numbers	
+1053	graphing-piecewise-functions	graphs-of-radical-functionsgraphs-of-absolute-value-functionspiecewise-graphs-lineargraphs-of-exponentials-and-logarithmsgraph-from-standard-form-equation	115	20	Graphs of nonlinear piecewise functions	
+1054	vertices-and-direction-of-hyperbola	equation-of-parabola-from-focus-and-directrix	115	30	Vertices & direction of a hyperbola	
+1055	equation_of_an_ellipse	center-and-radii-of-an-ellipse-and-its-graph	115	32	Center & radii of ellipses from equation	
+1056	matrix_dimensions	magnitude-of-vectors	116	-13	Matrix dimensions	
+1057	new_definitions_1	evaluate-composite-functions-from-formulas	116	24	New operator definitions 1	
+1058	foci-of-hyperbola-from-equation	vertices-and-direction-of-hyperbola	116	30	Foci of a hyperbola from equation	
+1059	equation-of-an-ellipse-from-its-graph	equation_of_an_ellipse	116	32	Ellipse standard equation & graph	
+1060	understand-matrix-coordinates	matrix_dimensions	117	-13	Matrix elements	
+1061	interpret-the-periodicity-of-modeling-functions	interpret-features-func-2graphs_of_sine_and_cosine	117	18	Periodicity of algebraic models	
+1062	recog-features-func-2	interpret-features-func-2determine-the-end-behavior-of-polynomialsend-behavior-of-rational-functions	117	20	End behavior of algebraic models	
+1063	new_definitions_2	new_definitions_1	117	24	New operator definitions 2	
+1064	equation_of_a_hyperbola	foci-of-hyperbola-from-equation	117	30	Equation of a hyperbola from features	
+1065	matrix_addition_and_subtraction	understand-matrix-coordinates	118	-14	Add & subtract matrices	
+1066	represent-systems-with-matrices	understand-matrix-coordinates	118	-12	Represent linear systems with matrices	
+1067	comparing-features-of-functions-2	recog-features-func-2comparing-features-of-functions-0-5compare-properties-quadratic-functionsinterpret-the-periodicity-of-modeling-functions	118	19	Compare features of functions	
+1068	find-foci-of-ellipse-from-radii	equation-of-an-ellipse-from-its-graph	118	32	Foci of an ellipse from radii	
+1069	scalar_matrix_multiplication	matrix_addition_and_subtraction	119	-15	Multiply matrices by scalars	
+1070	solve-matrix-equations-add-sub	matrix_addition_and_subtraction	119	-14	Matrix equations:  addition & subtraction	
+1071	perform-elementary-matrix-row-operations	represent-systems-with-matrices	119	-12	Matrix row operations	
+1072	manipulating-formulas	solving_for_a_variablecomparing-features-of-functions-2	119	19	Manipulate formulas	
+1073	foci-of-ellipse-from-equation	find-foci-of-ellipse-from-radii	119	32	Foci of an ellipse from equation	
+1074	solve-matrix-equations-scalar-multiplication	scalar_matrix_multiplicationsolve-matrix-equations-add-sub	120	-15	Matrix equations:  scalar multiplication	
+1075	modeling-with-one-variable-equations-and-inequalities	manipulating-formulasconstruct-exponential-models-according-to-rate-of-changerecursive_explicitcombining-functions-with-arithmetic-operationsmodeling-with-periodic-functionsconstructing-and-interpreting-linear-functionskey-features-quadratics	120	19	Equations & inequalities word problems	
+1076	equation-of-ellipse-from-foci	foci-of-ellipse-from-equation	120	32	Equation of an ellipse from features	
+1077	multiplying_a_matrix_by_a_matrix	solve-matrix-equations-scalar-multiplication	121	-14	Multiply matrices	
+1078	multiplying_a_matrix_by_a_vector	multiplying_a_matrix_by_a_matrix	122	-15	Transform vectors using matrices	
+1079	matrix_determinant	multiplying_a_matrix_by_a_matrix	122	-13	Determinant of a 2x2 matrix	
+1080	transform-polygons-with-matrices	multiplying_a_matrix_by_a_vector	123	-15	Transform polygons using matrices	
+1081	determine-inverse-matrices	matrix_determinant	123	-13	Determine inverse matrices	
+1082	transformation-matrices-1	transform-polygons-with-matrices	124	-15	Matrices as transformations	
+1083	determine-invertibile-2x2-matrices	determine-inverse-matrices	124	-13	Determine invertible matrices	
+1084	matrix_inverse_2x2	determine-invertibile-2x2-matricesperform-elementary-matrix-row-operations	125	-13	Find the inverse of a 2x2 matrix	
+1085	writing-systems-of-equations-as-matrix-equations	systems_of_equationsrepresent-systems-with-matricesmatrix_inverse_2x2	126	-12	Represent linear systems with matrix equations	
+1086	two-sided-limits-from-graphs	limits-intro	135	-4	Estimating limit values from graphs	
+1087	finding-limits-numerically	creating-tables-to-approximate-limits	135	-2	Estimating limits from tables	
+1088	one-sided-limits-from-graphs	two-sided-limits-from-graphs	136	-3	One-sided limits from graphs	
+1089	analyze-continuity-at-a-point-graphically	analyzing-discontinuities-graphical	137	-3	Continuity at a point (graphical)	
+1090	intermediate-value-theorem	continuous-functions	138	-5	Using the intermediate value theorem	
+1091	continuous-functions	continuous-functions--graphs	138	-4	Continuity and common functions	
+1092	limits-of-composite-functions--graphs	limits-of-combined-functions-graphs	138	-3	Limits of composite functions	
+1093	limits-of-combined-functions-graphs	limits-of-combined-functions-sums	138	-2	Limits of combined functions:  products and quotients	
+1094	find-limits-by-direct-substitution	limits-of-composite-functions--graphs	139	-3	Limits by direct substitution	
+1095	identify-undefined-limits-by-direct-substitution	find-limits-by-direct-substitution	140	-3	Direct substitution with limits that don't exist	
+1096	two-sided-limits-using-algebra	limits-of-piecewise-functions	141	-3	Limits by factoring	
+1097	limits_2	two-sided-limits-using-algebra	142	-4	Limits using conjugates	
+1098	find-limits-using-trig-identities	two-sided-limits-using-algebradetermining-trigonometric-limits	142	-2	Limits using trig identities	
+1099	limits-of-piecewise-functions	find-limits-using-trig-identities	143	-3	Limits of piecewise functions	
+1100	continuity	limits-of-piecewise-functionscontinuous-functions	144	-3	Removable discontinuities	
+1101	unbounded-limits-graphical	connecting-limits-and-graphical-behavior	144	0	Infinite limits:  graphical	
+1102	graphs-of-functions-and-their-derivatives	selecting-procedures-for-calculating-limits-3secants-and-average-rate-of-change	145	-7	Derivative as slope of curve	
+1103	limits-at-infinity-where-f-x--is-unbounded	unbounded-limits-graphicalidentify-undefined-limits-by-direct-substitution	145	0	Infinite limits:  algebraic	
+1104	recognizing_slope	graphs-of-functions-and-their-derivatives	146	-8	Derivative & the direction of a function	
+1105	derivative-at-a-point-as-slope-of-tangent-line	graphs-of-functions-and-their-derivatives	146	-6	The derivative & tangent line equations	
+1106	limits-at-infinity-where-x-is-unbounded	limits-at-infinity-where-f-x--is-unboundedlimits-at-infinity-graphical	146	0	Limits at infinity of quotients	
+1107	visualizing_derivatives	analyze-points-of-inflection-algebraic	147	-7	Visualizing derivatives	
+1108	slope-of-secant-lines	secants-and-average-rate-of-change	147	-6	Secant lines & average rate of change with arbitrary points	
+1109	limits-at-infinity-of-rational-functions-radicals	limits-at-infinity-where-x-is-unbounded	147	-1	Limits at infinity of quotients with square roots	
+1110	limits-at-infinity-of-rational-functions-trig	limits-at-infinity-of-rational-functions-radicals	147	1	Limits at infinity of quotients with trig	
+1111	slope-of-secant-lines-with-simplification	slope-of-secant-lines	148	-6	Secant lines & average rate of change with arbitrary points (with simplification)	
+1112	squeeze-theorem	two-sided-limits-using-algebra	148	-1	Squeeze theorem	
+1113	tangent-slope-is-limiting-value-of-secant-slope	slope-of-secant-lines-with-simplificationrecognizing_slope	149	-7	Derivative as a limit:  numerical	
+1114	the-formal-and-alternate-form-of-the-derivative	derivative-at-a-point-as-slope-of-tangent-lineslope-of-secant-lines	150	-7	Derivative as a limit	
+1115	differentiability-at-a-point-graphical	the-formal-and-alternate-form-of-the-derivative	151	-7	Differentiability at a point:  graphical	
+1116	differentiating-linear-functions	local-linearization	151	-4	Basic derivative rules:  find the error	
+1117	differentiability-at-a-point-algebraic	differentiability-at-a-point-graphical	152	-7	Differentiability at a point:  algebraic	
+1118	basic-differentiation-rules	differentiating-linear-functions	152	-4	Basic derivative rules:  table	
+1119	power-rule-basic	power-rule-intro	153	-4	Differentiate polynomials	
+1120	differentiate-fractional-powers	differentiate-negative-powers	154	-5	Power rule (with rewriting the expression)	
+1121	tangents-of-polynomials	power-rule-basic	154	-4	Tangents of polynomials	
+1122	differentiate-negative-powers	power-rule-basic	154	-3	Power rule (negative & fractional powers)	
+1123	differentiate-radical-functions-intro	differentiate-fractional-powers	155	-5	Differentiate integer powers (mixed positive and negative)	
+1124	differentiate-sine-and-cosine	differentiate-radical-functions-intro	156	-4	Derivatives of sin(x) and cos(x)	
+1125	differentiate-products	differentiate-sine-and-cosinederivatives-of-ex-and-lnx	157	-4	Differentiate products	
+1126	differentiate-composite-functions	differentiate-products	158	-5	Differentiate composite functions (all function types)	
+1127	product_rule	differentiate-products	158	-4	Product rule with tables	
+1128	differentiate-quotients	differentiate-products	158	-3	Differentiate quotients	
+1129	chain_rule_1	differentiate-composite-functions-intro	159	-5	Chain rule with tables	
+1130	quotient_rule	differentiate-quotientsproduct_rule	159	-3	Quotient rule with tables	
+1131	differentiate-logarithmic-functions-intro	differentiate-exponential-functions	160	-6	Logarithmic functions differentiation intro	
+1132	differentiate-exponential-functions-intro	chain_rule_1	160	-5	Derivatives of aˣ and logₐx	
+1133	differentiate-radical-functions	chain_rule_1	160	-4	Differentiate radical functions	
+1134	differentiate-basic-trigonometric-functions	quotient_rule	160	-3	Derivatives of tan(x) cot(x) sec(x) and csc(x)	
+1135	differentiate-rational-functions	quotient_rule	160	-2	Differentiate rational functions	
+1136	differentiate-logarithmic-functions	differentiate-logarithmic-functions-intro	161	-6	Differentiate logarithmic functions	
+1137	differentiate-exponential-functions	differentiate-exponential-functions-intro	161	-5	Differentiate exponential functions	
+1138	differentiate-trigonometric-functions	differentiate-basic-trigonometric-functions	161	-3	Differentiate trigonometric functions	
+1139	derivatives-capstone	differentiating-using-multiple-rules-strategy	162	-4	Differentiating using multiple rules	
+1140	implicit-differentiation	exp-log-trig-radical-composite-diff	163	0	Implicit differentiation	
+1141	derivatives-of-inverse-functions	implicit-differentiation	164	-1	Derivatives of inverse functions	
+1142	logarithmic-differentiation	implicit-differentiation	164	1	Composite exponential function differentiation	
+1143	find-increasing-and-decreasing-intervals	find-critical-points	164	4	Increasing & decreasing intervals	
+1144	disguised-derivatives	derivatives-of-inverse-trigonometric-functions	165	-1	Disguised derivatives	
+1145	critical-numbers	find-increasing-and-decreasing-intervals	165	4	Relative minima & maxima	
+1146	differentiate-vector-values-functions	differentiate-parametric-functions	166	-7	Vector-valued functions differentiation	
+1147	second-derivatives	derivatives-capstone	166	-4	Second derivatives	
+1148	extreme-value-theorem	critical-numbers	166	3	Absolute minima & maxima (closed intervals)	
+1149	extreme-values-from-graphs	extreme-value-theorem	166	5	Absolute minima & maxima (entire domain)	
+1150	differentiate-parametric-functions	differentiating-using-multiple-rules-strategy	167	-8	Parametric equations differentiation	
+1151	second-derivatives--vector-valued-functions-	differentiate-vector-values-functionssecond-derivatives-parametric-functions	167	-7	Second derivatives (vector-valued functions)	
+1152	recognizing_concavity	second-derivatives	167	4	Concavity intro	
+1153	second-derivatives-parametric-functions	differentiate-parametric-functionssecond-derivatives	168	-8	Second derivatives (parametric functions)	
+1154	analyze-concavity-algebraic	analyze-points-of-inflection-graphicalcritical-numbers	168	4	Analyze concavity	
+1155	analyze-points-of-inflection-graphical	recognizing_concavity	169	3	Inflection points intro	
+1156	second-derivative-test	analyze-points-of-inflection-graphicalcritical-numbers	169	5	Second derivative test	
+1157	antiderivatives	finding-area-with-fundamental-theorem-of-calculus	169	8	Antiderivatives and indefinite integrals	
+1158	lhopitals_rule	derivatives-capstone	170	-7	L'Hôpital's rule:  0/0	
+1159	mean-value-theorem	intermediate-value-theoremderivatives-capstone	170	-6	Using the mean value theorem	
+1160	applications-of-differentiation-in-biology--economics--physics--etc	meaning-of-the-derivative-in-contextsecond-derivatives	170	-5	Rates of change in other applied contexts (non-motion problems)	
+1161	related-rates	analyzing-related-rates-problems-equationsimplicit-differentiation-of-related-functions	170	-4	Related rates intro	
+1162	applications-of-derivatives--motion-along-a-line	meaning-of-the-derivative-in-contextsecond-derivatives	170	-3	Motion problems (differential calc)	
+1163	local-linearization	differentiability-at-a-point-algebraic	170	-2	Approximation with local linearity	
+1164	analyze-points-of-inflection-algebraic	analyze-concavity-algebraic	170	3	Find inflection points	
+1165	intro-to-integration	antiderivatives	170	8	Reverse power rule	
+1166	lhopitals-rule-composite-exponential-functions	lhopitals-rule-inf	171	-7	L’Hôpital’s rule (composite exponential functions)	
+1167	related-rates-multiple-rates	related-rates	171	-4	Related rates (multiple rates)	
+1168	planar-motion-differential-calc	applications-of-derivatives--motion-along-a-linesecond-derivatives--vector-valued-functions-	171	-3	Planar motion (differential calc)	
+1169	basic-integration	intro-to-integration	171	8	Reverse power rule:  negative and fractional powers	
+1170	related-rates-pythagorean-theorem	related-rates-multiple-rates	172	-4	Related rates (Pythagorean theorem)	
+1171	motion-along-a-curve-differential-calc	planar-motion-differential-calc	172	-3	Motion along a curve (differential calc)	
+1172	understanding-the-fundamental-theorem-of-calculus	the-fundamental-theorem-of-calculus	172	4	Finding definite integrals using area formulas	
+1173	integrating-sin-cos	reverse-power-rule-rewriting	172	6	Indefinite integrals:  sin & cos	
+1174	indefinite-integrals-of-e-x-1-x	reverse-power-rule-rewriting	172	7	Indefinite integrals:  eˣ & 1/x	
+1175	integration	basic-integration	172	8	Reverse power rule:  sums & multiples	
+1176	indefinite-integrals	u-substitution--definite-integrals	172	9	Particular solutions to differential equations	
+1177	related-rates-advanced	related-rates-pythagorean-theorem	173	-4	Related rates (advanced)	
+1178	evaluating-a-definite-integral-from-a-graph	understanding-the-fundamental-theorem-of-calculus	173	4	Definite integral by thinking about the function's graph	
+1179	integrating-trig-functions	integrating-sin-cos	173	6	Integrating trig functions	
+1180	properties-of-definite-integrals-challenge	the-definite-integral-as-the-limit-of-a-riemann-sum	174	4	Using multiple properties of definite integrals	
+1181	properties-of-integrals	understanding-the-fundamental-theorem-of-calculus	175	4	Finding definite integrals using algebraic properties	
+1182	using-rectangles-to-approximate-area-under-a-curve	area-under-a-rate-function-equals-net-change	176	7	Left & right Riemann sums	
+1183	riemann-sums-and-sigma-notation	sigma-notationover-and-under-estimation-of-riemann-sums	177	7	Riemann sums in summation notation	
+1184	the-definite-integral-as-the-limit-of-a-riemann-sum	riemann-sums-and-sigma-notation	178	6	Definite integral as the limit of a Riemann sum	
+1185	trapezoid-rule	using-rectangles-to-approximate-area-under-a-curve	178	8	Midpoint & trapezoidal sums	
+1186	fundamental-theorem-of-calculus-graphically	the-definite-integral-as-the-limit-of-a-riemann-sum	179	6	Functions defined by definite integrals (accumulation functions)	
+1187	functions-defined-by-integrals	fundamental-theorem-of-calculus-graphically	180	6	Functions defined by integrals challenge	
+1188	evaluating-definite-integrals	reverse-power-rule-rewriting	181	3	Definite integrals:  reverse power rule	
+1189	the-fundamental-theorem-of-calculus	fundamental-theorem-of-calculus-graphically	181	7	Finding derivative with fundamental theorem of calculus	
+1190	improper-integrals	evaluating-definite-integrals-2	182	1	Improper integrals	
+1191	integrating-piecewise-functions	evaluating-definite-integrals-2	182	2	Definite integrals of piecewise functions	
+1192	evaluating-definite-integrals-2	evaluating-definite-integralsindefinite-integrals-of-e-x-1-xintegrating-sin-cos	182	3	Definite integrals:  common functions	
+1193	fundamental-theorem-of-calculus	evaluating-definite-integrals	182	4	Area using definite integrals	
+1194	second-fundamental-theorem-of-calculus	the-fundamental-theorem-of-calculus	182	7	Finding derivative with fundamental theorem of calculus:  chain rule	
+1195	average-value-of-a-function	u-substitution--definite-integralsmean-value-theorem	183	-1	Average value of a function	
+1196	area-between-a-curve-and-an-axis	u-substitution--definite-integrals	183	3	Area between a curve and the x-axis	
+1197	area-between-two-curves-given-end-points	area-between-a-curve-and-an-axis	184	3	Area between two curves given end points	
+1198	integration-by-parts	u-substitution--definite-integrals	184	6	Integration by parts	
+1199	integration-of-rational-functions-by-division-and-partial-fractions	integration-by-u-substitution	184	7	Integration with partial fractions	
+1200	integration-by-u-substitution	u-substitution-defining-u	184	8	𝘶-substitution:  indefinite integrals	
+1201	integration-by-the-reverse-chain-rule	evaluating-definite-integrals-2second-fundamental-theorem-of-calculus	184	9	Reverse chain rule	
+1202	optimization	critical-numbersrelated-rates	185	3	Optimization	
+1203	find-the-area-between-two-curves	area-between-two-curves-given-end-points	185	3	Area between two curves	
+1204	integration-by-parts--definite-integrals	integration-by-parts	185	6	Integration by parts:  definite integrals	
+1205	u-substitution--definite-integrals	integration-by-u-substitution	185	8	𝘶-substitution:  definite integrals	
+1206	area-under-a-rate-function-equals-net-change	meaning-of-the-derivative-in-context	187	1	Accumulation of change	
+1207	volumes-of-solids-of-known-cross-section	area-between-curves-that-intersect-at-more-than-two-points	187	2	Volumes with cross sections:  squares and rectangles (intro)	
+1208	arc-length-of-functions-in-one-variable	volumes-with-square-and-rectangle-cross-sections	187	4	Arc length	
+1209	area-enclosed-by-polar-graphs	area-bounded-by-polar-curves-intro	187	5	Area bounded by polar curves	
+1210	particle-motion	analyzing-motion-problems-integral-calc	188	1	Motion problems (with integrals)	
+1211	the-disk-method	volumes-with-triangles-and-semicircles-cross-sections	188	2	Disc method:  revolving around x- or y-axis	
+1212	the-washer-method	the-disk-method	189	2	Washer method:  revolving around x- or y-axis	
+1213	volumes-of-solids-of-revolution-by-shells	the-washer-method	190	2	Shell method	
+1214	integration-using-trigonometric-identities	u-substitution--definite-integrals	192	7	Integration using trigonometric identities	
+1215	understanding-sequences	recursive_explicit	192	10	Sequences review	
+1216	integration-using-trigonometric-substitution	integration-using-trigonometric-identities	193	7	Trigonometric substitution	
+1217	convergence-and-divergence-of-sequences	recursive_explicitlimits-at-infinity-of-rational-functions-radicals	193	10	Sequence convergence/divergence	
+1218	understanding-series	convergence-and-divergence-of-sequencessigma-notation	194	10	Partial sums intro	
+1219	arc-length-of-polar-curves	parametric-curve-arc-lengtharea-between-two-polar-curves	195	9	Arc length of polar curves	
+1220	convergence-and-divergence-of-series	understanding-series	195	10	Partial sums & series	
+1221	geometric-series-of-constants	convergence-and-divergence-of-serieswriting-finite-geometric-series-in-sigma-notation	196	10	Infinite geometric series	
+1222	nth-term-test	geometric-series-of-constants	197	10	nth term test	
+1223	ratio-test	alternating-series	198	10	Ratio test	
+1224	direct-and-limit-comparison-tests	p-series	199	10	Direct comparison test	
+1225	alternating-series	limit-comparison-test	200	10	Alternating series test	
+1226	alternating-series-remainder	determine-absolute-or-conditional-convergence	201	10	Alternating series remainder	
+1227	creating-power-series-from-geometric-series-using-algebra	find-interval-of-convergence	202	10	Function as a geometric series	
+1228	introduction-to-differential-equations-and-initial-value-problems	write-differential-equations	202	22	Verify solutions to differential equations	
+1229	creating-power-series-from-geometric-series-using-differentiation-and-integration	integration-and-differentiation-of-power-series	203	10	Integrals & derivatives of functions with known power series	
+1230	slope-fields	introduction-to-differential-equations-and-initial-value-problems	203	22	Slope fields & equations	
+1231	maclaurin-series-for-sin-x--cos-x--and-e-x	creating-power-series-from-geometric-series-using-algebra	204	10	Maclaurin series of sin(x) cos(x) and eˣ	
+1232	separable-differential-equations	indefinite-integralsseparable-equations	204	22	Particular solutions to separable differential equations	
+1233	integration-and-differentiation-of-power-series	maclaurin-series-for-sin-x--cos-x--and-e-x	205	10	Integrate & differentiate power series	
+1234	euler-s-method	slope-fields-and-solutions	205	22	Euler's method	
+1235	finding-taylor-series	alternating-series-remainder	206	10	Taylor & Maclaurin polynomials	
+1236	shift-parabolas	graphing_parabolas_2	x	x	Shift parabolas	
+1237	find-critical-points	derivatives-capstone	x	x	Find critical points	
+1238	find-interval-of-convergence	taylor-polynomial-approximation	x	x	Interval of convergence	
+1239	circumference-and-rotations	find-the-radius-or-diameter-of-a-circle-from-the-circumference-or-area	x	x	Circumference and rotations	
+1240	powers-of-powers	exponents	x	x	Powers of powers	
+1241	find-measures-using-rigid-transformations	area_of_squares_and_rectanglesreflections-1	x	x	Find measures using rigid transformations	
+1242	constant-of-proportionality-from-tables	unit-rates	x	x	Constant of proportionality from tables (with equations)	
+1243	appropriate-units	rate-conversion	x	x	Appropriate units	
+1244	create-a-table-or-coordinates-from-a-given-rule	patternsgraphing_points	x	x	Tables from rules that relate 2 variables	
+1245	separable-equations	separable-differential-equations-find-the-error	x	x	Separable differential equations	
+1246	area-between-curves-that-intersect-at-more-than-two-points	area-between-a-curve-and-the-y-axis	x	x	Area between curves that intersect at more than two points (calculator-active)	
+1247	complete-a-table-from-a-two-variable-equation	create-a-table-or-coordinates-from-a-given-rule	x	x	Tables from equations with 2 variables	
+1248	diff-eq-exponential-models-word-problems	exponential-model-equations	x	x	Differential equations:  exponential model word problems	
+1249	net-change-algebraic	analyzing-problems-involving-definite-integrals	x	x	Problems involving definite integrals (algebraic)	
+1250	volume-with-cubes-with-fraction-lengths	volume_with_unit_cubesvolume_1	x	x	Volume with cubes with fraction lengths	
+1251	volume-of-spheres	area_of_a_circlevolume_1	x	x	Volume of spheres	
+1252	model-with-one-step-equations-and-solve	translate-one-step-equations-and-solve--basic-equations-in-one-variable-1	x	x	Model with one-step equations and solve	
+1253	function-rules-from-equations	evaluate-functions	x	x	Function rules from equations	
+1254	derivatives-of-inverse-trigonometric-functions	derivatives-of-inverse-functions	x	x	Derivatives of inverse trigonometric functions	
+1255	selecting-procedures-for-calculating-limits-3	selecting-procedures-for-calculating-limits-2	x	x	Strategy in finding limits	
+1256	telling-time-word-problems-	time-differences--over-the-hour-unit-sense	x	x	Telling time word problems	
+1257	equivalent-expressions-with-percent-problems	equivalent-representations-of-percent-problems	x	x	Equivalent expressions with percent problems	
+1258	area-polar-calculator-active	area-between-two-polar-curves	x	x	Area with polar functions (calculator-active)	
+1259	relate-double-numbers-lines-and-ratio-tables	ratios-with-double-number-lines	x	x	Relate double numbers lines and ratio tables	
+1260	integration-using-long-division	integration-by-u-substitution	x	x	Integration using long division	
+1261	second-derivatives-implicit-equations	second-derivativesimplicit-differentiation	x	x	Second derivatives (implicit equations)	
+1262	stretch-and-shrink-parabolas	shift-parabolas	x	x	Scale & reflect parabolas	
+1263	understanding-remainders	division_1.5	x	x	Intro to remainders	
+1264	testing-solutions-to-inequalities--basic-	number_line_2ordering-rational-numbers	x	x	Testing solutions to inequalities (basic)	
+1265	interpret-scale-factor-in-scale-drawings	corresponding-sides-and-points-in-scale-drawings	x	x	Interpret scale factor in scale drawings	
+1266	over-and-under-estimation-of-riemann-sums	using-rectangles-to-approximate-area-under-a-curve	x	x	Over- and under-estimation of Riemann sums	
+1267	connecting-limits-and-graphical-behavior	one-sided-limits-from-graphs	x	x	Connecting limits and graphical behavior	
+1268	power-rule-intro	basic-differentiation-rules	x	x	Power rule (positive integer powers)	
+1269	graphing-exponential-growth-intro	interpret-exponential-expressions-word-problems	x	x	Graphs of exponential growth	
+1270	separable-differential-equations-find-the-error	introduction-to-differential-equations-and-initial-value-problemsu-substitution--definite-integrals	x	x	Separable differential equations:  find the error	
+1271	solve-quadratics-by-taking-square-roots-intro	adding_and_subtracting_radicalszero-product-property	x	x	Quadratics by taking square roots intro	
+1272	add-decimals-visually	estimating-with-adding-decimalsdecimal-intuition-with-grids	x	x	Add decimals visually	
+1273	differentiating-functions--find-the-error	exp-log-trig-radical-composite-diff	x	x	Differentiating functions:  Find the error	
+1274	divide-decimals-visually	decimal-intuition-with-gridsestimating-with-dividing-decimals	x	x	Divide decimals visually	
+1275	equations-with-square-roots---cube-roots--decimals---fractions	roots-of-decimals-and-fractions	x	x	Equations with square roots:  decimals & fractions	
+1276	multi-digit-subtraction	select-strategies-for-subtracting-within-1000break-apart-3-digit-subtraction-problemssubtract-on-a-number-line	x	x	Multi-digit subtraction	
+1277	dilations-center	defining-dilations-2	x	x	Dilations:  center	
+1278	relate-fractions--decimals--and-percents	percents-from-fraction-models	x	x	Relate fractions decimals and percents	
+1279	ratios-on-coordinate-plane	solving-ratio-problems-with-tables	x	x	Ratios on coordinate plane	
+1280	add-and-subtract-mixed-numbers-word-problems--like-denominators-	adding_subtracting_mixed_numbers_0.5adding-and-subtracting-mixed-numbers-with-like-denominators-2	x	x	Add and subtract mixed numbers word problems (like denominators)	
+1281	right-triangle-side-lengths	pythagorean_theorem_1use-pythagorean-theorem-to-find-side-lengths-on-isosceles-triangles	x	x	Right triangle side lengths	
+1282	multiply-powers	exponents	x	x	Multiply powers	
+1283	parametric-curve-arc-length	arc-length-of-functions-in-one-variabledifferentiate-parametric-functions	x	x	Parametric curve arc length	
+1284	integral-test	nth-term-testimproper-integrals	x	x	Integral test	
+1285	order-of-operations--no-exponents-	expressions-with-parentheses	x	x	Order of operations (no exponents)	
+1286	equivalent-ratios-in-the-real-world	equivalent-ratio-word-problems--basic-	x	x	Equivalent ratios in the real world	
+1287	identify-symmetrical-figures	axis_of_symmetry	x	x	Identify symmetrical figures	
+1288	stretch-and-shrink-absolute-value-graphs	shift-absolute-value-graphs	x	x	Scale & reflect absolute value graphs	
+1289	washer-method-other-axes	the-washer-methoddisc-method-other-axes	x	x	Washer method:  revolving around other axes	
+1290	secants-and-average-rate-of-change	recognizing_slope	x	x	Secant lines & average rate of change	
+1291	sigma-notation	evaluating-basic-sigma-notation	x	x	Summation notation	
+1292	find-volume-by-multiplying-area-of-base-times-height	volume-formula-intuition	x	x	Volume by multiplying area of base times height	
+1293	missing-number-within-20--add-and-subtract-	addition_2subtraction_2	x	x	Find missing number (add and subtract within 20)	
+1294	negative-symbol-as-opposite	number-opposites	x	x	Negative symbol as opposite	
+1295	part-part-whole-ratios	equivalent-ratios	x	x	Part-part-whole ratios	
+1296	exponential-growth-vs-decay	graphing-exponential-growth-intro	x	x	Exponential growth vs. decay	
+1297	analyzing-related-rates-problems-equations	analyzing-related-rates-problems-expressions	x	x	Analyzing related rates problems:  equations	
+1298	conditions-for-mvt--graph	conditions-for-ivt-and-evt-table	x	x	Conditions for MVT:  graph	
+1299	compare-constants-of-proportionality	constant-of-proportionality-from-graphsconstant-of-proportionality-from-tablesconstant-of-proportionality-from-equations	x	x	Compare constants of proportionality	
+1300	signs-of-expressions	number-oppositesadding_negative_numbersadding_and_subtracting_negative_numbers	x	x	Signs of expressions	
+1301	divide-fractions-by-whole-numbers	dividing_fractions_0.5	x	x	Divide fractions by whole numbers	
+1302	equivalent-representations-of-percent-problems	converting_percents_to_decimalsconverting-between-fractions-and-percents	x	x	Equivalent representations of percent problems	
+1303	write-fraction-addition-problems-with-common-denominators--denominators-of-10-and-100-	equivalent-fractions-with-denominators-of-10-and-100	x	x	Equivalent expressions with common denominators (denominators 10 & 100)	
+1304	volume-and-surface-area-word-problems	volume_1surface-areas	x	x	Volume and surface area word problems	
+1305	compare-decimals-word-problems	comparing_decimals_2	x	x	Compare decimals word problems	
+1306	exponents-in-expressions	exponents	x	x	Variable expressions with exponents	
+1307	exponential-vs-linear-growth	geometric_sequences_2	x	x	Exponential vs. linear growth	
+1308	limits-of-combined-functions-sums	connecting-limits-and-graphical-behavior	x	x	Limits of combined functions:  sums and differences	
+1309	mapping-shapes	transformation-preserved-propertiesperforming-translations-on-the-coordinate-planeperforming-reflections-on-the-coordinate-planeperforming-rotations-on-the-coordinate-plane	x	x	Mapping shapes	
+1310	finding-missing-factors--1-digit-multiplication-	multiplication_0.5division_0.5	x	x	Find missing factors (1-digit multiplication)	
+1311	explore-behaviors-of-implicit-relations	second-derivatives-implicit-equationsanalyze-points-of-inflection-algebraic	x	x	Tangents to graphs of implicit relations	
+1312	2-step-estimation-word-problems	multiplication-and-division-word-problems--within-100-rounding-to-the-nearest-ten-or-hundred	x	x	2-step estimation word problems	
+1313	constant-of-proportionality-from-graphs	unit-rates	x	x	Constant of proportionality from graphs	
+1314	writing-linear-functions-word-problems	graphing-linear-functions-word-problems	x	x	Writing linear functions word problems	
+1315	quadratic-word-problems-vertex-form	graphing_parabolas_1	x	x	Quadratic word problems (vertex form)	
+1316	estimate-multi-digit-division-problems	dividing-by-taking-out-factors-of-10	x	x	Estimate multi-digit division problems	
+1317	interpret-two-step-equation-word-problems	linear_equations_2	x	x	Interpret two-step equation word problems	
+1318	evaluate-functions-from-graph	evaluate-functions	x	x	Evaluate functions from their graph	
+1319	divide-powers	exponentsmultiply-powers	x	x	Divide powers	
+1320	indirect-measurement	order-by-lengthwhich-has-more-	x	x	Indirect measurement	
+1321	negative-signs-in-fractions--with-variables-	negative-signs-in-numerators-and-denominators	x	x	Negative signs in fractions (with variables)	
+1322	translate-one-step-equations-and-solve--basic-	one_step_equationslinear_equations_1	x	x	Translate one-step equations and solve	
+1323	u-substitution-defining-u	evaluating-definite-integrals-2	x	x	𝘶-substitution:  defining 𝘶	
+1324	understand-subtraction-as-adding-the-opposite	signs-of-sumsadding_negative_numbers	x	x	Understand subtraction as adding the opposite	
+1325	graph-a-2-variable-relationship	write-a-2-variable-relationshipcreate-a-table-or-coordinates-from-a-given-ruleidentify-points-on-a-line	x	x	Graphs of rules that relate 2 variables	
+1326	linear-equations-word-problems	evaluate-functions	x	x	Linear equations word problems	
+1327	identify-transformations	polygons-in-the-coordinate-plane	x	x	Identify transformations	
+1328	dividing-negative-numbers	division_0.5	x	x	Dividing negative numbers	
+1329	avg-rate-of-change-graphs-tables	interpret-features-func-2	x	x	Average rate of change:  graphs & tables	
+1330	equivalent-ratios	representing-ratios	x	x	Equivalent ratios	
+1331	ratios-and-units-of-measurement	ratio_word_problems	x	x	Ratios and units of measurement	
+1332	divide-whole-numbers-by-fractions	dividing_fractions	x	x	Divide whole numbers by fractions	
+1333	continuity-at-a-point-algebraic	analyze-continuity-at-a-point-graphically	x	x	Continuity at a point (algebraic)	
+1334	subtract-decimals-visually	decimal-intuition-with-gridsestimating-with-subtracting-decimals	x	x	Subtract decimals visually	
+1335	interpreting-definite-integrals-in-context	analyzing-motion-problems-integral-calc	x	x	Interpreting definite integrals in context	
+1336	manipulating-functions-before-differentiation	differentiating-functions--find-the-error	x	x	Manipulating functions before differentiation	
+1337	zero-product-property	factoring_polynomials_by_grouping_1	x	x	Zero product property	
+1338	identify-geometric-solids--3d-figures-	recognizing-shapesidentify-parts-of-3d-shapes	x	x	Identify geometric solids (3D shapes)	
+1339	differentiate-polar-functions	second-derivatives-parametric-functions	x	x	Differentiate polar functions	
+1340	factor-quadratics-sp	factoring-polynomialsmultiply-binomials-coefficient	x	x	Warmup:  factoring quadratics intro	
+1341	definite-integral-properties-2	properties-of-integrals	x	x	Definite integrals over adjacent intervals	
+1342	implicit-differentiation-of-related-functions	implicit-differentiation	x	x	Differentiate related functions	
+1343	intro-to-percents	decimal-intuition-with-grids	x	x	Intro to percents	
+1344	interpret-constants-of-proportionality-	constant-of-proportionality-from-tablesconstant-of-proportionality-from-graphsconstant-of-proportionality-from-equations	x	x	Interpret constants of proportionality	
+1345	patterns-with-even-and-odd	addition_3	x	x	Patterns with even and odd	
+1346	determine-reflections	performing-reflections-on-the-coordinate-planedefining-rotations	x	x	Determine reflections	
+1347	represent-2-step-word-problems-using-equations	letters-and-symbols-in-multiplication-and-division-equationsmultiplication-and-division-word-problems--within-100-	x	x	Represent 2-step word problems with equations	
+1348	represent-multi-step-word-problems-using-equations	arithmetic_word_problemsletters-and-symbols-in-multiplication-and-division-equations	x	x	Represent multi-step word problems using equations	
+1349	volume-of-cylinders--spheres--and-cones-word-problems	volume-of-spheresvolume-of-conesvolumes-of-cones--cylinders--and-spheres	x	x	Volume of cylinders spheres and cones word problems	
+1350	analyzing-related-rates-problems-expressions	applications-of-differentiation-in-biology--economics--physics--etcapplications-of-derivatives--motion-along-a-line	x	x	Analyzing related rates problems:  expressions	
+1351	creating-tables-to-approximate-limits	connecting-limits-and-graphical-behavior	x	x	Creating tables for approximating limits	
+1352	explore-scale-copies	understand-equivalent-ratios	x	x	Explore scale copies	
+1353	compare-multi-digit-numbers-word-problems	comparing-multi-digit-numbers	x	x	Compare multi-digit numbers word problems	
+1354	estimate-multi-digit-multiplication-problems	multiplying-by-taking-out-factors-of-10	x	x	Estimate multi-digit multiplication problems	
+1355	evaluate-functions	linear_equations_3	x	x	Evaluate functions	
+1356	rotate-points--basic-	defining-translationsmeasuring_angles	x	x	Rotate points (basic)	
+1357	create-two-variable-equations-from-real-world-contexts	complete-a-table-from-a-two-variable-equationequations-in-one-variable-1writing_expressions_1	x	x	Relationships between quantities in equations and graphs	
+1358	analyzing-discontinuities-graphical	connecting-limits-and-graphical-behavior	x	x	Classify discontinuities	
+1359	volume-of-cones	area_of_a_circlevolume_1	x	x	Volume of cones	
+1360	angle-basics	recognizing_rays_lines_and_line_segments	x	x	Angle basics	
+1361	relative-position	naming-shapes	x	x	Relative position	
+1362	use-area-of-squares-to-visualize-pythagorean-theorem	area_of_triangles_1area_of_squares_and_rectangles	x	x	Use area of squares to visualize Pythagorean theorem	
+1363	derivatives-of-ex-and-lnx	differentiate-radical-functions-intro	x	x	Derivatives of 𝑒ˣ and ln(x)	
+1364	powers-of-products-and-quotients	multiply-powerspowers-of-powersdivide-powers	x	x	Powers of products & quotients	
+1365	analyzing-motion-problems-integral-calc	u-substitution--definite-integralsapplications-of-derivatives--motion-along-a-line	x	x	Analyzing motion problems (integral calculus)	
+1366	meaning-of-the-derivative-in-context	differentiability-at-a-point-algebraic	x	x	Interpreting the meaning of the derivative in context	
+1367	multiplication-and-division-word-problems--within-100-	multiplication_0.5division_0.5	x	x	Multiplication and division word problems (within 100)	
+1368	integration-using-completing-the-square	integration-by-u-substitution	x	x	Integration using completing the square	
+1369	corresponding-sides-and-points-in-scale-drawings	understand-equivalent-ratiosexplore-scale-copies	x	x	Corresponding sides and points	
+1370	estimate-derivatives-from-tables	the-formal-and-alternate-form-of-the-derivative	x	x	Estimate derivatives	
+1371	interpreting-behavior-of-antiderivative-of-f-from-the-graph-of-f	the-fundamental-theorem-of-calculus	x	x	Interpreting the behavior of accumulation functions	
+1372	round-whole-numbers-word-problems	rounding_whole_numbers	x	x	Round whole numbers word problems	
+1373	one-step-equations-with-negatives--add---subtract-	adding_negative_numbersadding_and_subtracting_negative_numbersone_step_equations	x	x	One-step equations with negatives (add & subtract)	
+1374	make-bar-graphs-1	solving-problems-with-bar-graphs-1	x	x	Make bar graphs 1	
+1375	logistic-differential-equation	diff-eq-exponential-models-word-problems	x	x	Differential equations:  logistic model word problems	
+1376	differentiate-composite-functions-intro	identify-composite-functionsdifferentiate-basic-trigonometric-functions	x	x	Chain rule intro	
+1377	estimate-center-using-histograms	reading-histograms	x	x	Estimate center using histograms	
+1378	relate-scale-drawings-to-area	interpreting-scale-drawings	x	x	Relate scale drawings to area	
+1379	surface-area-word-problems	surface-areas	x	x	Surface area word problems	
+1380	area-bounded-by-polar-curves-intro	volumes-with-square-and-rectangle-cross-sections	x	x	Area bounded by polar curves intro	
+1381	intro-to-factoring-perfect-squares	finding-special-productsfactoring_polynomials_by_grouping_1	x	x	Perfect squares intro	
+1382	create-double-number-lines	representing-ratios	x	x	Create double number lines	
+1383	continuous-functions--graphs	analyze-continuity-at-a-point-graphically	x	x	Continuity over an interval	
+1384	one-sided-limits-from-tables	one-sided-limits-from-graphs	x	x	One-sided limits from tables	
+1385	estimate-to-add-multi-digit-whole-numbers-	rounding-to-the-nearest-ten-or-hundredaddition_3	x	x	Estimate to add and subtract multi-digit whole numbers	
+1386	find-surface-area-by-adding-areas-of-faces	surface-areanets-of-3d-figures	x	x	Find surface area by adding areas of faces	
+1387	find-length-when-given-area-of-a-triangle	area_of_triangles_1	x	x	Find missing length when given area of a triangle	
+1388	limits-at-infinity-graphical	unbounded-limits-graphical	x	x	Limits at infinity:  graphical	
+1389	quadratic-word-problems-factored-form	graph-quadratic-functions-in-factored-form	x	x	Quadratic word problems (factored form)	
+1390	one-step-equations-with-negatives--multiply---divide-	multiplying_and_dividing_negative_numberslinear_equations_1	x	x	One-step equations with negatives (multiply & divide)	
+1391	use-pythagorean-theorem-to-find-area-and-perimeter	pythagorean_theorem_1	x	x	Use Pythagorean theorem to find perimeter	
+1392	tangents-to-polar-curves	differentiate-polar-functions	x	x	Tangents to polar curves	
+1393	percents-from-fraction-models	intro-to-percents	x	x	Percents from fraction models	
+1394	converting-fraction-to-percents	relate-fractions--decimals--and-percents	x	x	Convert fractions to percents	
+1395	round-decimals-word-problems	rounding_numbersrounding-decimals-using-a-number-line	x	x	Round decimals word problems	
+1396	lhopitals-rule-inf	lhopitals_rule	x	x	L'Hôpital's rule:  ∞/∞	
+1397	rate-conversion	linear-equation-world-problems-2	x	x	Rate conversion	
+1398	identify-quadrilaterals	recognizing-shapes	x	x	Identify quadrilaterals	
+1399	understand-equivalent-ratios	equivalent-ratios	x	x	Understand equivalent ratios in the real world	
+1400	find-missing-side-when-given-area-of-a-parallelogram	area_of_parallelograms	x	x	Find missing length when given area of a parallelogram	
+1401	taylor-polynomial-approximation	finding-taylor-series	x	x	Lagrange error bound	
+1402	greatest-common-factor-of-monomials	factoring-monomials	x	x	Greatest common factor of monomials	
+1403	ratios-with-double-number-lines	create-double-number-lines	x	x	Ratios with double number lines	
+1404	area-of-right-triangles	find-base-and-height-on-a-triangle	x	x	Area of right triangles	
+1405	selecting-procedures-for-calculating-limits-2	conditions-for-using-direct-substitution	x	x	Next steps after indeterminate form (finding limits)	
+1406	limits-intro	comparing-features-of-functions-2	x	x	Limits intro	
+1407	area-and-perimeter-on-the-coordinate-plane	drawing-polygons	x	x	Area and perimeter on the coordinate plane	
+1408	find-base-and-height-on-a-triangle	area-of-squares-and-rectanglesrecognizing-shapes	x	x	Find base and height on a triangle	
+1409	estimate-lengths--us-customary-units-	measuring-lengths-2	x	x	Estimate lengths (US Customary units)	
+1410	determine-absolute-or-conditional-convergence	ratio-test	x	x	Determine absolute or conditional convergence	
+1411	analyze-functions-calculator-active	analyze-points-of-inflection-algebraic	x	x	Analyze functions (calculator-active)	
+1412	complementary-and-supplementary-angles--no-visual-	complementary_and_supplementary_angles	x	x	Complementary and supplementary angles (no visual)	
+1413	tax-and-tip-word-problems	markup_and_commission_word_problems	x	x	Tax and tip word problems	
+1414	identify-proportional-relationships-from-graphs	analyzing-and-identifying-proportional-relationships-2	x	x	Identify proportional relationships from graphs	
+1415	planar-motion-integral-calc	particle-motionplanar-motion-differential-calc	x	x	Planar motion (with integrals)	
+1416	exponential-model-equations	separable-differential-equations	x	x	Differential equations:  exponential model equations	
+1417	time-differences--over-the-hour-	telling_timetelling_time_0.5	x	x	Time differences	
+1418	interpret-multiplying-fraction-and-whole-number-word-problems	multiplying-fractions-and-whole-numbers-word-problems	x	x	Interpret multiplying fraction and whole number word problems	
+1419	metric-conversions-word-problems	converting-larger-units-to-smaller-units--milliliters-and-liters-converting-larger-units-to-smaller-units--millimeters--centimeters--meters--and-kilometers-converting-larger-units-to-smaller-units--grams-and-kilograms-	x	x	Metric conversions word problems	
+1420	dilations-preserved-properties	dilations	x	x	Dilations and properties	
+1421	unit-rates	equivalent-ratios	x	x	Unit rates	
+1422	ratios-with-tape-diagrams	representing-ratios	x	x	Ratios with tape diagrams	
+1423	telling-time-on-the-number-line	telling-time-to-the-nearest-minute	x	x	Telling time on the number line	
+1424	volumes-with-triangles-and-semicircles-cross-sections	volumes-with-square-and-rectangle-cross-sections	x	x	Volumes with cross sections:  triangles and semicircles	
+1425	tell-time-to-hour-or-half-hour	addition_3measuring-lengths-1	x	x	Tell time to hour or half hour	
+1426	relate-repeated-addition-to-multiplication	meaning-of-multiplicationrepeated-addition	x	x	Relate repeated addition to multiplication	
+1427	identify-composite-functions	evaluate-composite-functions-from-formulas	x	x	Identify composite functions	
+1428	conditions-for-ivt-and-evt-table	intermediate-value-theorem	x	x	Justification with the intermediate value theorem	
+1429	create-equations-to-solve-for-missing-angles	find-missing-angles	x	x	Create equations to solve for missing angles	
+1430	scale-factor-in-scale-drawings	corresponding-sides-and-points-in-scale-drawings	x	x	Identify scale factor in scale drawings	
+1431	applications-of-integration-calculator-active	indefinite-integralsaverage-value-of-a-functionparticle-motionnet-change-algebraic	x	x	Contextual and analytical applications of integration (calculator-active)	
+1432	divide-mixed-numbers	dividing_fractions_1.5	x	x	Divide mixed numbers	
+1433	scale-copies	identify-scale-copies	x	x	Scale copies	
+1434	pythagorean-theorem-word-problems--basic	pythagorean_theorem_1use-pythagorean-theorem-to-find-side-lengths-on-isosceles-triangles	x	x	Pythagorean theorem word problems	
+1435	finding-area-with-fundamental-theorem-of-calculus	second-fundamental-theorem-of-calculusdefinite-integral-properties-2	x	x	The fundamental theorem of calculus and definite integrals	
+1436	constant-of-proportionality-from-equations	unit-rates	x	x	Constant of proportionality from equations	
+1437	decompose-figures-to-find-volume--unit-cubes-	volume_with_unit_cubesvolume_1	x	x	Decompose figures to find volume (unit cubes)	
+1438	limit-comparison-test	direct-and-limit-comparison-tests	x	x	Limit comparison test	
+1439	multiply-binomials-area-model	finding-the-product-of-a-monomial-and-a-polynomial	x	x	Multiply binomials:  area model	
+1440	identify-scale-copies	corresponding-sides-and-points-in-scale-drawingsexplore-scale-copies	x	x	Identify scale copies	
+1441	graphs-of-inequalities	testing-solutions-to-inequalities--basic-	x	x	Graphing basic inequalities	
+1442	exponential-expressions-word-problems-algebraic	understanding-linear-and-exponential-models	x	x	Exponential expressions word problems (algebraic)	
+1443	read-line-plots	solving-problems-with-line-plots-1	x	x	Read line plots (data with fractions)	
+1444	us-customary-conversion-word-problems	converting-larger-units-to-smaller-units--inches--feet--yards--and-miles-converting-larger-units-to-smaller-units--cups--pints--quarts--and-gallons-converting-larger-units-to-smaller-units--ounces-and-pounds-	x	x	US customary conversion word problems	
+1445	equivalent-expressions-with-negative-numbers-and-varables	integer-addition-and-subtractionnegative-number-addition-and-subtraction-equivalent-expressions	x	x	Equivalent expressions with negative numbers and variables	
+1446	decimals-on-the-number-line--hundredths-0-1	decimals_on_the_number_line_1	x	x	Decimals on the number line:  hundredths 0-0.1	
+1447	quadratics-by-taking-square-roots-with-steps	understanding-the-equation-solving-process	x	x	Quadratics by taking square roots:  with steps	
+1448	decimals-on-the-number-line-1	number_linedecimal-intuition-with-grids	x	x	Decimals on the number line:  tenths 0-1	
+1449	conditions-for-ivt-and-evt-graph	differentiate-logarithmic-functions	x	x	Conditions for IVT and EVT:  graph	
+1450	exponents	positive_and_zero_exponents	x	x	Exponents	
+1451	shift-absolute-value-graphs	writing-the-equation-of-a-line-in-any-forminterpret-features-func-2	x	x	Shift absolute value graphs	
+1452	determine-rotations--basic-	defining-translations	x	x	Determine rotations (basic)	
+1453	counting-tens	count-to-100counting-objects	x	x	Count tens	
+1454	justification-using-first-derivative-test	extreme-values-from-graphs	x	x	Justification using first derivative	
+1455	multiply-decimals-visually	estimating-with-multiplying-decimalsdecimal-intuition-with-grids	x	x	Multiply decimals visually	
+1456	equivalent-expressions-with-common-denominators	common-denominatorsadding_fractions_with_common_denominators	x	x	Equivalent expressions with common denominators	
+1457	use-pythagorean-theorem-to-find-side-lengths-on-isosceles-triangles	pythagorean_theorem_1	x	x	Use Pythagorean theorem to find isosceles triangle side lengths	
+1458	write-differential-equations	meaning-of-the-derivative-in-context	x	x	Write differential equations	
+1459	conditions-for-using-direct-substitution	find-limits-using-trig-identitieslimits_2	x	x	Conclusions from direct substitution (finding limits)	
+1460	relate-fractions-to-1	recognizing_fractions_0.5fractions_on_the_number_line_1	x	x	Relate fractions to 1	
+1461	multi-digit-addition	break-apart-three-dig-addmaking-100-and-1000select-strategies-for-adding-within-1000	x	x	Multi-digit addition	
+1462	area-between-two-polar-curves	area-enclosed-by-polar-graphs	x	x	Area between two polar curves	
+1463	interpret-exponential-expressions-word-problems	exponential-expressions-word-problems-algebraic	x	x	Interpret exponential expressions word problems	
+1464	powers-of-powers-int-exp	powers-of-products-and-quotientsexponent_rules	x	x	Powers of products & quotients (integer exponents)	
+1465	identify-points-on-a-line	create-a-table-or-coordinates-from-a-given-ruleidentify-coordinates	x	x	Identify points on a line	
+1466	p-series	integral-test	x	x	p-series	
+1467	points-of-inflection--graphical-	analyze-points-of-inflection-graphical	x	x	Inflection points from graphs of first & second derivatives	
+1468	write-a-2-variable-relationship	create-a-table-or-coordinates-from-a-given-rulegraphing_pointspatterns	x	x	Write rules that relate 2 variables	
+1469	conditions-for-mvt-table	mean-value-theorem	x	x	Justification with the mean value theorem	
+1470	horizontal-and-vertical-lines	slope-from-two-points	x	x	Horizontal & vertical lines	
+1471	reverse-power-rule-rewriting	integration	x	x	Reverse power rule:  rewriting before integrating	
+1472	multi-step-estimation-word-problems	rounding-to-the-nearest-ten-or-hundredarithmetic_word_problems	x	x	Multi-step estimation word problems	
+1473	circumference-of-parts-of-circles	find-the-radius-or-diameter-of-a-circle-from-the-circumference-or-area	x	x	Circumference of parts of circles	
+1474	identify-parts-of-3d-shapes	recognizing-shapesarea_of_triangles_1	x	x	Identify parts of 3D shapes	
+1475	justification-using-second-derivative	justification-using-first-derivative-testanalyze-points-of-inflection-algebraic	x	x	Justification using second derivative	
+1476	differentiating-using-multiple-rules-strategy	manipulating-functions-before-differentiation	x	x	Differentiating using multiple rules:  strategy	
+1477	make-picture-graphs-1	solving-problems-with-picture-graphs-1	x	x	Make picture graphs 1	
+1478	match-equations-to-coordinates-on-a-line	identify-points-on-a-line	x	x	Match equations to coordinates on a line	
+1479	connecting-function-and-derivatives	justification-using-second-derivative	x	x	Connecting f f' and f'' graphically	
+1480	transformation-preserved-properties	identify-transformationsfind-measures-using-rigid-transformations	x	x	Rigid transformations:  preserved properties	
+1481	analyzing-problems-involving-definite-integrals	interpreting-definite-integrals-in-context	x	x	Analyzing problems involving definite integrals	
+1482	identify-separable-equations	separable-equations	x	x	Identify separable equations	
+1483	slope-fields-and-solutions	slope-fields	x	x	Reasoning using slope fields	
+1484	determining-trigonometric-limits	identify-undefined-limits-by-direct-substitution	x	x	Limits of trigonometric functions	
+1485	area-between-a-curve-and-the-y-axis	find-the-area-between-two-curves	x	x	Horizontal areas between curves	
+1486	disc-method-other-axes	the-disk-method	x	x	Disc method:  revolving around other axes	
+1487	volumes-with-square-and-rectangle-cross-sections	volumes-of-solids-of-known-cross-section	x	x	Volumes with cross sections:  squares and rectangles	
