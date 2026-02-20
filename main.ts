@@ -720,6 +720,19 @@ function writeLevelsTsv(levels: Level[]) {
   writeTsv("levels.tsv", header, rows)
 }
 
+function writeVizJson(skills: Map<string, Skill>, prereqs: Prereq[]) {
+  const involved = new Set<string>()
+  for (const p of prereqs) { involved.add(p.skill_id); involved.add(p.prereq_id) }
+  const vizSkills: Array<{ id: string; label: string; tags: string; gs: string; ge: string }> = []
+  for (const id of involved) {
+    const s = skills.get(id)
+    if (s) vizSkills.push({ id: s.id, label: s.label, tags: s.tags.join(";"), gs: s.grade_start?.toFixed(1) ?? "", ge: s.grade_end?.toFixed(1) ?? "" })
+    else vizSkills.push({ id, label: id, tags: "", gs: "", ge: "" })
+  }
+  const vizPrereqs = prereqs.map(p => [p.skill_id, p.prereq_id, p.source])
+  Deno.writeTextFileSync("viz.json", JSON.stringify({ skills: vizSkills, prereqs: vizPrereqs }))
+}
+
 function writeDot(skills: Map<string, Skill>, prereqs: Prereq[]) {
   const involved = new Set<string>()
   for (const p of prereqs) { involved.add(p.skill_id); involved.add(p.prereq_id) }
@@ -826,6 +839,8 @@ async function main() {
   console.log("Wrote levels.tsv")
   writeDot(mergedById, mergeResult.prereqs)
   console.log("Wrote skills.dot")
+  writeVizJson(mergedById, mergeResult.prereqs)
+  console.log("Wrote viz.json")
 }
 
 main()
