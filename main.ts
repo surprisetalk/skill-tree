@@ -75,13 +75,56 @@ function parseCsvRows(text: string): Record<string, string>[] {
 }
 
 function sanitize(s: string): string {
-  return s.replace(/[\t\n\r]/g, " ").trim()
+  let t = s.replace(/<[^>]+>/g, " ")
+  t = t.replace(/\[cite_start\]/g, "")
+  t = t.replace(/\*\*/g, "")
+  t = t.replace(/[\t\n\r]/g, " ")
+  t = t.replace(/\s+/g, " ").trim()
+  return t
+}
+
+function sanitizeId(s: string): string {
+  return s.replace(/[\t\n\r;]/g, "_").trim()
+}
+
+function isValidLabel(s: string): boolean {
+  if (!s || !s.trim()) return false
+  if (/^\(.*\)$/.test(s.trim())) return false
+  if (s.length > 1500) return false
+  // detect predominantly non-English: >30% accented alpha chars
+  const alpha = s.match(/[a-zA-Z\u00C0-\u024F]/g)
+  if (alpha && alpha.length > 10) {
+    const accented = alpha.filter(c => /[\u00C0-\u024F]/.test(c)).length
+    if (accented / alpha.length > 0.3) return false
+  }
+  return true
+}
+
+const NON_ENGLISH_JURISDICTIONS = new Set([
+  "québec", "quebec", "puerto rico", "guam", "american samoa",
+])
+
+const TAG_ALIASES: Record<string, string> = {
+  psy: "psychology", cs: "computer science", ml: "machine learning",
+  ai: "artificial intelligence", k12: "k-12", dl: "deep learning",
+  cv: "computer vision", nlp: "natural language processing",
+}
+
+function normalizeTag(s: string): string {
+  let t = s.toLowerCase().trim()
+  t = t.replace(/^\[(?:archive|archived)\]\s*/i, "")
+  t = t.replace(/\s*\(\d{4}(?:-\d{0,4})?\)\s*$/, "")
+  t = t.replace(/[_-]/g, " ").replace(/\s+/g, " ").trim()
+  t = t.replace(/\bstandards?\b/g, "").replace(/\s+/g, " ").trim()
+  return TAG_ALIASES[t] ?? t
 }
 
 function skill(id: string, label: string, opts?: Partial<Skill>): Skill {
+  const tags = (opts?.tags ?? []).map(normalizeTag).filter(t => t.length > 0)
   return {
     id, ext_ids: [], ext_urls: [], label: sanitize(label), description: "",
     tags: [], grade_start: null, grade_end: null, ...opts,
+    tags,
     ...(opts?.description ? { description: sanitize(opts.description) } : {}),
   }
 }
@@ -355,6 +398,7 @@ async function parseCsp(): Promise<Result> {
   const skills: Skill[] = []
 
   for (const j of jurisdictions) {
+    if (NON_ENGLISH_JURISDICTIONS.has(j.title.toLowerCase())) continue
     // deno-lint-ignore no-explicit-any
     let data: any
     try {
@@ -377,11 +421,14 @@ async function parseCsp(): Promise<Result> {
       const gEnd = gradeNums.length ? Math.max(...gradeNums) : null
 
       for (const std of Object.values(ss.standards)) {
-        const id = std.statementNotation ? `csp.${std.statementNotation}` : `csp.${std.id}`
+        const label = sanitize(std.description || std.statementNotation || "")
+        if (!isValidLabel(label)) continue
+        const notation = std.statementNotation ? sanitizeId(std.statementNotation) : ""
+        const id = notation ? `csp.${notation}` : `csp.${sanitizeId(std.id)}`
         const extIds = [std.asnIdentifier, std.id].filter(Boolean) as string[]
-        skills.push(skill(id, std.description || "", {
+        skills.push(skill(id, label, {
           ext_ids: extIds,
-          tags: [ss.subject?.toLowerCase(), j.title.toLowerCase()].filter(Boolean) as string[],
+          tags: [ss.subject].filter(Boolean) as string[],
           grade_start: gStart, grade_end: gEnd,
         }))
       }
@@ -416,12 +463,14 @@ async function parseOpensalt(): Promise<Result> {
 
     const itemIdMap = new Map<string, string>() // opensalt identifier -> our id
     for (const item of data.CFItems ?? []) {
-      const code = item.humanCodingScheme || item.identifier
+      const code = sanitizeId(item.humanCodingScheme || item.identifier)
       const id = `opensalt.${code}`
       itemIdMap.set(item.identifier, id)
+      const label = sanitize(item.fullStatement || code)
+      if (!isValidLabel(label)) continue
       const gradeNums = (item.educationLevel || []).map(parseGrade).filter((g): g is number => g !== null)
-      skills.push(skill(id, item.fullStatement || code, {
-        tags: [item.CFItemType?.toLowerCase(), fw.title.toLowerCase()].filter(Boolean) as string[],
+      skills.push(skill(id, label, {
+        tags: [item.CFItemType].filter(Boolean) as string[],
         grade_start: gradeNums.length ? Math.min(...gradeNums) : null,
         grade_end: gradeNums.length ? Math.max(...gradeNums) : null,
       }))
@@ -774,6 +823,8 @@ function mergeGroup(group: Skill[], idMap: Map<string, string>): Skill {
     if (s.grade_start !== null && (gStart === null || s.grade_start < gStart)) gStart = s.grade_start
     if (s.grade_end !== null && (gEnd === null || s.grade_end > gEnd)) gEnd = s.grade_end
     if (!desc && s.description) desc = s.description
+    if (!canon.label && s.label) canon.label = s.label
+    if (s.label && s.label.length < canon.label.length && canon.label.length > 500 && s.label.length <= 500) canon.label = s.label
   }
   idMap.set(canon.id, canon.id)
   canon.ext_ids = [...allExtIds]
@@ -1027,7 +1078,7 @@ function writeSkillsTsv(skills: Skill[]) {
   const header = ["id", "ext_ids", "label", "description", "tags", "grade_start", "grade_end"]
   const rows = skills.map(s => [
     s.id,
-    s.ext_ids.join(";"),
+    s.ext_ids.map(id => id.replace(/[\t\n\r;]/g, "_")).join(";"),
     sanitize(s.label),
     sanitize(s.description),
     s.tags.join(";"),
@@ -1113,7 +1164,9 @@ async function main() {
     console.log(`Parsing ${name}...`)
     try {
       const r = await parser()
+      let skipped = 0
       for (const s of r.skills) {
+        if (!isValidLabel(s.label)) { skipped++; continue }
         if (byId.has(s.id)) {
           console.error(`  WARN: duplicate id ${s.id}, skipping`)
           continue
@@ -1121,6 +1174,7 @@ async function main() {
         byId.set(s.id, s)
         allSkills.push(s)
       }
+      if (skipped) console.log(`  Skipped ${skipped} skills with invalid labels`)
       allPrereqs.push(...r.prereqs)
       allLevels.push(...r.levels)
       console.log(`  ${r.skills.length} skills, ${r.prereqs.length} prereqs, ${r.levels.length} levels`)
@@ -1157,12 +1211,15 @@ async function main() {
   console.log(`  ${allSkills.length} -> ${mergeResult.skills.length} skills (${allSkills.length - mergeResult.skills.length} merged)`)
   console.log(`  ${allPrereqs.length} -> ${mergeResult.prereqs.length} prereqs after rewrite`)
 
+  // Post-merge label filter (merge can pick a long label)
+  const finalSkills = mergeResult.skills.filter(s => isValidLabel(s.label))
+
   const mergedById = new Map<string, Skill>()
-  for (const s of mergeResult.skills) mergedById.set(s.id, s)
+  for (const s of finalSkills) mergedById.set(s.id, s)
 
-  console.log(`\nTotals: ${mergeResult.skills.length} skills, ${mergeResult.prereqs.length} prereqs, ${mergeResult.levels.length} levels`)
+  console.log(`\nTotals: ${finalSkills.length} skills, ${mergeResult.prereqs.length} prereqs, ${mergeResult.levels.length} levels`)
 
-  writeSkillsTsv(mergeResult.skills)
+  writeSkillsTsv(finalSkills)
   console.log("Wrote skills.tsv")
   const gz = new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] })
   const gzr = await gz.output()
