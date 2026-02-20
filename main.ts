@@ -527,6 +527,9 @@ const ACRONYMS: Record<string, string> = {
 
 function normalizeLabel(s: string): string {
   let n = s.toLowerCase().trim()
+  // strip difficulty-level prefixes from translations (e.g. "[Foundational] ...", "Basic: ...")
+  n = n.replace(/^\[(foundational|basic|intermediate|advanced|general)\]\s*/i, "")
+  n = n.replace(/^(foundational|basic|intermediate|advanced|general):\s*/i, "")
   // strip pedagogical boilerplate prefixes
   n = n.replace(/^(the )?student(s)? (will |is expected to |can )?(be able to )?/, "")
   n = n.replace(/^demonstrate (an )?understanding of /, "")
@@ -736,11 +739,11 @@ function dotProduct(a: Float32Array, b: Float32Array): number {
 }
 
 function shouldMerge(diceScore: number, tfidfCos: number, embCos: number | null): boolean {
-  if (diceScore >= 0.95) return true
-  if (tfidfCos >= 0.85) return true
-  if (embCos !== null && embCos >= 0.95) return true
-  if (diceScore >= 0.80 && tfidfCos >= 0.65) return true
-  if (embCos !== null && embCos >= 0.85 && diceScore >= 0.70) return true
+  if (diceScore >= 0.90) return true
+  if (tfidfCos >= 0.80) return true
+  if (embCos !== null && embCos >= 0.90) return true
+  if (diceScore >= 0.75 && tfidfCos >= 0.60) return true
+  if (embCos !== null && embCos >= 0.80 && diceScore >= 0.65) return true
   return false
 }
 
