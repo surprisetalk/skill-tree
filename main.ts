@@ -446,6 +446,16 @@ async function parseAsn(): Promise<Result> {
 
 // Merge skills with similar labels, accumulating ext_ids and rewriting prereqs
 
+const ACRONYMS: Record<string, string> = {
+  ml: "machine learning", nlp: "natural language processing", ai: "artificial intelligence",
+  cs: "computer science", dl: "deep learning", cv: "computer vision", db: "database",
+  os: "operating system", rl: "reinforcement learning", nn: "neural network",
+  svm: "support vector machine", pca: "principal component analysis", oop: "object oriented programming",
+  sql: "structured query language", api: "application programming interface",
+  ux: "user experience", ui: "user interface", qa: "quality assurance",
+  hr: "human resource", pr: "public relation", it: "information technology",
+}
+
 function normalizeLabel(s: string): string {
   let n = s.toLowerCase().trim()
   // strip parentheticals at end: "repairing (manual/mechanical)" -> "repairing"
@@ -459,71 +469,340 @@ function normalizeLabel(s: string): string {
   n = n.replace(/\b(\w{4,})s\b/g, "$1")
   // strip leading articles
   n = n.replace(/^(the |a |an )/, "")
+  // expand known acronyms
+  if (ACRONYMS[n]) return ACRONYMS[n]
   return n
 }
 
-function mergeSkills(
+// --- Fuzzy merge utilities ---
+
+const STOPWORDS = new Set(["a","an","the","and","or","of","in","to","for","is","on","at","by","with","as","it","its","be","are","was","were","been","has","have","had","do","does","did","not","no","but","if","so","up","out","all","can","will","may","use","used","using"])
+
+function charBigrams(s: string): Set<string> {
+  const bg = new Set<string>()
+  for (let i = 0; i < s.length - 1; i++) bg.add(s.slice(i, i + 2))
+  return bg
+}
+
+function dice(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0
+  let overlap = 0
+  for (const x of a) if (b.has(x)) overlap++
+  return (2 * overlap) / (a.size + b.size)
+}
+
+function sourcePrefix(id: string): string { return id.split(".")[0] }
+
+function buildCandidatePairs(skills: Skill[]): [number, number][] {
+  const labels = skills.map(s => normalizeLabel(s.label))
+  // Index only short-label, non-CSP-sentence skills
+  const eligible = new Set<number>()
+  for (let i = 0; i < skills.length; i++) {
+    if (labels[i].length > 60) continue
+    if (labels[i].length < 3) continue
+    eligible.add(i)
+  }
+  console.log(`  ${eligible.size} skills eligible for fuzzy matching (label <= 60 chars)`)
+
+  // inverted index: token -> skill indices
+  const index = new Map<string, number[]>()
+  for (const i of eligible) {
+    for (const tok of labels[i].split(" ")) {
+      if (STOPWORDS.has(tok) || tok.length < 3) continue
+      const arr = index.get(tok)
+      if (arr) arr.push(i)
+      else index.set(tok, [i])
+    }
+  }
+
+  // Build source prefix index for fast cross-source check
+  const srcPrefix = skills.map(s => sourcePrefix(s.id))
+
+  const pairs: [number, number][] = []
+  const seen = new Set<number>() // pack pair as single number for memory efficiency
+  const MAX_PAIRS = 500_000
+  for (const members of index.values()) {
+    if (members.length > 100) continue // skip common tokens
+    for (let i = 0; i < members.length && pairs.length < MAX_PAIRS; i++) {
+      for (let j = i + 1; j < members.length && pairs.length < MAX_PAIRS; j++) {
+        const a = members[i], b = members[j]
+        // cross-source only
+        if (srcPrefix[a] === srcPrefix[b]) continue
+        // length ratio filter
+        const la = labels[a].length, lb = labels[b].length
+        if (Math.min(la, lb) < Math.max(la, lb) * 0.4) continue
+        // dedup: pack two 20-bit indices into one number (supports up to 1M skills)
+        const key = a < b ? a * 1048576 + b : b * 1048576 + a
+        if (seen.has(key)) continue
+        seen.add(key)
+        pairs.push([a, b])
+      }
+    }
+  }
+  return pairs
+}
+
+// TF-IDF on labels
+function buildTfidf(labels: string[]): { vecs: Map<number, number>[]; vocab: Map<string, number> } {
+  const vocab = new Map<string, number>()
+  const df = new Map<string, number>()
+  const docs: string[][] = []
+  for (const l of labels) {
+    const toks = l.split(" ").filter(t => !STOPWORDS.has(t) && t.length >= 2)
+    docs.push(toks)
+    const unique = new Set(toks)
+    for (const t of unique) {
+      if (!vocab.has(t)) vocab.set(t, vocab.size)
+      df.set(t, (df.get(t) ?? 0) + 1)
+    }
+  }
+  const N = labels.length
+  const vecs: Map<number, number>[] = []
+  for (const toks of docs) {
+    const tf = new Map<string, number>()
+    for (const t of toks) tf.set(t, (tf.get(t) ?? 0) + 1)
+    const vec = new Map<number, number>()
+    let norm = 0
+    for (const [t, count] of tf) {
+      const w = (count / toks.length) * Math.log(N / (df.get(t) ?? 1))
+      vec.set(vocab.get(t)!, w)
+      norm += w * w
+    }
+    norm = Math.sqrt(norm)
+    if (norm > 0) for (const [k, v] of vec) vec.set(k, v / norm)
+    vecs.push(vec)
+  }
+  return { vecs, vocab }
+}
+
+function cosineSparse(a: Map<number, number>, b: Map<number, number>): number {
+  let dot = 0
+  const [smaller, larger] = a.size <= b.size ? [a, b] : [b, a]
+  for (const [k, v] of smaller) {
+    const bv = larger.get(k)
+    if (bv !== undefined) dot += v * bv
+  }
+  return dot // already L2-normalized
+}
+
+// Embedding support: shell out to python3 + sentence_transformers
+async function embedLabels(labels: string[]): Promise<Float32Array[] | null> {
+  const tmpIn = await Deno.makeTempFile({ suffix: ".txt" })
+  const tmpOut = await Deno.makeTempFile({ suffix: ".bin" })
+  try {
+    await Deno.writeTextFile(tmpIn, labels.join("\n"))
+    const script = `
+import sys, struct, numpy as np
+from sentence_transformers import SentenceTransformer
+m = SentenceTransformer('all-MiniLM-L6-v2')
+with open(sys.argv[1]) as f: labels = [l.rstrip('\\n') for l in f if l.strip()]
+vecs = m.encode(labels, normalize_embeddings=True, show_progress_bar=True).astype(np.float32)
+with open(sys.argv[2], 'wb') as f: f.write(vecs.tobytes())
+print(f'{len(labels)} labels, {vecs.shape[1]} dims', file=sys.stderr)
+`
+    // Prefer venv python if available
+    const venvPy = `${Deno.cwd()}/.venv/bin/python3`
+    let pyCmd = "python3"
+    try { await Deno.stat(venvPy); pyCmd = venvPy } catch { /* use system python3 */ }
+    const proc = new Deno.Command(pyCmd, {
+      args: ["-c", script, tmpIn, tmpOut],
+      stdout: "piped", stderr: "piped",
+    })
+    const { success, stderr } = await proc.output()
+    const errMsg = new TextDecoder().decode(stderr)
+    if (!success) {
+      console.error(`  Embedding failed: ${errMsg.slice(0, 200)}`)
+      return null
+    }
+    console.log(`  Embedding: ${errMsg.trim()}`)
+    const buf = await Deno.readFile(tmpOut)
+    const floats = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4)
+    const dim = 384
+    const vecs: Float32Array[] = []
+    for (let i = 0; i < labels.length; i++) {
+      vecs.push(floats.slice(i * dim, (i + 1) * dim))
+    }
+    return vecs
+  } catch (e) {
+    console.error(`  Embedding unavailable (python3/sentence_transformers not found): ${e}`)
+    return null
+  } finally {
+    try { await Deno.remove(tmpIn) } catch { /* ok */ }
+    try { await Deno.remove(tmpOut) } catch { /* ok */ }
+  }
+}
+
+function dotProduct(a: Float32Array, b: Float32Array): number {
+  let d = 0
+  for (let i = 0; i < a.length; i++) d += a[i] * b[i]
+  return d
+}
+
+function shouldMerge(diceScore: number, tfidfCos: number, embCos: number | null): boolean {
+  if (diceScore >= 0.95) return true
+  if (tfidfCos >= 0.85) return true
+  if (embCos !== null && embCos >= 0.95) return true
+  if (diceScore >= 0.80 && tfidfCos >= 0.65) return true
+  if (embCos !== null && embCos >= 0.85 && diceScore >= 0.70) return true
+  return false
+}
+
+// Union-Find
+function ufInit(n: number): number[] { return Array.from({ length: n }, (_, i) => i) }
+function ufFind(parent: number[], x: number): number {
+  while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x] }
+  return x
+}
+function ufUnion(parent: number[], a: number, b: number) {
+  const ra = ufFind(parent, a), rb = ufFind(parent, b)
+  if (ra !== rb) parent[ra] = rb
+}
+
+async function fuzzyMergePass(ungrouped: Skill[]): Promise<Map<string, string[]>> {
+  console.log(`  Fuzzy merge: ${ungrouped.length} candidate skills`)
+  const pairs = buildCandidatePairs(ungrouped)
+  console.log(`  ${pairs.length} candidate pairs after blocking`)
+  if (!pairs.length) return new Map()
+
+  const labels = ungrouped.map(s => normalizeLabel(s.label))
+  const bigrams = labels.map(charBigrams)
+
+  // TF-IDF
+  const { vecs: tfidfVecs } = buildTfidf(labels)
+
+  // Embeddings (optional)
+  console.log("  Computing embeddings...")
+  const embVecs = await embedLabels(labels)
+
+  // Score pairs
+  const parent = ufInit(ungrouped.length)
+  const mergeCounts = { dice: 0, tfidf: 0, embedding: 0, combined: 0 }
+  for (const [a, b] of pairs) {
+    const d = dice(bigrams[a], bigrams[b])
+    const t = cosineSparse(tfidfVecs[a], tfidfVecs[b])
+    const e = embVecs ? dotProduct(embVecs[a], embVecs[b]) : null
+    if (shouldMerge(d, t, e)) {
+      ufUnion(parent, a, b)
+      if (d >= 0.95) mergeCounts.dice++
+      else if (t >= 0.85) mergeCounts.tfidf++
+      else if (e !== null && e >= 0.95) mergeCounts.embedding++
+      else mergeCounts.combined++
+    }
+  }
+  console.log(`  Fuzzy merges: ${JSON.stringify(mergeCounts)}`)
+
+  // Collect groups (cap at 20)
+  const groups = new Map<number, number[]>()
+  for (let i = 0; i < ungrouped.length; i++) {
+    const root = ufFind(parent, i)
+    const arr = groups.get(root)
+    if (arr) arr.push(i)
+    else groups.set(root, [i])
+  }
+
+  const result = new Map<string, string[]>() // canonical id -> [other ids]
+  for (const members of groups.values()) {
+    if (members.length < 2) continue
+    if (members.length > 20) continue // skip suspiciously large clusters
+    const ids = members.map(i => ungrouped[i].id)
+    result.set(ids[0], ids.slice(1))
+  }
+  return result
+}
+
+function mergeGroup(group: Skill[], idMap: Map<string, string>): Skill {
+  group.sort((a, b) => {
+    const aHex = /^csp\.[A-F0-9]{32}$/.test(a.id) ? 1 : 0
+    const bHex = /^csp\.[A-F0-9]{32}$/.test(b.id) ? 1 : 0
+    if (aHex !== bHex) return aHex - bHex
+    return a.id.length - b.id.length
+  })
+  const canon = group[0]
+  const allExtIds = new Set(canon.ext_ids)
+  const allExtUrls = new Set(canon.ext_urls)
+  const allTags = new Set(canon.tags)
+  let gStart = canon.grade_start, gEnd = canon.grade_end
+  let desc = canon.description
+
+  for (let i = 1; i < group.length; i++) {
+    const s = group[i]
+    idMap.set(s.id, canon.id)
+    allExtIds.add(s.id)
+    for (const x of s.ext_ids) allExtIds.add(x)
+    for (const u of s.ext_urls) allExtUrls.add(u)
+    for (const t of s.tags) allTags.add(t)
+    if (s.grade_start !== null && (gStart === null || s.grade_start < gStart)) gStart = s.grade_start
+    if (s.grade_end !== null && (gEnd === null || s.grade_end > gEnd)) gEnd = s.grade_end
+    if (!desc && s.description) desc = s.description
+  }
+  idMap.set(canon.id, canon.id)
+  canon.ext_ids = [...allExtIds]
+  canon.ext_urls = [...allExtUrls]
+  canon.tags = [...allTags]
+  canon.grade_start = gStart
+  canon.grade_end = gEnd
+  canon.description = desc
+  return canon
+}
+
+async function mergeSkills(
   skills: Skill[], prereqs: Prereq[], levels: Level[]
-): { skills: Skill[]; prereqs: Prereq[]; levels: Level[]; idMap: Map<string, string> } {
-  // Group by normalized label
+): Promise<{ skills: Skill[]; prereqs: Prereq[]; levels: Level[]; idMap: Map<string, string> }> {
+  // Pass 1: exact normalized label grouping
   const byLabel = new Map<string, Skill[]>()
   for (const s of skills) {
     const key = normalizeLabel(s.label)
-    if (key.length < 3) { byLabel.set(`__${s.id}`, [s]); continue } // too short: keep as-is
+    if (key.length < 3) { byLabel.set(`__${s.id}`, [s]); continue }
     const arr = byLabel.get(key)
     if (arr) arr.push(s)
     else byLabel.set(key, [s])
   }
 
   const merged: Skill[] = []
-  const idMap = new Map<string, string>() // old id -> canonical id
+  const idMap = new Map<string, string>()
+  const ungrouped: Skill[] = [] // singletons eligible for fuzzy matching
+  let exactMerges = 0
   for (const group of byLabel.values()) {
     if (group.length === 1) {
       merged.push(group[0])
       idMap.set(group[0].id, group[0].id)
+      ungrouped.push(group[0])
       continue
     }
-    // Pick canonical: prefer shortest ID with a dot-separated notation (not a hex hash)
-    group.sort((a, b) => {
-      const aHex = /^csp\.[A-F0-9]{32}$/.test(a.id) ? 1 : 0
-      const bHex = /^csp\.[A-F0-9]{32}$/.test(b.id) ? 1 : 0
-      if (aHex !== bHex) return aHex - bHex
-      return a.id.length - b.id.length
-    })
-    const canon = group[0]
-    const allExtIds = new Set(canon.ext_ids)
-    const allExtUrls = new Set(canon.ext_urls)
-    const allTags = new Set(canon.tags)
-    let gStart = canon.grade_start, gEnd = canon.grade_end
-    let desc = canon.description
-
-    for (let i = 1; i < group.length; i++) {
-      const s = group[i]
-      idMap.set(s.id, canon.id)
-      allExtIds.add(s.id) // old id becomes an ext_id
-      for (const x of s.ext_ids) allExtIds.add(x)
-      for (const u of s.ext_urls) allExtUrls.add(u)
-      for (const t of s.tags) allTags.add(t)
-      if (s.grade_start !== null && (gStart === null || s.grade_start < gStart)) gStart = s.grade_start
-      if (s.grade_end !== null && (gEnd === null || s.grade_end > gEnd)) gEnd = s.grade_end
-      if (!desc && s.description) desc = s.description
-    }
-    idMap.set(canon.id, canon.id)
-    canon.ext_ids = [...allExtIds]
-    canon.ext_urls = [...allExtUrls]
-    canon.tags = [...allTags]
-    canon.grade_start = gStart
-    canon.grade_end = gEnd
-    canon.description = desc
-    merged.push(canon)
+    exactMerges += group.length - 1
+    merged.push(mergeGroup(group, idMap))
   }
+  console.log(`  Exact label merges: ${exactMerges}`)
+
+  // Pass 2: fuzzy merge on ungrouped skills
+  const fuzzyGroups = await fuzzyMergePass(ungrouped)
+  let fuzzyMergeCount = 0
+  if (fuzzyGroups.size) {
+    const byId = new Map<string, Skill>()
+    for (const s of merged) byId.set(s.id, s)
+    const toRemove = new Set<string>()
+    for (const [canonId, otherIds] of fuzzyGroups) {
+      const group = [byId.get(canonId)!, ...otherIds.map(id => byId.get(id)!).filter(Boolean)]
+      if (group.length < 2) continue
+      for (const id of otherIds) toRemove.add(id)
+      const canon = mergeGroup(group, idMap)
+      byId.set(canon.id, canon)
+      fuzzyMergeCount += otherIds.length
+    }
+    // Rebuild merged array excluding removed skills
+    merged.length = 0
+    for (const s of byId.values()) {
+      if (!toRemove.has(s.id)) merged.push(s)
+    }
+  }
+  console.log(`  Fuzzy merges: ${fuzzyMergeCount}`)
 
   // Rewrite prereq IDs
   const mergedPrereqs = prereqs.map(p => ({
     skill_id: idMap.get(p.skill_id) ?? p.skill_id,
     prereq_id: idMap.get(p.prereq_id) ?? p.prereq_id,
     source: p.source,
-  })).filter(p => p.skill_id !== p.prereq_id) // drop self-loops from merging
+  })).filter(p => p.skill_id !== p.prereq_id)
 
   // Dedup prereqs
   const seen = new Set<string>()
@@ -834,7 +1113,7 @@ async function main() {
 
   // Merge duplicate skills by label
   console.log("\nMerging skills by label...")
-  const mergeResult = mergeSkills(allSkills, allPrereqs, allLevels)
+  const mergeResult = await mergeSkills(allSkills, allPrereqs, allLevels)
   console.log(`  ${allSkills.length} -> ${mergeResult.skills.length} skills (${allSkills.length - mergeResult.skills.length} merged)`)
   console.log(`  ${allPrereqs.length} -> ${mergeResult.prereqs.length} prereqs after rewrite`)
 
