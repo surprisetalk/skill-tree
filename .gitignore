@@ -13,3 +13,6 @@ data/dbpedia/article_categories_en.ttl.bz2
 
 # decompressed versions of files tracked as compressed
 data/lcsh/*.nt
+
+# store .gz, uncompressed over 100MB
+skills.tsv
