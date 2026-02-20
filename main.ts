@@ -75,7 +75,9 @@ function parseCsvRows(text: string): Record<string, string>[] {
 }
 
 function sanitize(s: string): string {
-  let t = s.replace(/<[^>]+>/g, " ")
+  // decode HTML entities first so encoded tags get stripped
+  let t = s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+  t = t.replace(/<[^>]*>/g, " ")
   t = t.replace(/\[cite_start\]/g, "")
   t = t.replace(/\*\*/g, "")
   t = t.replace(/[\t\n\r]/g, " ")
@@ -84,24 +86,23 @@ function sanitize(s: string): string {
 }
 
 function sanitizeId(s: string): string {
-  return s.replace(/[\t\n\r;]/g, "_").trim()
+  return s.replace(/[\t\n\r; ]/g, "_").trim()
 }
 
 function isValidLabel(s: string): boolean {
   if (!s || !s.trim()) return false
   if (/^\(.*\)$/.test(s.trim())) return false
   if (s.length > 1500) return false
-  // detect predominantly non-English: >30% accented alpha chars
-  const alpha = s.match(/[a-zA-Z\u00C0-\u024F]/g)
-  if (alpha && alpha.length > 10) {
-    const accented = alpha.filter(c => /[\u00C0-\u024F]/.test(c)).length
-    if (accented / alpha.length > 0.3) return false
-  }
   return true
 }
 
 const NON_ENGLISH_JURISDICTIONS = new Set([
-  "québec", "quebec", "puerto rico", "guam", "american samoa",
+  "québec", "quebec", "québec (français)", "quebec (english)",
+  "puerto rico", "guam", "american samoa",
+  "ontario", "ontario (français)",
+  "new brunswick (français)",
+  "colombie-britannique / british columbia (français)",
+  "alberta (français)",
 ])
 
 const TAG_ALIASES: Record<string, string> = {
@@ -526,6 +527,13 @@ const ACRONYMS: Record<string, string> = {
 
 function normalizeLabel(s: string): string {
   let n = s.toLowerCase().trim()
+  // strip pedagogical boilerplate prefixes
+  n = n.replace(/^(the )?student(s)? (will |is expected to |can )?(be able to )?/, "")
+  n = n.replace(/^demonstrate (an )?understanding of /, "")
+  // normalize common abbreviations before punctuation stripping
+  n = n.replace(/\be\.?\s*g\.?\b/g, "eg")
+  n = n.replace(/\bi\.?\s*e\.?\b/g, "ie")
+  n = n.replace(/\bp\.?\s*ex\.?\b/g, "pex")
   // strip parentheticals at end: "repairing (manual/mechanical)" -> "repairing"
   n = n.replace(/\s*\([^)]*\)\s*$/, "")
   // strip all punctuation except internal apostrophes
@@ -544,7 +552,7 @@ function normalizeLabel(s: string): string {
 
 // --- Fuzzy merge utilities ---
 
-const STOPWORDS = new Set(["a","an","the","and","or","of","in","to","for","is","on","at","by","with","as","it","its","be","are","was","were","been","has","have","had","do","does","did","not","no","but","if","so","up","out","all","can","will","may","use","used","using"])
+const STOPWORDS = new Set(["a","an","the","and","or","of","in","to","for","is","on","at","by","with","as","it","its","be","are","was","were","been","has","have","had","do","does","did","not","no","but","if","so","up","out","all","can","will","may","use","used","using","student","students","able","expected","demonstrate","understanding"])
 
 function charBigrams(s: string): Set<string> {
   const bg = new Set<string>()
