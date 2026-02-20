@@ -816,6 +816,10 @@ async function main() {
 
   writeSkillsTsv(mergeResult.skills)
   console.log("Wrote skills.tsv")
+  const gz = new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] })
+  const gzr = await gz.output()
+  if (gzr.success) console.log("Wrote skills.tsv.gz")
+  else console.error("Failed to gzip skills.tsv")
   writePrereqsTsv(mergeResult.prereqs)
   console.log("Wrote prereqs.tsv")
   writeLevelsTsv(mergeResult.levels)
