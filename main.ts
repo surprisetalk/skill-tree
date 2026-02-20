@@ -252,11 +252,22 @@ async function parseLightcast(): Promise<Result> {
   return { skills, prereqs: [], levels: [] }
 }
 
+async function loadTranslations(path: string): Promise<Map<string, string>> {
+  try {
+    const data = JSON.parse(await Deno.readTextFile(path)) as Record<string, string>
+    return new Map(Object.entries(data))
+  } catch {
+    return new Map()
+  }
+}
+
 // 7. MOOCCubeX
 async function parseMooccubex(): Promise<Result> {
   const domains = ["cs", "math", "psy"]
   const skills: Skill[] = []
   const prereqs: Prereq[] = []
+  const tr = await loadTranslations(`${DATA}/mooccubex/translations.json`)
+  if (tr.size) console.log(`  Loaded ${tr.size} MOOCCubeX translations`)
 
   for (const domain of domains) {
     const path = `${DATA}/mooccubex/${domain}.json`
@@ -279,7 +290,9 @@ async function parseMooccubex(): Promise<Result> {
     }
 
     for (const [name, id] of concepts) {
-      skills.push(skill(id, name, { tags: [domain] }))
+      const label = tr.get(name) ?? name
+      const ext_ids = label !== name ? [name] : []
+      skills.push(skill(id, label, { tags: [domain], ext_ids }))
     }
     for (const [sid, pid] of preqEdges) {
       prereqs.push({ skill_id: sid, prereq_id: pid, source: "mooccubex" })
@@ -316,14 +329,20 @@ async function parseAssistments(): Promise<Result> {
 async function parseJunyi(): Promise<Result> {
   const text = await Deno.readTextFile(`${DATA}/junyi/Info_Content.csv`)
   const rows = parseCsvRows(text)
+  const tr = await loadTranslations(`${DATA}/junyi/translations.json`)
+  if (tr.size) console.log(`  Loaded ${tr.size} Junyi translations`)
   const gradeMap: Record<string, [number, number]> = {
     elementary: [1, 6], junior: [7, 9], senior: [10, 12],
   }
   const skills = rows.map(r => {
     const grades = gradeMap[r["learning_stage"]] ?? [null, null]
-    return skill(`junyi.${r["ucid"]}`, r["content_pretty_name"] || "", {
+    const origName = r["content_pretty_name"] || ""
+    const label = tr.get(origName) ?? origName
+    const ext_ids = label !== origName && origName ? [origName] : []
+    return skill(`junyi.${r["ucid"]}`, label, {
       tags: [r["subject"], r["learning_stage"]].filter(Boolean),
       grade_start: grades[0], grade_end: grades[1],
+      ext_ids,
     })
   }).filter(s => s.label)
   return { skills, prereqs: [], levels: [] }

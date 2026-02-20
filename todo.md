@@ -15,4 +15,5 @@
 - [ ] https://github.com/md-nobin/Skill-Tree
 - [ ] ucsd map of science https://journals.plos.org/plosone/article/figures?id=10.1371%2Fjournal.pone.0039464 https://github.com/Science-Integrity-Alliance/science-map
 - [ ] which skills are most valuable? use occupation salaries
-- [ ] USE VECTOR EMBEDDINGS TO MERGE SKILLS
+- [x] USE VECTOR EMBEDDINGS TO MERGE SKILLS
+- [ ] let's run every skill through a local llm to fill out more cols/dims and then use a local llm to find prerequisite pairs
