@@ -10,3 +10,15 @@
 - [ ] https://github.com/md-nobin/Skill-Tree
 - [ ] ucsd map of science https://journals.plos.org/plosone/article/figures?id=10.1371%2Fjournal.pone.0039464 https://github.com/Science-Integrity-Alliance/science-map
 - [ ] which skills are most valuable? use occupation salaries
+
+Node {
+  id: string
+  label: string  // e.g. "Multiply two-digit numbers"
+  domains: string[]
+  age_start: int
+  age_end: int
+  lvl_*: float  // o*int dim levels L1-L7
+  prereqs: string[]
+  ext_ids: ["CCSS.MATH.3.NBT.2", ...]
+}
+
