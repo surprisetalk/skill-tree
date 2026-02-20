@@ -14,5 +14,11 @@ data/dbpedia/article_categories_en.ttl.bz2
 # decompressed versions of files tracked as compressed
 data/lcsh/*.nt
 
+# embedding cache
+.cache/
+
+# venv
+.venv/
+
 # store .gz, uncompressed over 100MB
 skills.tsv

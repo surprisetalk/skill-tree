@@ -585,27 +585,55 @@ function cosineSparse(a: Map<number, number>, b: Map<number, number>): number {
   return dot // already L2-normalized
 }
 
-// Embedding support: shell out to python3 + sentence_transformers
+// Embedding support: shell out to python3 + sentence_transformers, with disk cache
+const EMB_DIM = 384
+const EMB_CACHE_DIR = ".cache/embeddings"
+
+async function hashLabels(labels: string[]): Promise<string> {
+  const data = new TextEncoder().encode(labels.join("\n"))
+  const hash = await crypto.subtle.digest("SHA-256", data)
+  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 16)
+}
+
+function parseEmbeddingBin(buf: Uint8Array, count: number): Float32Array[] {
+  const floats = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4)
+  const vecs: Float32Array[] = []
+  for (let i = 0; i < count; i++) vecs.push(floats.slice(i * EMB_DIM, (i + 1) * EMB_DIM))
+  return vecs
+}
+
 async function embedLabels(labels: string[]): Promise<Float32Array[] | null> {
+  // Check cache
+  const hash = await hashLabels(labels)
+  const cachePath = `${EMB_CACHE_DIR}/${hash}.bin`
+  try {
+    const cached = await Deno.readFile(cachePath)
+    const expected = labels.length * EMB_DIM * 4
+    if (cached.byteLength === expected) {
+      console.log(`  Embedding cache hit: ${cachePath}`)
+      return parseEmbeddingBin(cached, labels.length)
+    }
+    console.log(`  Embedding cache stale (size mismatch), recomputing`)
+  } catch { /* cache miss */ }
+
   const tmpIn = await Deno.makeTempFile({ suffix: ".txt" })
-  const tmpOut = await Deno.makeTempFile({ suffix: ".bin" })
   try {
     await Deno.writeTextFile(tmpIn, labels.join("\n"))
     const script = `
-import sys, struct, numpy as np
+import sys, numpy as np
 from sentence_transformers import SentenceTransformer
 m = SentenceTransformer('all-MiniLM-L6-v2')
-with open(sys.argv[1]) as f: labels = [l.rstrip('\\n') for l in f if l.strip()]
+with open(sys.argv[1]) as f: labels = [l.rstrip('\\n') for l in f]
 vecs = m.encode(labels, normalize_embeddings=True, show_progress_bar=True).astype(np.float32)
 with open(sys.argv[2], 'wb') as f: f.write(vecs.tobytes())
 print(f'{len(labels)} labels, {vecs.shape[1]} dims', file=sys.stderr)
 `
-    // Prefer venv python if available
     const venvPy = `${Deno.cwd()}/.venv/bin/python3`
     let pyCmd = "python3"
     try { await Deno.stat(venvPy); pyCmd = venvPy } catch { /* use system python3 */ }
+    await Deno.mkdir(EMB_CACHE_DIR, { recursive: true })
     const proc = new Deno.Command(pyCmd, {
-      args: ["-c", script, tmpIn, tmpOut],
+      args: ["-c", script, tmpIn, cachePath],
       stdout: "piped", stderr: "piped",
     })
     const { success, stderr } = await proc.output()
@@ -615,20 +643,13 @@ print(f'{len(labels)} labels, {vecs.shape[1]} dims', file=sys.stderr)
       return null
     }
     console.log(`  Embedding: ${errMsg.trim()}`)
-    const buf = await Deno.readFile(tmpOut)
-    const floats = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4)
-    const dim = 384
-    const vecs: Float32Array[] = []
-    for (let i = 0; i < labels.length; i++) {
-      vecs.push(floats.slice(i * dim, (i + 1) * dim))
-    }
-    return vecs
+    const buf = await Deno.readFile(cachePath)
+    return parseEmbeddingBin(buf, labels.length)
   } catch (e) {
     console.error(`  Embedding unavailable (python3/sentence_transformers not found): ${e}`)
     return null
   } finally {
     try { await Deno.remove(tmpIn) } catch { /* ok */ }
-    try { await Deno.remove(tmpOut) } catch { /* ok */ }
   }
 }
 
