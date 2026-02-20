@@ -739,11 +739,11 @@ function dotProduct(a: Float32Array, b: Float32Array): number {
 }
 
 function shouldMerge(diceScore: number, tfidfCos: number, embCos: number | null): boolean {
-  if (diceScore >= 0.90) return true
-  if (tfidfCos >= 0.80) return true
-  if (embCos !== null && embCos >= 0.90) return true
-  if (diceScore >= 0.75 && tfidfCos >= 0.60) return true
-  if (embCos !== null && embCos >= 0.80 && diceScore >= 0.65) return true
+  if (diceScore >= 0.85) return true
+  if (tfidfCos >= 0.75) return true
+  if (embCos !== null && embCos >= 0.85) return true
+  if (diceScore >= 0.70 && tfidfCos >= 0.55) return true
+  if (embCos !== null && embCos >= 0.75 && diceScore >= 0.60) return true
   return false
 }
 
