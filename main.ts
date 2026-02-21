@@ -421,7 +421,11 @@ async function parseCsp(): Promise<Result> {
       const gStart = gradeNums.length ? Math.min(...gradeNums) : null
       const gEnd = gradeNums.length ? Math.max(...gradeNums) : null
 
+      // Only emit leaf standards (those that are not parents of other standards)
+      const parentIds = new Set(Object.values(ss.standards).map(s => s.parentId).filter(Boolean))
+
       for (const std of Object.values(ss.standards)) {
+        if (parentIds.has(std.id)) continue
         const label = sanitize(std.description || std.statementNotation || "")
         if (!isValidLabel(label)) continue
         const notation = std.statementNotation ? sanitizeId(std.statementNotation) : ""
@@ -462,8 +466,16 @@ async function parseOpensalt(): Promise<Result> {
       data = JSON.parse(await Deno.readTextFile(`${DATA}/opensalt/${fw.identifier}.json`))
     } catch { continue }
 
+    // Collect parent identifiers from isChildOf associations (leaf-only filtering)
+    const parentIdentifiers = new Set<string>()
+    for (const assoc of data.CFAssociations ?? []) {
+      if (assoc.associationType === "isChildOf")
+        parentIdentifiers.add(assoc.destinationNodeURI.identifier)
+    }
+
     const itemIdMap = new Map<string, string>() // opensalt identifier -> our id
     for (const item of data.CFItems ?? []) {
+      if (parentIdentifiers.has(item.identifier)) continue
       const code = sanitizeId(item.humanCodingScheme || item.identifier)
       const id = `opensalt.${code}`
       itemIdMap.set(item.identifier, id)
@@ -848,8 +860,69 @@ function mergeGroup(group: Skill[], idMap: Map<string, string>): Skill {
 }
 
 async function mergeSkills(
-  skills: Skill[], prereqs: Prereq[], levels: Level[]
+  skills_in: Skill[], prereqs: Prereq[], levels: Level[]
 ): Promise<{ skills: Skill[]; prereqs: Prereq[]; levels: Level[]; idMap: Map<string, string> }> {
+  let skills = skills_in
+  // Pass 0: merge skills sharing ASN identifiers (catches CSP↔ASN duplicates)
+  // CSP stores short asnIdentifier codes (e.g. "S1143545") in ext_ids
+  // ASN stores full URIs (e.g. "http://asn.desire2learn.com/resources/S1143545") in ext_urls
+  // Extract the short code from both and match
+  const asnIndex = new Map<string, number>() // short ASN code -> index in skills array
+  const asnParent = ufInit(skills.length)
+  let asnMerges = 0
+  for (let i = 0; i < skills.length; i++) {
+    const codes: string[] = []
+    // From ext_urls: extract short code from full ASN URIs
+    for (const url of skills[i].ext_urls) {
+      if (url.startsWith("http://asn.desire2learn.com/resources/")) {
+        codes.push(lastSeg(url).replace(".xml", ""))
+      }
+    }
+    // From ext_ids: short ASN identifier codes (CSP asnIdentifier, e.g. "S103E740", "D10002DE")
+    for (const eid of skills[i].ext_ids) {
+      if (/^[A-Z][0-9A-F]{5,}$/i.test(eid)) codes.push(eid)
+    }
+    for (const code of codes) {
+      const existing = asnIndex.get(code)
+      if (existing !== undefined && ufFind(asnParent, existing) !== ufFind(asnParent, i)) {
+        ufUnion(asnParent, existing, i)
+        asnMerges++
+      } else if (existing === undefined) {
+        asnIndex.set(code, i)
+      }
+    }
+  }
+  if (asnMerges) {
+    console.log(`  ASN identifier merges: ${asnMerges}`)
+    const asnGroups = new Map<number, number[]>()
+    for (let i = 0; i < skills.length; i++) {
+      const root = ufFind(asnParent, i)
+      const arr = asnGroups.get(root)
+      if (arr) arr.push(i)
+      else asnGroups.set(root, [i])
+    }
+    const asnIdMap = new Map<string, string>()
+    const deduped: Skill[] = []
+    for (const members of asnGroups.values()) {
+      if (members.length === 1) { deduped.push(skills[members[0]]); continue }
+      const group = members.map(i => skills[i])
+      deduped.push(mergeGroup(group, asnIdMap))
+    }
+    // Rewrite prereqs and levels through ASN id map
+    for (let i = 0; i < prereqs.length; i++) {
+      prereqs[i] = {
+        skill_id: asnIdMap.get(prereqs[i].skill_id) ?? prereqs[i].skill_id,
+        prereq_id: asnIdMap.get(prereqs[i].prereq_id) ?? prereqs[i].prereq_id,
+        source: prereqs[i].source,
+      }
+    }
+    for (let i = 0; i < levels.length; i++) {
+      levels[i] = { skill_id: asnIdMap.get(levels[i].skill_id) ?? levels[i].skill_id, lvl: levels[i].lvl }
+    }
+    skills = deduped
+    console.log(`  After ASN dedup: ${skills.length} skills`)
+  }
+
   // Pass 1: exact normalized label grouping
   const byLabel = new Map<string, Skill[]>()
   for (const s of skills) {
@@ -1157,7 +1230,6 @@ async function main() {
     ["onet-knowledge", () => parseOnet("Knowledge.txt", "knowledge")],
     ["onet-abilities", () => parseOnet("Abilities.txt", "ability")],
     ["esco", parseEsco],
-    ["lightcast", parseLightcast],
     ["mooccubex", parseMooccubex],
     ["assistments", parseAssistments],
     ["junyi", parseJunyi],
