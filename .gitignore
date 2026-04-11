@@ -20,5 +20,8 @@ data/lcsh/*.nt
 # venv
 .venv/
 
+# secrets
+.env
+
 # store .gz, uncompressed over 100MB
 skills.tsv

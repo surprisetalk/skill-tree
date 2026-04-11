@@ -525,6 +525,88 @@ async function parseAsn(): Promise<Result> {
   return { skills, prereqs: [], levels: [] }
 }
 
+// 13. LCSH (Library of Congress Subject Headings)
+async function parseLcsh(): Promise<Result> {
+  const path = `${DATA}/lcsh/subjects.skosrdf.nt.gz`
+  try { await Deno.stat(path) } catch (e) {
+    if (e instanceof Deno.errors.NotFound) {
+      console.error("  LCSH file not found, skipping")
+      return { skills: [], prereqs: [], levels: [] }
+    }
+    throw e
+  }
+
+  const SKOS = "http://www.w3.org/2004/02/skos/core#"
+  const PREDS = new Set([`${SKOS}prefLabel`, `${SKOS}altLabel`, `${SKOS}broader`])
+  const SUBJ_PREFIX = "http://id.loc.gov/authorities/subjects/"
+
+  const labels = new Map<string, string>()       // shortCode -> prefLabel
+  const altLabels = new Map<string, string[]>()   // shortCode -> alt labels
+  const broaderEdges: [string, string][] = []     // [child, parent]
+
+  const file = await Deno.open(path)
+  const stream = file.readable
+    .pipeThrough(new DecompressionStream("gzip"))
+    .pipeThrough(new TextDecoderStream())
+  let buf = ""
+  let lineNum = 0
+
+  for await (const chunk of stream) {
+    buf += chunk
+    const lines = buf.split("\n")
+    buf = lines.pop()!
+    for (const line of lines) {
+      lineNum++
+      if (!line || line[0] === "#" || line[0] === "_") continue
+
+      const m = line.match(/^<([^>]+)>\s+<([^>]+)>\s+(.+)\s+\.\s*$/)
+      if (!m) continue
+      const [, subj, pred, obj] = m
+      if (!PREDS.has(pred) || !subj.startsWith(SUBJ_PREFIX)) continue
+
+      const code = subj.slice(SUBJ_PREFIX.length)
+
+      if (pred === `${SKOS}prefLabel` || pred === `${SKOS}altLabel`) {
+        if (!obj.endsWith('@en')) continue
+        const label = obj.replace(/^"/, "").replace(/"@en$/, "").replace(/\\"/g, '"').replace(/\\\\/g, "\\")
+        if (!label) continue
+        if (pred === `${SKOS}prefLabel`) {
+          labels.set(code, label)
+        } else {
+          const arr = altLabels.get(code)
+          if (arr) arr.push(label)
+          else altLabels.set(code, [label])
+        }
+      } else {
+        // broader: code is narrower than objCode
+        const objMatch = obj.match(/^<([^>]+)>$/)
+        if (!objMatch || !objMatch[1].startsWith(SUBJ_PREFIX)) continue
+        broaderEdges.push([code, objMatch[1].slice(SUBJ_PREFIX.length)])
+      }
+    }
+  }
+  console.log(`  Streamed ${lineNum} lines, ${labels.size} subjects, ${broaderEdges.length} broader edges`)
+
+  const skills: Skill[] = []
+  for (const [code, label] of labels) {
+    const alts = altLabels.get(code)
+    skills.push(skill(`lcsh.${code}`, label, {
+      tags: ["lcsh"],
+      description: alts ? alts.join("; ") : "",
+      ext_urls: [`${SUBJ_PREFIX}${code}`],
+    }))
+  }
+
+  // broader = prereq: to learn narrow topic, know the broad one first
+  const prereqs: Prereq[] = []
+  for (const [child, parent] of broaderEdges) {
+    if (!labels.has(child) || !labels.has(parent)) continue
+    prereqs.push({ skill_id: `lcsh.${child}`, prereq_id: `lcsh.${parent}`, source: "lcsh_broader" })
+  }
+
+  return { skills, prereqs, levels: [] }
+}
+
 // Merge skills with similar labels, accumulating ext_ids and rewriting prereqs
 
 const ACRONYMS: Record<string, string> = {
@@ -827,6 +909,9 @@ function mergeGroup(group: Skill[], idMap: Map<string, string>): Skill {
     const aHex = /^csp\.[A-F0-9]{32}$/.test(a.id) ? 1 : 0
     const bHex = /^csp\.[A-F0-9]{32}$/.test(b.id) ? 1 : 0
     if (aHex !== bHex) return aHex - bHex
+    const aLcsh = a.id.startsWith("lcsh.") ? 1 : 0
+    const bLcsh = b.id.startsWith("lcsh.") ? 1 : 0
+    if (aLcsh !== bLcsh) return aLcsh - bLcsh
     return a.id.length - b.id.length
   })
   const canon = group[0]
@@ -941,7 +1026,7 @@ async function mergeSkills(
     if (group.length === 1) {
       merged.push(group[0])
       idMap.set(group[0].id, group[0].id)
-      ungrouped.push(group[0])
+      if (!group[0].id.startsWith("lcsh.")) ungrouped.push(group[0])
       continue
     }
     exactMerges += group.length - 1
@@ -1220,6 +1305,21 @@ function writeDot(skills: Map<string, Skill>, prereqs: Prereq[]) {
   Deno.writeTextFileSync("skills.dot", lines.join("\n") + "\n")
 }
 
+async function loadLlmPrereqs(): Promise<Prereq[]> {
+  let text: string
+  try { text = await Deno.readTextFile(`${DATA}/llm_prereqs.json`) }
+  catch { return [] }
+  const data = JSON.parse(text) as { pairs: Record<string, { direction: string }> }
+  if (!data.pairs) throw new Error("llm_prereqs.json missing 'pairs' field")
+  const prereqs: Prereq[] = []
+  for (const [key, val] of Object.entries(data.pairs)) {
+    const [a, b] = key.split("|")
+    if (val.direction === "a->b") prereqs.push({ skill_id: b, prereq_id: a, source: "llm" })
+    else if (val.direction === "b->a") prereqs.push({ skill_id: a, prereq_id: b, source: "llm" })
+  }
+  return prereqs
+}
+
 // Main
 async function main() {
   const parsers: [string, () => Promise<Result>][] = [
@@ -1236,6 +1336,7 @@ async function main() {
     ["csp", parseCsp],
     ["opensalt", parseOpensalt],
     ["asn", parseAsn],
+    ["lcsh", parseLcsh],
   ]
 
   const allSkills: Skill[] = []
@@ -1258,8 +1359,8 @@ async function main() {
         allSkills.push(s)
       }
       if (skipped) console.log(`  Skipped ${skipped} skills with invalid labels`)
-      allPrereqs.push(...r.prereqs)
-      allLevels.push(...r.levels)
+      for (const p of r.prereqs) allPrereqs.push(p)
+      for (const l of r.levels) allLevels.push(l)
       console.log(`  ${r.skills.length} skills, ${r.prereqs.length} prereqs, ${r.levels.length} levels`)
     } catch (e) {
       console.error(`FATAL parsing ${name}: ${e}`)
@@ -1287,6 +1388,11 @@ async function main() {
   const assistPrereqs = await inferAssistmentsPrereqs()
   allPrereqs.push(...assistPrereqs)
   console.log(`  ${assistPrereqs.length} assistments prereqs`)
+
+  console.log("  LLM prereqs...")
+  const llmPrereqs = await loadLlmPrereqs()
+  allPrereqs.push(...llmPrereqs)
+  console.log(`  ${llmPrereqs.length} LLM prereqs`)
 
   // Merge duplicate skills by label
   console.log("\nMerging skills by label...")
