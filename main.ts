@@ -10,7 +10,7 @@ type Skill = {
   grade_start: number | null
   grade_end: number | null
 }
-type Prereq = { skill_id: string; prereq_id: string; source: string }
+type Prereq = { skill_id: string; prereq_id: string; source: string; type: "prerequisite" | "broader" }
 type Level = { skill_id: string; lvl: Record<string, number> }
 type Result = { skills: Skill[]; prereqs: Prereq[]; levels: Level[] }
 
@@ -148,7 +148,7 @@ async function parseKhan(): Promise<Result> {
     for (const tok of pStr.split(";").map(s => s.trim()).filter(Boolean)) {
       if (tok === "root") continue
       const resolved = /^\d+$/.test(tok) ? codeToSlug.get(tok) : tok
-      if (resolved) prereqs.push({ skill_id: id, prereq_id: `khan.${resolved}`, source: "khan" })
+      if (resolved) prereqs.push({ skill_id: id, prereq_id: `khan.${resolved}`, source: "khan", type: "prerequisite" })
     }
   }
   return { skills, prereqs, levels: [] }
@@ -177,6 +177,7 @@ async function parseAlcpl(): Promise<Result> {
           skill_id: `alcpl.${domain}.${tgt.trim()}`,
           prereq_id: `alcpl.${domain}.${pre.trim()}`,
           source: "alcpl",
+          type: "prerequisite",
         })
       }
     }
@@ -214,7 +215,7 @@ async function parseMetacademy(): Promise<Result> {
       const deps = await Deno.readTextFile(`${base}/${name}/dependencies.txt`)
       for (const line of deps.split("\n")) {
         const m = line.match(/^tag:\s*(.+)/)
-        if (m) prereqs.push({ skill_id: id, prereq_id: `metacademy.${m[1].trim()}`, source: "metacademy" })
+        if (m) prereqs.push({ skill_id: id, prereq_id: `metacademy.${m[1].trim()}`, source: "metacademy", type: "prerequisite" })
       }
     } catch { /* ok */ }
   }
@@ -278,7 +279,7 @@ async function parseEsco(): Promise<Result> {
     if (r["relationType"] !== "essential") continue
     const origId = uriToId.get(r["originalSkillUri"])
     const relId = uriToId.get(r["relatedSkillUri"])
-    if (origId && relId) prereqs.push({ skill_id: origId, prereq_id: relId, source: "esco" })
+    if (origId && relId) prereqs.push({ skill_id: origId, prereq_id: relId, source: "esco", type: "prerequisite" })
   }
   return { skills, prereqs, levels: [] }
 }
@@ -339,7 +340,7 @@ async function parseMooccubex(): Promise<Result> {
       skills.push(skill(id, label, { tags: [domain], ext_ids }))
     }
     for (const [sid, pid] of preqEdges) {
-      prereqs.push({ skill_id: sid, prereq_id: pid, source: "mooccubex" })
+      prereqs.push({ skill_id: sid, prereq_id: pid, source: "mooccubex", type: "prerequisite" })
     }
   }
   return { skills, prereqs, levels: [] }
@@ -493,7 +494,7 @@ async function parseOpensalt(): Promise<Result> {
       if (assoc.associationType !== "precedes") continue
       const originId = itemIdMap.get(assoc.originNodeURI?.identifier)
       const destId = itemIdMap.get(assoc.destinationNodeURI?.identifier)
-      if (originId && destId) prereqs.push({ skill_id: destId, prereq_id: originId, source: "opensalt" })
+      if (originId && destId) prereqs.push({ skill_id: destId, prereq_id: originId, source: "opensalt", type: "prerequisite" })
     }
   }
   return { skills, prereqs, levels: [] }
@@ -601,7 +602,7 @@ async function parseLcsh(): Promise<Result> {
   const prereqs: Prereq[] = []
   for (const [child, parent] of broaderEdges) {
     if (!labels.has(child) || !labels.has(parent)) continue
-    prereqs.push({ skill_id: `lcsh.${child}`, prereq_id: `lcsh.${parent}`, source: "lcsh_broader" })
+    prereqs.push({ skill_id: `lcsh.${child}`, prereq_id: `lcsh.${parent}`, source: "lcsh_broader", type: "broader" })
   }
 
   return { skills, prereqs, levels: [] }
@@ -999,6 +1000,7 @@ async function mergeSkills(
         skill_id: asnIdMap.get(prereqs[i].skill_id) ?? prereqs[i].skill_id,
         prereq_id: asnIdMap.get(prereqs[i].prereq_id) ?? prereqs[i].prereq_id,
         source: prereqs[i].source,
+        type: prereqs[i].type,
       }
     }
     for (let i = 0; i < levels.length; i++) {
@@ -1062,12 +1064,13 @@ async function mergeSkills(
     skill_id: idMap.get(p.skill_id) ?? p.skill_id,
     prereq_id: idMap.get(p.prereq_id) ?? p.prereq_id,
     source: p.source,
+    type: p.type,
   })).filter(p => p.skill_id !== p.prereq_id)
 
   // Dedup prereqs
   const seen = new Set<string>()
   const dedupedPrereqs = mergedPrereqs.filter(p => {
-    const key = `${p.skill_id}|${p.prereq_id}|${p.source}`
+    const key = `${p.skill_id}|${p.prereq_id}|${p.source}|${p.type}`
     if (seen.has(key)) return false
     seen.add(key)
     return true
@@ -1101,7 +1104,7 @@ function inferJunyiHierarchyPrereqs(junyiRows: Record<string, string>[]): Prereq
     for (let i = 0; i < members.length; i++)
       for (let j = i + 1; j < members.length; j++)
         if (members[j].diff > members[i].diff)
-          prereqs.push({ skill_id: members[j].id, prereq_id: members[i].id, source: "junyi_hierarchy" })
+          prereqs.push({ skill_id: members[j].id, prereq_id: members[i].id, source: "junyi_hierarchy", type: "prerequisite" })
   }
   return prereqs
 }
@@ -1170,9 +1173,9 @@ async function inferJunyiLogPrereqs(): Promise<Prereq[]> {
     if (total < MIN_STUDENTS) continue
     const [ea, eb] = key.split("|")
     if (counts.ab / total >= THRESHOLD) {
-      prereqs.push({ skill_id: `junyi.${eb}`, prereq_id: `junyi.${ea}`, source: "junyi_logs" })
+      prereqs.push({ skill_id: `junyi.${eb}`, prereq_id: `junyi.${ea}`, source: "junyi_logs", type: "prerequisite" })
     } else if (counts.ba / total >= THRESHOLD) {
-      prereqs.push({ skill_id: `junyi.${ea}`, prereq_id: `junyi.${eb}`, source: "junyi_logs" })
+      prereqs.push({ skill_id: `junyi.${ea}`, prereq_id: `junyi.${eb}`, source: "junyi_logs", type: "prerequisite" })
     }
   }
   return prereqs
@@ -1226,9 +1229,9 @@ async function inferAssistmentsPrereqs(): Promise<Prereq[]> {
     if (total < MIN_STUDENTS) continue
     const [sa, sb] = key.split("|")
     if (counts.ab / total >= THRESHOLD) {
-      prereqs.push({ skill_id: `assistments.${sb}`, prereq_id: `assistments.${sa}`, source: "assistments_logs" })
+      prereqs.push({ skill_id: `assistments.${sb}`, prereq_id: `assistments.${sa}`, source: "assistments_logs", type: "prerequisite" })
     } else if (counts.ba / total >= THRESHOLD) {
-      prereqs.push({ skill_id: `assistments.${sa}`, prereq_id: `assistments.${sb}`, source: "assistments_logs" })
+      prereqs.push({ skill_id: `assistments.${sa}`, prereq_id: `assistments.${sb}`, source: "assistments_logs", type: "prerequisite" })
     }
   }
   return prereqs
@@ -1258,8 +1261,8 @@ function writeSkillsTsv(skills: Skill[]) {
 }
 
 function writePrereqsTsv(prereqs: Prereq[]) {
-  const header = ["skill_id", "prereq_id", "source"]
-  const rows = prereqs.map(p => [p.skill_id, p.prereq_id, p.source])
+  const header = ["skill_id", "prereq_id", "source", "type"]
+  const rows = prereqs.map(p => [p.skill_id, p.prereq_id, p.source, p.type])
   writeTsv("prereqs.tsv", header, rows)
 }
 
@@ -1284,7 +1287,7 @@ function writeVizJson(skills: Map<string, Skill>, prereqs: Prereq[]) {
     if (s) vizSkills.push({ id: s.id, label: s.label, tags: s.tags.join(";"), gs: s.grade_start?.toFixed(1) ?? "", ge: s.grade_end?.toFixed(1) ?? "" })
     else vizSkills.push({ id, label: id, tags: "", gs: "", ge: "" })
   }
-  const vizPrereqs = prereqs.map(p => [p.skill_id, p.prereq_id, p.source])
+  const vizPrereqs = prereqs.map(p => [p.skill_id, p.prereq_id, p.source, p.type])
   Deno.writeTextFileSync("viz.json", JSON.stringify({ skills: vizSkills, prereqs: vizPrereqs }))
 }
 
@@ -1299,7 +1302,8 @@ function writeDot(skills: Map<string, Skill>, prereqs: Prereq[]) {
     lines.push(`  "${id}" [label="${label}"];`)
   }
   for (const p of prereqs) {
-    lines.push(`  "${p.prereq_id}" -> "${p.skill_id}";`)
+    const style = p.type === "broader" ? ' [style=dashed]' : ""
+    lines.push(`  "${p.prereq_id}" -> "${p.skill_id}"${style};`)
   }
   lines.push('}')
   Deno.writeTextFileSync("skills.dot", lines.join("\n") + "\n")
@@ -1314,10 +1318,148 @@ async function loadLlmPrereqs(): Promise<Prereq[]> {
   const prereqs: Prereq[] = []
   for (const [key, val] of Object.entries(data.pairs)) {
     const [a, b] = key.split("|")
-    if (val.direction === "a->b") prereqs.push({ skill_id: b, prereq_id: a, source: "llm" })
-    else if (val.direction === "b->a") prereqs.push({ skill_id: a, prereq_id: b, source: "llm" })
+    if (val.direction === "a->b") prereqs.push({ skill_id: b, prereq_id: a, source: "llm", type: "prerequisite" })
+    else if (val.direction === "b->a") prereqs.push({ skill_id: a, prereq_id: b, source: "llm", type: "prerequisite" })
   }
   return prereqs
+}
+
+function cleanPrereqs(prereqs: Prereq[], skills: Map<string, Skill>): Prereq[] {
+  const before = prereqs.length
+
+  // 1. Drop dangling refs (either side doesn't exist)
+  let cleaned = prereqs.filter(p => skills.has(p.skill_id) && skills.has(p.prereq_id))
+  const dangling = before - cleaned.length
+
+  // 2. Break A<->B cycles
+  // "depCount" = how many skills depend on this node (appears as prereq_id)
+  const depCount = new Map<string, number>()
+  for (const p of cleaned) depCount.set(p.prereq_id, (depCount.get(p.prereq_id) ?? 0) + 1)
+
+  const SOURCE_PRIORITY: Record<string, number> = {
+    khan: 5, alcpl: 5, metacademy: 5, opensalt: 5, asn: 5,
+    esco: 4, junyi_hierarchy: 3,
+    junyi_logs: 2, assistments_logs: 2,
+    llm: 1, lcsh_broader: 1,
+  }
+
+  // Edge semantics: edgeKey(skill_id, prereq_id) = "skill_id depends on prereq_id"
+  const edgeKey = (a: string, b: string) => `${a}|${b}`
+  const edgeMap = new Map<string, Prereq>()
+  for (const p of cleaned) edgeMap.set(edgeKey(p.skill_id, p.prereq_id), p)
+  const cyclePairs = new Set<string>()
+  const dropSet = new Set<string>()
+
+  for (const p of cleaned) {
+    if (!edgeMap.has(edgeKey(p.prereq_id, p.skill_id))) continue
+    const pairKey = [p.skill_id, p.prereq_id].sort().join("|")
+    if (cyclePairs.has(pairKey)) continue
+    cyclePairs.add(pairKey)
+
+    const fwd = edgeMap.get(edgeKey(p.skill_id, p.prereq_id))!
+    const bwd = edgeMap.get(edgeKey(p.prereq_id, p.skill_id))!
+
+    // Resolve: higher source priority wins — drop the lower-priority edge
+    const fwdPri = SOURCE_PRIORITY[fwd.source] ?? 0
+    const bwdPri = SOURCE_PRIORITY[bwd.source] ?? 0
+    if (fwdPri !== bwdPri) {
+      const loser = fwdPri < bwdPri ? fwd : bwd
+      dropSet.add(edgeKey(loser.skill_id, loser.prereq_id))
+      continue
+    }
+
+    // Grade heuristic: lower grade = more foundational = should be prereq, not dependent
+    const sA = skills.get(p.skill_id)!, sB = skills.get(p.prereq_id)!
+    if (sA.grade_start !== null && sB.grade_start !== null && sA.grade_start !== sB.grade_start) {
+      // A.grade < B.grade => A is foundational. Drop "A depends on B", keep "B depends on A"
+      if (sA.grade_start < sB.grade_start) dropSet.add(edgeKey(p.skill_id, p.prereq_id))
+      else dropSet.add(edgeKey(p.prereq_id, p.skill_id))
+      continue
+    }
+
+    // depCount: more dependents = more foundational = should be prereq, not dependent
+    const dA = depCount.get(p.skill_id) ?? 0, dB = depCount.get(p.prereq_id) ?? 0
+    if (dA !== dB) {
+      // If A has more dependents, A is foundational. Drop "A depends on B" (fwd), keep "B depends on A" (bwd)
+      if (dA > dB) dropSet.add(edgeKey(p.skill_id, p.prereq_id))
+      else dropSet.add(edgeKey(p.prereq_id, p.skill_id))
+      continue
+    }
+
+    // No signal: drop both
+    dropSet.add(edgeKey(p.skill_id, p.prereq_id))
+    dropSet.add(edgeKey(p.prereq_id, p.skill_id))
+  }
+
+  cleaned = cleaned.filter(p => !dropSet.has(edgeKey(p.skill_id, p.prereq_id)))
+  const cyclesDropped = dropSet.size
+
+  console.log(`\n=== Prereq Cleanup ===`)
+  console.log(`  Dangling removed: ${dangling}`)
+  console.log(`  Cycle pairs found: ${cyclePairs.size}, edges dropped: ${cyclesDropped}`)
+  console.log(`  ${before} -> ${cleaned.length} prereqs`)
+  return cleaned
+}
+
+function printGraphStats(skills: Skill[], prereqs: Prereq[]) {
+  console.log("\n=== Graph Quality ===")
+
+  const byType = new Map<string, number>()
+  const bySource = new Map<string, number>()
+  for (const p of prereqs) {
+    byType.set(p.type, (byType.get(p.type) ?? 0) + 1)
+    bySource.set(p.source, (bySource.get(p.source) ?? 0) + 1)
+  }
+  console.log("Edges by type:", [...byType].map(([k, v]) => `${k}=${v}`).join(", "))
+  console.log("Edges by source:", [...bySource].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(", "))
+
+  const inDeg = new Map<string, number>()
+  const outDeg = new Map<string, number>()
+  for (const p of prereqs) {
+    inDeg.set(p.skill_id, (inDeg.get(p.skill_id) ?? 0) + 1)
+    outDeg.set(p.prereq_id, (outDeg.get(p.prereq_id) ?? 0) + 1)
+  }
+  const connected = new Set([...inDeg.keys(), ...outDeg.keys()])
+  const orphans = skills.length - connected.size
+  console.log(`Nodes: ${skills.length}, Edges: ${prereqs.length}`)
+  console.log(`Connected: ${connected.size} (${(100 * connected.size / skills.length).toFixed(1)}%), Orphans: ${orphans} (${(100 * orphans / skills.length).toFixed(1)}%)`)
+  const avgIn = [...inDeg.values()].reduce((a, b) => a + b, 0) / (connected.size || 1)
+  const avgOut = [...outDeg.values()].reduce((a, b) => a + b, 0) / (connected.size || 1)
+  console.log(`Avg in-degree: ${avgIn.toFixed(2)}, avg out-degree: ${avgOut.toFixed(2)}`)
+
+  const edgeSet = new Set(prereqs.map(p => `${p.skill_id}|${p.prereq_id}`))
+  let cycles = 0
+  for (const p of prereqs) if (edgeSet.has(`${p.prereq_id}|${p.skill_id}`)) cycles++
+  console.log(`Direct A<->B cycles: ${cycles / 2}`)
+
+  const nodeArr = [...connected]
+  const idx = new Map<string, number>()
+  for (let i = 0; i < nodeArr.length; i++) idx.set(nodeArr[i], i)
+  const parent = new Int32Array(nodeArr.length)
+  for (let i = 0; i < parent.length; i++) parent[i] = i
+  const find = (i: number): number => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i] } return i }
+  for (const p of prereqs) {
+    const a = idx.get(p.skill_id), b = idx.get(p.prereq_id)
+    if (a !== undefined && b !== undefined) parent[find(a)] = find(b)
+  }
+  const roots = new Set<number>()
+  for (let i = 0; i < nodeArr.length; i++) roots.add(find(i))
+  console.log(`Connected components: ${roots.size} (among ${connected.size} connected nodes)`)
+}
+
+function auditLlmEdges(prereqs: Prereq[], skills: Map<string, Skill>, n = 20) {
+  const llm = prereqs.filter(p => p.source === "llm")
+  if (!llm.length) return
+  for (let i = llm.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [llm[i], llm[j]] = [llm[j], llm[i]]
+  }
+  console.log(`\n=== LLM Edge Audit (${n} of ${llm.length}) ===`)
+  for (const p of llm.slice(0, n)) {
+    const sLabel = skills.get(p.skill_id)?.label ?? p.skill_id
+    const rLabel = skills.get(p.prereq_id)?.label ?? p.prereq_id
+    console.log(`  ${rLabel} -> ${sLabel}`)
+  }
 }
 
 // Main
@@ -1406,7 +1548,9 @@ async function main() {
   const mergedById = new Map<string, Skill>()
   for (const s of finalSkills) mergedById.set(s.id, s)
 
-  console.log(`\nTotals: ${finalSkills.length} skills, ${mergeResult.prereqs.length} prereqs, ${mergeResult.levels.length} levels`)
+  const cleanedPrereqs = cleanPrereqs(mergeResult.prereqs, mergedById)
+
+  console.log(`\nTotals: ${finalSkills.length} skills, ${cleanedPrereqs.length} prereqs, ${mergeResult.levels.length} levels`)
 
   writeSkillsTsv(finalSkills)
   console.log("Wrote skills.tsv")
@@ -1414,14 +1558,17 @@ async function main() {
   const gzr = await gz.output()
   if (gzr.success) console.log("Wrote skills.tsv.gz")
   else console.error("Failed to gzip skills.tsv")
-  writePrereqsTsv(mergeResult.prereqs)
+  writePrereqsTsv(cleanedPrereqs)
   console.log("Wrote prereqs.tsv")
   writeLevelsTsv(mergeResult.levels)
   console.log("Wrote levels.tsv")
-  writeDot(mergedById, mergeResult.prereqs)
+  writeDot(mergedById, cleanedPrereqs)
   console.log("Wrote skills.dot")
-  writeVizJson(mergedById, mergeResult.prereqs)
+  writeVizJson(mergedById, cleanedPrereqs)
   console.log("Wrote viz.json")
+
+  printGraphStats(finalSkills, cleanedPrereqs)
+  auditLlmEdges(cleanedPrereqs, mergedById)
 }
 
 main()
