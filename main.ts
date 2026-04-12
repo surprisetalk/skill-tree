@@ -227,27 +227,32 @@ async function parseOnet(file: string, category: string): Promise<Result> {
   const text = await Deno.readTextFile(`${DATA}/onet/${file}`)
   const rows = parseTsvRows(text)
 
-  const groups = new Map<string, { name: string; lvVals: number[] }>()
+  const dimNames = new Map<string, string>() // Element ID -> Element Name
+  // Per-occupation, per-dimension LV scores
+  const occDims = new Map<string, Map<string, number>>() // SOC code -> (Element ID -> LV value)
   for (const r of rows) {
-    const eid = r["Element ID"]
-    const ename = r["Element Name"]
-    if (!eid || !ename) continue
-    if (!groups.has(eid)) groups.set(eid, { name: ename, lvVals: [] })
+    const eid = r["Element ID"], ename = r["Element Name"], soc = r["O*NET-SOC Code"]
+    if (!eid || !ename || !soc) continue
+    dimNames.set(eid, ename)
     if (r["Scale ID"] === "LV") {
       const v = parseFloat(r["Data Value"])
-      if (!isNaN(v)) groups.get(eid)!.lvVals.push(v)
+      if (isNaN(v)) continue
+      let dims = occDims.get(soc)
+      if (!dims) { dims = new Map(); occDims.set(soc, dims) }
+      dims.set(eid, v)
     }
   }
 
   const skills: Skill[] = []
   const levels: Level[] = []
-  for (const [eid, g] of groups) {
-    const id = `onet.${category}.${eid}`
-    skills.push(skill(id, g.name, { tags: ["onet", category] }))
-    if (g.lvVals.length) {
-      const mean = g.lvVals.reduce((a, b) => a + b, 0) / g.lvVals.length
-      levels.push({ skill_id: id, lvl: { [slug(g.name)]: mean } })
-    }
+  for (const [eid, name] of dimNames) {
+    skills.push(skill(`onet.${category}.${eid}`, name, { tags: ["onet", category] }))
+  }
+  // One level row per occupation with all dimensions
+  for (const [soc, dims] of occDims) {
+    const lvl: Record<string, number> = {}
+    for (const [eid, v] of dims) lvl[slug(dimNames.get(eid)!)] = v
+    levels.push({ skill_id: soc, lvl })
   }
   return { skills, prereqs: [], levels }
 }
@@ -468,16 +473,8 @@ async function parseOpensalt(): Promise<Result> {
       data = JSON.parse(await Deno.readTextFile(`${DATA}/opensalt/${fw.identifier}.json`))
     } catch { continue }
 
-    // Collect parent identifiers from isChildOf associations (leaf-only filtering)
-    const parentIdentifiers = new Set<string>()
-    for (const assoc of data.CFAssociations ?? []) {
-      if (assoc.associationType === "isChildOf")
-        parentIdentifiers.add(assoc.destinationNodeURI.identifier)
-    }
-
     const itemIdMap = new Map<string, string>() // opensalt identifier -> our id
     for (const item of data.CFItems ?? []) {
-      if (parentIdentifiers.has(item.identifier)) continue
       const code = sanitizeId(item.humanCodingScheme || item.identifier)
       const id = `opensalt.${code}`
       itemIdMap.set(item.identifier, id)
@@ -492,10 +489,14 @@ async function parseOpensalt(): Promise<Result> {
     }
 
     for (const assoc of data.CFAssociations ?? []) {
-      if (assoc.associationType !== "precedes") continue
       const originId = itemIdMap.get(assoc.originNodeURI?.identifier)
       const destId = itemIdMap.get(assoc.destinationNodeURI?.identifier)
-      if (originId && destId) prereqs.push({ skill_id: destId, prereq_id: originId, source: "opensalt", type: "prerequisite" })
+      if (!originId || !destId) continue
+      if (assoc.associationType === "precedes") {
+        prereqs.push({ skill_id: destId, prereq_id: originId, source: "opensalt", type: "prerequisite" })
+      } else if (assoc.associationType === "isChildOf") {
+        prereqs.push({ skill_id: originId, prereq_id: destId, source: "opensalt", type: "broader" })
+      }
     }
   }
   return { skills, prereqs, levels: [] }
@@ -1154,7 +1155,7 @@ async function inferJunyiLogPrereqs(): Promise<Prereq[]> {
     if (entries.length < 2) continue
     entries.sort((a, b) => a[1] < b[1] ? -1 : 1)
     // Only check sequential pairs within window to avoid O(n^2) per user
-    for (let i = 0; i < entries.length - 1 && i < 50; i++) {
+    for (let i = 0; i < entries.length - 1 && i < 100; i++) {
       for (let j = i + 1; j < entries.length && j < i + 10; j++) {
         const [ea, _ta] = entries[i], [eb, _tb] = entries[j]
         if (ea === eb) continue
@@ -1167,7 +1168,7 @@ async function inferJunyiLogPrereqs(): Promise<Prereq[]> {
   }
 
   const prereqs: Prereq[] = []
-  const MIN_STUDENTS = 20
+  const MIN_STUDENTS = 10
   const THRESHOLD = 0.8
   for (const [key, counts] of exercisePairs) {
     const total = counts.ab + counts.ba
@@ -1223,7 +1224,7 @@ async function inferAssistmentsPrereqs(): Promise<Prereq[]> {
   }
 
   const prereqs: Prereq[] = []
-  const MIN_STUDENTS = 10
+  const MIN_STUDENTS = 5
   const THRESHOLD = 0.8
   for (const [key, counts] of skillPairs) {
     const total = counts.ab + counts.ba
@@ -1239,8 +1240,8 @@ async function inferAssistmentsPrereqs(): Promise<Prereq[]> {
 }
 
 function inferCspGradePrereqs(skills: Skill[]): Prereq[] {
-  const DICE_THRESHOLD = 0.4
-  const MAX_EDGES_PER_GRADE_PAIR = 500
+  const DICE_THRESHOLD = 0.3
+  const MAX_EDGES_PER_GRADE_PAIR = 1000
 
   // Group CSP skills by (subject tag, integer grade)
   const csp = skills.filter(s => s.id.startsWith("csp.") && s.grade_start !== null)
@@ -1261,7 +1262,7 @@ function inferCspGradePrereqs(skills: Skill[]): Prereq[] {
     const sortedGrades = [...grades.keys()].sort((a, b) => a - b)
     for (let gi = 0; gi < sortedGrades.length - 1; gi++) {
       const gLow = sortedGrades[gi], gHigh = sortedGrades[gi + 1]
-      if (gHigh - gLow > 2) continue // skip non-adjacent grades
+      if (gHigh - gLow > 3) continue // skip distant grades
       const lo = grades.get(gLow)!, hi = grades.get(gHigh)!
       if (lo.length > 500 || hi.length > 500) continue // skip huge groups
 
@@ -1297,13 +1298,14 @@ function writeTsv(path: string, header: string[], rows: string[][]): string {
 }
 
 function writeSkillsTsv(skills: Skill[]) {
-  const header = ["id", "ext_ids", "label", "description", "tags", "grade_start", "grade_end"]
+  const header = ["id", "ext_ids", "label", "description", "tags", "source", "grade_start", "grade_end"]
   const rows = skills.map(s => [
     s.id,
     s.ext_ids.map(id => id.replace(/[\t\n\r;]/g, "_")).join(";"),
     sanitize(s.label),
     sanitize(s.description),
     s.tags.join(";"),
+    s.id.split(".")[0],
     s.grade_start !== null ? s.grade_start.toFixed(1) : "",
     s.grade_end !== null ? s.grade_end.toFixed(1) : "",
   ])
@@ -1497,6 +1499,64 @@ function printGraphStats(skills: Skill[], prereqs: Prereq[]) {
   console.log(`Connected components: ${roots.size} (among ${connected.size} connected nodes)`)
 }
 
+async function validateAgainstAlcpl(prereqs: Prereq[], idMap: Map<string, string>) {
+  const domains = ["data_mining", "geometry", "physics", "precalculus"]
+  console.log("\n=== AL-CPL Ground Truth Validation ===")
+
+  // Build set of all prereq edges (using canonical IDs)
+  const edgeSet = new Set<string>()
+  for (const p of prereqs) edgeSet.add(`${p.prereq_id}|${p.skill_id}`)
+
+  // Build reverse map: canonical ID -> set of original alcpl IDs that merged into it
+  const canonToAlcpl = new Map<string, Set<string>>()
+  for (const [oldId, canonId] of idMap) {
+    if (oldId.startsWith("alcpl.")) {
+      let s = canonToAlcpl.get(canonId)
+      if (!s) { s = new Set(); canonToAlcpl.set(canonId, s) }
+      s.add(oldId)
+    }
+  }
+
+  for (const domain of domains) {
+    let text: string
+    try { text = await Deno.readTextFile(`${DATA}/al-cpl/data/${domain}.preqs`) } catch { continue }
+    const groundTruth: Array<[string, string]> = []
+    for (const line of text.split("\n").filter(l => l.trim())) {
+      const [pre, tgt] = line.split(",")
+      if (pre && tgt) groundTruth.push([pre.trim(), tgt.trim()])
+    }
+
+    let tp = 0, fn = 0
+    for (const [pre, tgt] of groundTruth) {
+      const preId = idMap.get(`alcpl.${domain}.${pre}`) ?? `alcpl.${domain}.${pre}`
+      const tgtId = idMap.get(`alcpl.${domain}.${tgt}`) ?? `alcpl.${domain}.${tgt}`
+      if (edgeSet.has(`${preId}|${tgtId}`)) tp++
+      else fn++
+    }
+
+    // Count edges where both endpoints trace back to this domain's alcpl skills
+    const domainPrefix = `alcpl.${domain}.`
+    const domainCanonIds = new Set<string>()
+    for (const [canonId, origIds] of canonToAlcpl) {
+      for (const oid of origIds) if (oid.startsWith(domainPrefix)) { domainCanonIds.add(canonId); break }
+    }
+    // Also include alcpl IDs that weren't remapped
+    for (const p of prereqs) {
+      if (p.skill_id.startsWith(domainPrefix)) domainCanonIds.add(p.skill_id)
+      if (p.prereq_id.startsWith(domainPrefix)) domainCanonIds.add(p.prereq_id)
+    }
+    let predicted = 0
+    for (const p of prereqs) {
+      if (domainCanonIds.has(p.skill_id) && domainCanonIds.has(p.prereq_id)) predicted++
+    }
+    const fp = Math.max(0, predicted - tp)
+    const precision = predicted > 0 ? tp / predicted : 0
+    const recall = groundTruth.length > 0 ? tp / groundTruth.length : 0
+    const f1 = precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0
+    console.log(`  ${domain}: P=${precision.toFixed(3)} R=${recall.toFixed(3)} F1=${f1.toFixed(3)} (TP=${tp} FP=${fp} FN=${fn} gold=${groundTruth.length} predicted=${predicted})`)
+  }
+}
+
 function auditLlmEdges(prereqs: Prereq[], skills: Map<string, Skill>, n = 20) {
   const llm = prereqs.filter(p => p.source === "llm")
   if (!llm.length) return
@@ -1528,6 +1588,7 @@ async function main() {
     ["csp", parseCsp],
     ["opensalt", parseOpensalt],
     ["asn", parseAsn],
+    ["lightcast", parseLightcast],
     ["lcsh", parseLcsh],
   ]
 
@@ -1622,6 +1683,7 @@ async function main() {
   console.log("Wrote viz.json")
 
   printGraphStats(finalSkills, cleanedPrereqs)
+  await validateAgainstAlcpl(cleanedPrereqs, mergeResult.idMap)
   auditLlmEdges(cleanedPrereqs, mergedById)
 }
 
