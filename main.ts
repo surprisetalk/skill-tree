@@ -264,7 +264,11 @@ async function parseOnet(file: string, category: string): Promise<Result> {
   const skills: Skill[] = []
   const levels: Level[] = []
   for (const [eid, name] of dimNames) {
-    skills.push(skill(`onet.${category}.${eid}`, name, { tags: ["onet", category] }))
+    skills.push(skill(`onet.${category}.${eid}`, name, {
+      tags: ["onet", category],
+      ext_urls: [`https://www.onetonline.org/find/descriptor/result/${eid}`],
+      ext_ids: [eid],
+    }))
   }
   // One level row per occupation with all dimensions
   for (const [soc, dims] of occDims) {
@@ -1437,10 +1441,11 @@ function writeTsv(path: string, header: string[], rows: string[][]): string {
 }
 
 function writeSkillsTsv(skills: Skill[], path = "skills.tsv") {
-  const header = ["id", "ext_ids", "label", "description", "tags", "source", "grade_start", "grade_end"]
+  const header = ["id", "ext_ids", "ext_urls", "label", "description", "tags", "source", "grade_start", "grade_end"]
   const rows = skills.map(s => [
     s.id,
     s.ext_ids.map(id => id.replace(/[\t\n\r;]/g, "_")).join(";"),
+    s.ext_urls.map(u => u.replace(/[\t\n\r;]/g, "_")).join(";"),
     sanitize(s.label),
     sanitize(s.description),
     s.tags.join(";"),
@@ -1522,9 +1527,12 @@ async function loadLlmPrereqs(): Promise<Prereq[]> {
 function cleanPrereqs(prereqs: Prereq[], skills: Map<string, Skill>): Prereq[] {
   const before = prereqs.length
 
-  // 1. Drop dangling refs (either side doesn't exist)
+  // 1. Drop dangling refs (either side doesn't exist) and self-loops
   let cleaned = prereqs.filter(p => skills.has(p.skill_id) && skills.has(p.prereq_id))
   const dangling = before - cleaned.length
+  const beforeSelf = cleaned.length
+  cleaned = cleaned.filter(p => p.skill_id !== p.prereq_id)
+  const selfLoops = beforeSelf - cleaned.length
 
   // 2. Break A<->B cycles
   // "depCount" = how many skills depend on this node (appears as prereq_id)
@@ -1591,6 +1599,7 @@ function cleanPrereqs(prereqs: Prereq[], skills: Map<string, Skill>): Prereq[] {
 
   console.log(`\n=== Prereq Cleanup ===`)
   console.log(`  Dangling removed: ${dangling}`)
+  console.log(`  Self-loops removed: ${selfLoops}`)
   console.log(`  Cycle pairs found: ${cyclePairs.size}, edges dropped: ${cyclesDropped}`)
   console.log(`  ${before} -> ${cleaned.length} prereqs`)
   return cleaned
