@@ -276,10 +276,11 @@ async function parseEsco(): Promise<Result> {
   const relRows = parseCsvRows(relsText)
   const prereqs: Prereq[] = []
   for (const r of relRows) {
-    if (r["relationType"] !== "essential") continue
+    const rel = r["relationType"]
+    if (rel !== "essential" && rel !== "optional") continue
     const origId = uriToId.get(r["originalSkillUri"])
     const relId = uriToId.get(r["relatedSkillUri"])
-    if (origId && relId) prereqs.push({ skill_id: origId, prereq_id: relId, source: "esco", type: "prerequisite" })
+    if (origId && relId) prereqs.push({ skill_id: origId, prereq_id: relId, source: rel === "essential" ? "esco" : "esco_optional", type: "prerequisite" })
   }
   return { skills, prereqs, levels: [] }
 }
@@ -1237,6 +1238,55 @@ async function inferAssistmentsPrereqs(): Promise<Prereq[]> {
   return prereqs
 }
 
+function inferCspGradePrereqs(skills: Skill[]): Prereq[] {
+  const DICE_THRESHOLD = 0.4
+  const MAX_EDGES_PER_GRADE_PAIR = 500
+
+  // Group CSP skills by (subject tag, integer grade)
+  const csp = skills.filter(s => s.id.startsWith("csp.") && s.grade_start !== null)
+  const bySubjectGrade = new Map<string, Map<number, Skill[]>>()
+  for (const s of csp) {
+    const grade = Math.round(s.grade_start!)
+    for (const tag of s.tags) {
+      let grades = bySubjectGrade.get(tag)
+      if (!grades) { grades = new Map(); bySubjectGrade.set(tag, grades) }
+      let arr = grades.get(grade)
+      if (!arr) { arr = []; grades.set(grade, arr) }
+      arr.push(s)
+    }
+  }
+
+  const prereqs: Prereq[] = []
+  for (const [tag, grades] of bySubjectGrade) {
+    const sortedGrades = [...grades.keys()].sort((a, b) => a - b)
+    for (let gi = 0; gi < sortedGrades.length - 1; gi++) {
+      const gLow = sortedGrades[gi], gHigh = sortedGrades[gi + 1]
+      if (gHigh - gLow > 2) continue // skip non-adjacent grades
+      const lo = grades.get(gLow)!, hi = grades.get(gHigh)!
+      if (lo.length > 500 || hi.length > 500) continue // skip huge groups
+
+      const loBigrams = lo.map(s => ({ s, bg: charBigrams(normalizeLabel(s.label)) }))
+      const hiBigrams = hi.map(s => ({ s, bg: charBigrams(normalizeLabel(s.label)) }))
+
+      let edgeCount = 0
+      for (const a of loBigrams) {
+        if (edgeCount >= MAX_EDGES_PER_GRADE_PAIR) break
+        let bestScore = 0, bestTarget: Skill | null = null
+        for (const b of hiBigrams) {
+          const d = dice(a.bg, b.bg)
+          if (d > bestScore) { bestScore = d; bestTarget = b.s }
+        }
+        if (bestScore >= DICE_THRESHOLD && bestTarget) {
+          prereqs.push({ skill_id: bestTarget.id, prereq_id: a.s.id, source: "csp_grade", type: "prerequisite" })
+          edgeCount++
+        }
+      }
+    }
+  }
+  console.log(`  ${prereqs.length} CSP grade-sequential prereqs across ${bySubjectGrade.size} subject groups`)
+  return prereqs
+}
+
 // Writers
 
 function writeTsv(path: string, header: string[], rows: string[][]): string {
@@ -1338,7 +1388,7 @@ function cleanPrereqs(prereqs: Prereq[], skills: Map<string, Skill>): Prereq[] {
 
   const SOURCE_PRIORITY: Record<string, number> = {
     khan: 5, alcpl: 5, metacademy: 5, opensalt: 5, asn: 5,
-    esco: 4, junyi_hierarchy: 3,
+    esco: 4, esco_optional: 2, junyi_hierarchy: 3, csp_grade: 3,
     junyi_logs: 2, assistments_logs: 2,
     llm: 1, lcsh_broader: 1,
   }
@@ -1530,6 +1580,10 @@ async function main() {
   const assistPrereqs = await inferAssistmentsPrereqs()
   allPrereqs.push(...assistPrereqs)
   console.log(`  ${assistPrereqs.length} assistments prereqs`)
+
+  console.log("  CSP grade sequencing...")
+  const cspPrereqs = inferCspGradePrereqs(allSkills)
+  allPrereqs.push(...cspPrereqs)
 
   console.log("  LLM prereqs...")
   const llmPrereqs = await loadLlmPrereqs()
