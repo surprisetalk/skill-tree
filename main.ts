@@ -10,7 +10,19 @@ type Skill = {
   grade_start: number | null
   grade_end: number | null
 }
-type Prereq = { skill_id: string; prereq_id: string; source: string; type: "prerequisite" | "broader" }
+type Prereq = { skill_id: string; prereq_id: string; source: string; type: "prerequisite" | "broader"; confidence?: number }
+
+const SOURCE_CONFIDENCE: Record<string, number> = {
+  khan: 1.0, alcpl: 1.0, metacademy: 1.0, opensalt: 1.0, asn: 1.0,
+  esco: 1.0, csp_grade: 1.0,
+  esco_optional: 0.9, junyi_hierarchy: 0.9, ngss_progression: 0.9, hess_progression: 0.9,
+  junyi_logs: 0.8, assistments_logs: 0.8, mooccubex: 0.8,
+  course_skill_atlas: 0.6, csa_distance: 0.6, lcsh_broader: 0.5, dbpedia_broader: 0.5, wikidata_p279: 0.7,
+  llm: 0.8,
+}
+function confidenceFor(p: Prereq): number {
+  return p.confidence ?? SOURCE_CONFIDENCE[p.source] ?? 0.5
+}
 type Level = { skill_id: string; lvl: Record<string, number> }
 type Result = { skills: Skill[]; prereqs: Prereq[]; levels: Level[] }
 
@@ -497,13 +509,16 @@ async function parseOpensalt(): Promise<Result> {
 
     const itemIdMap = new Map<string, string>() // opensalt identifier -> our id
     for (const item of data.CFItems ?? []) {
-      const code = sanitizeId(item.humanCodingScheme || item.identifier)
-      const id = `opensalt.${code}`
+      const uid = sanitizeId(item.identifier)
+      if (!uid) continue // skip items without a UUID — would produce empty-ID orphans
+      const id = `opensalt.${uid}`
       itemIdMap.set(item.identifier, id)
-      const label = sanitize(item.fullStatement || code)
+      const label = sanitize(item.fullStatement || item.humanCodingScheme || "")
       if (!isValidLabel(label)) continue
       const gradeNums = (item.educationLevel || []).map(parseGrade).filter((g): g is number => g !== null)
+      const hcs = sanitizeId(item.humanCodingScheme || "")
       skills.push(skill(id, label, {
+        ext_ids: hcs ? [`opensalt.${hcs}`] : [],
         tags: [item.CFItemType].filter(Boolean) as string[],
         grade_start: gradeNums.length ? Math.min(...gradeNums) : null,
         grade_end: gradeNums.length ? Math.max(...gradeNums) : null,
@@ -519,6 +534,73 @@ async function parseOpensalt(): Promise<Result> {
       } else if (assoc.associationType === "isChildOf") {
         prereqs.push({ skill_id: originId, prereq_id: destId, source: "opensalt", type: "broader" })
       }
+    }
+  }
+  return { skills, prereqs, levels: [] }
+}
+
+async function parseWikidata(): Promise<Result> {
+  const skills: Skill[] = []
+  const prereqs: Prereq[] = []
+  const path = `${DATA}/wikidata/p279.jsonl`
+  let text: string
+  try { text = await Deno.readTextFile(path) } catch { return { skills, prereqs, levels: [] } }
+
+  const seen = new Set<string>()
+  const addSkill = (qid: string, label: string) => {
+    if (!qid || !label || seen.has(qid)) return
+    seen.add(qid)
+    skills.push(skill(`wikidata.${qid}`, label, { tags: ["wikidata"], ext_urls: [`https://www.wikidata.org/wiki/${qid}`] }))
+  }
+
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue
+    let r: { label: string; qid: string; parents?: Array<{ qid: string; label: string }> }
+    try { r = JSON.parse(line) } catch { continue }
+    if (!r.qid) continue
+    addSkill(r.qid, r.label)
+    for (const p of r.parents ?? []) {
+      addSkill(p.qid, p.label)
+      prereqs.push({ skill_id: `wikidata.${r.qid}`, prereq_id: `wikidata.${p.qid}`, source: "wikidata_p279", type: "broader" })
+    }
+  }
+  return { skills, prereqs, levels: [] }
+}
+
+async function parseNgss(): Promise<Result> {
+  // Extract Disciplinary Core Idea codes (e.g. ESS1.A, LS2.B) from Appendix E.
+  // For each DCI code, emit 4 grade-band skills and a prereq chain between them.
+  const skills: Skill[] = []
+  const prereqs: Prereq[] = []
+  const path = `${DATA}/ngss/AppendixE-Progressions.pdf`
+  try { await Deno.stat(path) } catch { return { skills, prereqs, levels: [] } }
+
+  const proc = new Deno.Command("pdftotext", { args: [path, "-"], stdout: "piped" })
+  const { success, stdout } = await proc.output()
+  if (!success) return { skills, prereqs, levels: [] }
+  const text = new TextDecoder().decode(stdout)
+
+  const dciSet = new Set<string>()
+  for (const m of text.matchAll(/\b([A-Z]{2,4}\d+\.[A-Z])\b/g)) dciSet.add(m[1])
+
+  const bands: Array<{ suffix: string; label: string; gs: number; ge: number }> = [
+    { suffix: "k2", label: "K–2", gs: 0, ge: 2 },
+    { suffix: "35", label: "3–5", gs: 3, ge: 5 },
+    { suffix: "68", label: "6–8", gs: 6, ge: 8 },
+    { suffix: "912", label: "9–12", gs: 9, ge: 12 },
+  ]
+  for (const dci of dciSet) {
+    const ids: string[] = []
+    for (const b of bands) {
+      const id = `ngss.${dci}.${b.suffix}`
+      ids.push(id)
+      skills.push(skill(id, `NGSS ${dci} grades ${b.label}`, {
+        tags: ["ngss", "science"],
+        grade_start: b.gs, grade_end: b.ge,
+      }))
+    }
+    for (let i = 1; i < ids.length; i++) {
+      prereqs.push({ skill_id: ids[i], prereq_id: ids[i - 1], source: "ngss_progression", type: "prerequisite" })
     }
   }
   return { skills, prereqs, levels: [] }
@@ -1457,13 +1539,44 @@ function writeSkillsTsv(skills: Skill[], path = "skills.tsv") {
 }
 
 function writePrereqsTsv(prereqs: Prereq[], path = "prereqs.tsv") {
-  const header = ["skill_id", "prereq_id", "source", "type"]
-  const rows = prereqs.map(p => [p.skill_id, p.prereq_id, p.source, p.type])
+  const header = ["skill_id", "prereq_id", "source", "type", "confidence"]
+  const rows = prereqs.map(p => [p.skill_id, p.prereq_id, p.source, p.type, confidenceFor(p).toFixed(2)])
   writeTsv(path, header, rows)
 }
 
 function isTaxonomyId(id: string): boolean {
   return id.startsWith("lcsh.") || id.startsWith("dbpedia.")
+}
+
+async function writeEmbeddings(skills: Skill[]) {
+  const labels = skills.map(s => s.label)
+  const vecs = await embedLabels(labels)
+  if (!vecs) { console.error("  Skipping embeddings output (python unavailable)"); return }
+  const buf = new Uint8Array(4 + skills.length * EMB_DIM * 4)
+  const dv = new DataView(buf.buffer)
+  dv.setUint32(0, skills.length, true)
+  for (let i = 0; i < skills.length; i++) {
+    const f = new Float32Array(buf.buffer, 4 + i * EMB_DIM * 4, EMB_DIM)
+    f.set(vecs[i])
+  }
+  await Deno.writeFile("embeddings.bin", buf)
+  const idsTsv = "id\n" + skills.map(s => s.id).join("\n") + "\n"
+  await Deno.writeTextFile("embeddings_ids.tsv", idsTsv)
+}
+
+function writeSkillsSourcesTsv(skills: Skill[]) {
+  const header = ["canonical_id", "source_id", "source_url"]
+  const rows: string[][] = []
+  for (const s of skills) {
+    const maxLen = Math.max(s.ext_ids.length, s.ext_urls.length, 1)
+    for (let i = 0; i < maxLen; i++) {
+      const sid = s.ext_ids[i] ?? ""
+      const surl = s.ext_urls[i] ?? ""
+      if (!sid && !surl) continue
+      rows.push([s.id, sid, surl])
+    }
+  }
+  writeTsv("skills_sources.tsv", header, rows)
 }
 
 function writeLevelsTsv(levels: Level[]) {
@@ -1513,13 +1626,14 @@ async function loadLlmPrereqs(): Promise<Prereq[]> {
   let text: string
   try { text = await Deno.readTextFile(`${DATA}/llm_prereqs.json`) }
   catch { return [] }
-  const data = JSON.parse(text) as { pairs: Record<string, { direction: string }> }
+  const data = JSON.parse(text) as { pairs: Record<string, { direction: string; confidence?: number }> }
   if (!data.pairs) throw new Error("llm_prereqs.json missing 'pairs' field")
   const prereqs: Prereq[] = []
   for (const [key, val] of Object.entries(data.pairs)) {
     const [a, b] = key.split("|")
-    if (val.direction === "a->b") prereqs.push({ skill_id: b, prereq_id: a, source: "llm", type: "prerequisite" })
-    else if (val.direction === "b->a") prereqs.push({ skill_id: a, prereq_id: b, source: "llm", type: "prerequisite" })
+    const confidence = val.confidence ?? 0.8
+    if (val.direction === "a->b") prereqs.push({ skill_id: b, prereq_id: a, source: "llm", type: "prerequisite", confidence })
+    else if (val.direction === "b->a") prereqs.push({ skill_id: a, prereq_id: b, source: "llm", type: "prerequisite", confidence })
   }
   return prereqs
 }
@@ -1597,12 +1711,139 @@ function cleanPrereqs(prereqs: Prereq[], skills: Map<string, Skill>): Prereq[] {
   cleaned = cleaned.filter(p => !dropSet.has(edgeKey(p.skill_id, p.prereq_id)))
   const cyclesDropped = dropSet.size
 
+  // 3. Break longer cycles (SCCs > 1) among prerequisite-type edges only.
+  // Taxonomic "broader" edges form a near-DAG naturally and are too numerous to process repeatedly.
+  const sccBroken = { iters: 0, edgesDropped: 0 }
+  const MAX_SCC_ITERS = 5
+  while (sccBroken.iters < MAX_SCC_ITERS) {
+    const adj = new Map<string, Prereq[]>()
+    const nodeSet = new Set<string>()
+    for (const p of cleaned) {
+      if (p.type !== "prerequisite") continue
+      nodeSet.add(p.skill_id); nodeSet.add(p.prereq_id)
+      let a = adj.get(p.skill_id)
+      if (!a) { a = []; adj.set(p.skill_id, a) }
+      a.push(p)
+    }
+    const nodes = [...nodeSet]
+
+    // Tarjan's SCC
+    const idxOf = new Map<string, number>()
+    const low = new Map<string, number>()
+    const onStack = new Set<string>()
+    const stack: string[] = []
+    let counter = 0
+    const sccs: string[][] = []
+    const strongConnect = (v: string) => {
+      const work: Array<{ v: string; iter: Iterator<Prereq> }> = []
+      idxOf.set(v, counter); low.set(v, counter); counter++
+      stack.push(v); onStack.add(v)
+      work.push({ v, iter: (adj.get(v) ?? [])[Symbol.iterator]() })
+      while (work.length) {
+        const top = work[work.length - 1]
+        const n = top.iter.next()
+        if (n.done) {
+          if (low.get(top.v) === idxOf.get(top.v)) {
+            const scc: string[] = []
+            while (true) {
+              const w = stack.pop()!
+              onStack.delete(w)
+              scc.push(w)
+              if (w === top.v) break
+            }
+            sccs.push(scc)
+          }
+          work.pop()
+          if (work.length) {
+            const parent = work[work.length - 1].v
+            low.set(parent, Math.min(low.get(parent)!, low.get(top.v)!))
+          }
+        } else {
+          const w = n.value.prereq_id
+          if (!idxOf.has(w)) {
+            idxOf.set(w, counter); low.set(w, counter); counter++
+            stack.push(w); onStack.add(w)
+            work.push({ v: w, iter: (adj.get(w) ?? [])[Symbol.iterator]() })
+          } else if (onStack.has(w)) {
+            low.set(top.v, Math.min(low.get(top.v)!, idxOf.get(w)!))
+          }
+        }
+      }
+    }
+    for (const v of nodes) if (!idxOf.has(v)) strongConnect(v)
+
+    const bigSccs = sccs.filter(s => s.length > 1)
+    if (!bigSccs.length) break
+
+    // Index node->SCC for O(1) lookup
+    const nodeToScc = new Map<string, number>()
+    for (let i = 0; i < bigSccs.length; i++) for (const n of bigSccs[i]) nodeToScc.set(n, i)
+    // Per-SCC worst edge (lowest priority, keyed by edge-string to drop)
+    const worstPerScc: Array<{ key: string; pri: number }> = bigSccs.map(() => ({ key: "", pri: Infinity }))
+    for (const p of cleaned) {
+      if (p.type !== "prerequisite") continue
+      const si = nodeToScc.get(p.skill_id)
+      if (si === undefined || nodeToScc.get(p.prereq_id) !== si) continue
+      const pri = SOURCE_PRIORITY[p.source] ?? 0
+      if (pri < worstPerScc[si].pri) {
+        worstPerScc[si] = { key: edgeKey(p.skill_id, p.prereq_id), pri }
+      }
+    }
+    const sccEdgesToDrop = new Set(worstPerScc.map(w => w.key).filter(k => k))
+    cleaned = cleaned.filter(p => !sccEdgesToDrop.has(edgeKey(p.skill_id, p.prereq_id)))
+    sccBroken.iters++
+    sccBroken.edgesDropped += sccEdgesToDrop.size
+  }
+
   console.log(`\n=== Prereq Cleanup ===`)
   console.log(`  Dangling removed: ${dangling}`)
   console.log(`  Self-loops removed: ${selfLoops}`)
   console.log(`  Cycle pairs found: ${cyclePairs.size}, edges dropped: ${cyclesDropped}`)
+  console.log(`  SCC cycles broken: ${sccBroken.iters} iters, ${sccBroken.edgesDropped} edges dropped`)
   console.log(`  ${before} -> ${cleaned.length} prereqs`)
   return cleaned
+}
+
+function assertInvariants(prereqs: Prereq[]) {
+  const emptyTail = (id: string) => {
+    const tail = id.split(".").slice(1).join(".")
+    return !tail
+  }
+  let selfLoops = 0, emptyIds = 0
+  for (const p of prereqs) {
+    if (p.skill_id === p.prereq_id) selfLoops++
+    if (emptyTail(p.skill_id) || emptyTail(p.prereq_id)) emptyIds++
+  }
+  // DAG check (prerequisite edges only — broader taxonomy edges allowed cycles)
+  const adj = new Map<string, string[]>()
+  const indeg = new Map<string, number>()
+  const nodes = new Set<string>()
+  for (const p of prereqs) {
+    if (p.type !== "prerequisite") continue
+    nodes.add(p.skill_id); nodes.add(p.prereq_id)
+    let a = adj.get(p.skill_id); if (!a) { a = []; adj.set(p.skill_id, a) }
+    a.push(p.prereq_id)
+    indeg.set(p.prereq_id, (indeg.get(p.prereq_id) ?? 0) + 1)
+  }
+  const queue: string[] = []
+  for (const n of nodes) if (!indeg.get(n)) queue.push(n)
+  let processed = 0
+  while (queue.length) {
+    const v = queue.shift()!
+    processed++
+    for (const w of adj.get(v) ?? []) {
+      const d = (indeg.get(w) ?? 0) - 1
+      indeg.set(w, d)
+      if (!d) queue.push(w)
+    }
+  }
+  const cyclicNodes = nodes.size - processed
+  const errs: string[] = []
+  if (selfLoops) errs.push(`${selfLoops} self-loops`)
+  if (emptyIds) errs.push(`${emptyIds} edges with empty-ID endpoint`)
+  if (errs.length) throw new Error(`Invariant violations: ${errs.join("; ")}`)
+  if (cyclicNodes) console.warn(`  WARN: ${cyclicNodes} nodes still in prereq cycles after cleanup`)
+  console.log(`  Invariants OK (no self-loops, no empty-ID endpoints; ${cyclicNodes} cyclic nodes)`)
 }
 
 function printGraphStats(skills: Skill[], prereqs: Prereq[]) {
@@ -1740,6 +1981,8 @@ async function main() {
     ["csp", parseCsp],
     ["opensalt", parseOpensalt],
     ["asn", parseAsn],
+    ["ngss", parseNgss],
+    ["wikidata", parseWikidata],
     ["lightcast", parseLightcast],
     ["lcsh", parseLcsh],
     ["dbpedia", parseDbpedia],
@@ -1818,6 +2061,7 @@ async function main() {
   for (const s of finalSkills) mergedById.set(s.id, s)
 
   const cleanedPrereqs = cleanPrereqs(mergeResult.prereqs, mergedById)
+  assertInvariants(cleanedPrereqs)
 
   console.log(`\nTotals: ${finalSkills.length} skills, ${cleanedPrereqs.length} prereqs, ${mergeResult.levels.length} levels`)
 
@@ -1844,6 +2088,10 @@ async function main() {
   console.log(`Wrote taxonomy_edges.tsv (${taxonomyEdges.length} taxonomy edges)`)
   writeLevelsTsv(mergeResult.levels)
   console.log("Wrote levels.tsv")
+  writeSkillsSourcesTsv(curatedSkills)
+  console.log("Wrote skills_sources.tsv")
+  await writeEmbeddings(curatedSkills)
+  console.log("Wrote embeddings.bin + embeddings_ids.tsv")
   writeDot(mergedById, curatedPrereqs)
   console.log("Wrote skills.dot")
   writeVizJson(mergedById, curatedPrereqs)
