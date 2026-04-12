@@ -96,6 +96,24 @@ function isValidLabel(s: string): boolean {
   return true
 }
 
+const DOMAIN_KEYWORDS: [string, RegExp][] = [
+  ["math", /\b(math|algebra|geometry|calculus|trigonometr|arithmetic|topolog|statistic|probabilit|number theor|linear algebra|differential equation|analysis \(math|numerical)\b/i],
+  ["science", /\b(physic|chemistr|biolog|astronom|geolog|ecolog|anatom|zoolog|botan|microbiolog|genetic|biochem|neurosci|meteorolog|earth science|natural science|scientific)\b/i],
+  ["history", /\b(histor|ancient|medieval|renaissance|civilization|empire|dynasty|revolution|war of|century |historical)\b/i],
+  ["language", /\b(language|linguistic|grammar|syntax|phoneti|literatur|poetry|rhetoric|writing|reading|vocabulary|translation|etymolog)\b/i],
+  ["technology", /\b(comput|software|programming|algorithm|data structure|machine learning|artificial intelligence|network|cryptograph|database|engineering|electron|robotic|digital|internet|web )\b/i],
+  ["social studies", /\b(politic|government|sociolog|anthropolog|psycholog|economic|geograph|civic|cultur|philosoph|ethic|law|international relations)\b/i],
+  ["art", /\b(art|music|paint|sculptur|drawing|design|theater|theatre|film|cinema|photograph|danc|architect|craft)\b/i],
+  ["business", /\b(business|finance|account|marketing|manage|entrepreneur|commerce|trade|investment|econom|industry)\b/i],
+  ["health", /\b(health|medic|nurs|dental|pharmac|therap|clinical|disease|diagnos|patient|surger|hospital|public health|nutrition|fitness)\b/i],
+]
+
+function domainTags(label: string): string[] {
+  const tags: string[] = []
+  for (const [tag, re] of DOMAIN_KEYWORDS) if (re.test(label)) tags.push(tag)
+  return tags
+}
+
 const NON_ENGLISH_JURISDICTIONS = new Set([
   "québec", "quebec", "québec (français)", "quebec (english)",
   "puerto rico", "guam", "american samoa",
@@ -594,7 +612,7 @@ async function parseLcsh(): Promise<Result> {
   for (const [code, label] of labels) {
     const alts = altLabels.get(code)
     skills.push(skill(`lcsh.${code}`, label, {
-      tags: ["lcsh"],
+      tags: ["lcsh", ...domainTags(label)],
       description: alts ? alts.join("; ") : "",
       ext_urls: [`${SUBJ_PREFIX}${code}`],
     }))
@@ -607,6 +625,127 @@ async function parseLcsh(): Promise<Result> {
     prereqs.push({ skill_id: `lcsh.${child}`, prereq_id: `lcsh.${parent}`, source: "lcsh_broader", type: "broader" })
   }
 
+  return { skills, prereqs, levels: [] }
+}
+
+// 14. DBpedia SKOS categories
+async function parseDbpedia(): Promise<Result> {
+  const path = `${DATA}/dbpedia/skos_categories_en.ttl.bz2`
+  try { await Deno.stat(path) } catch (e) {
+    if (e instanceof Deno.errors.NotFound) {
+      console.error("  DBpedia file not found, skipping")
+      return { skills: [], prereqs: [], levels: [] }
+    }
+    throw e
+  }
+
+  const SKOS = "http://www.w3.org/2004/02/skos/core#"
+  const PREFLABEL = `${SKOS}prefLabel`
+  const BROADER = `${SKOS}broader`
+  const CAT_PREFIX = "http://dbpedia.org/resource/Category:"
+
+  const labels = new Map<string, string>()
+  const broaderEdges: [string, string][] = []
+
+  const proc = new Deno.Command("bzcat", { args: [path], stdout: "piped", stderr: "null" }).spawn()
+  const stream = proc.stdout.pipeThrough(new TextDecoderStream())
+  let buf = ""
+  let lineNum = 0
+
+  for await (const chunk of stream) {
+    buf += chunk
+    const lines = buf.split("\n")
+    buf = lines.pop()!
+    for (const line of lines) {
+      lineNum++
+      if (!line || line[0] === "#") continue
+      const m = line.match(/^<([^>]+)>\s+<([^>]+)>\s+(.+)\s+\.\s*$/)
+      if (!m) continue
+      const [, subj, pred, obj] = m
+      if (!subj.startsWith(CAT_PREFIX)) continue
+      const code = subj.slice(CAT_PREFIX.length)
+      if (pred === PREFLABEL) {
+        if (!obj.endsWith('@en')) continue
+        const label = obj.replace(/^"/, "").replace(/"@en$/, "").replace(/\\"/g, '"').replace(/\\\\/g, "\\")
+        if (label) labels.set(code, label)
+      } else if (pred === BROADER) {
+        const objMatch = obj.match(/^<([^>]+)>$/)
+        if (!objMatch || !objMatch[1].startsWith(CAT_PREFIX)) continue
+        broaderEdges.push([code, objMatch[1].slice(CAT_PREFIX.length)])
+      }
+    }
+  }
+  await proc.status
+  console.log(`  Streamed ${lineNum} lines, ${labels.size} categories, ${broaderEdges.length} broader edges`)
+
+  const skills: Skill[] = []
+  for (const [code, label] of labels) {
+    // Filter administrative Wikipedia categories (heavily noise-inducing)
+    if (/^Wikipedia_|^Articles_|^CS1_|^Pages_|^Hidden_categor|^Disambiguation/.test(code)) continue
+    skills.push(skill(`dbpedia.${code}`, label, {
+      tags: ["dbpedia", ...domainTags(label)],
+      ext_urls: [`${CAT_PREFIX}${code}`],
+    }))
+  }
+  const validCodes = new Set(skills.map(s => s.id.slice("dbpedia.".length)))
+
+  const prereqs: Prereq[] = []
+  for (const [child, parent] of broaderEdges) {
+    if (!validCodes.has(child) || !validCodes.has(parent)) continue
+    prereqs.push({ skill_id: `dbpedia.${child}`, prereq_id: `dbpedia.${parent}`, source: "dbpedia_broader", type: "broader" })
+  }
+
+  return { skills, prereqs, levels: [] }
+}
+
+// 15. Course-Skill Atlas: Field of Study -> top 10 DWAs
+async function parseCourseSkillAtlas(): Promise<Result> {
+  const fosPath = `${DATA}/course-skill-atlas/top10_DWA_per_FOS.csv`
+  const dwaPath = `${DATA}/onet/DWA Reference.txt`
+  try { await Deno.stat(fosPath); await Deno.stat(dwaPath) } catch {
+    console.error("  Course-Skill Atlas or DWA Reference not found, skipping")
+    return { skills: [], prereqs: [], levels: [] }
+  }
+
+  // DWA title (normalized) -> DWA ID
+  const dwaByTitle = new Map<string, string>()
+  for (const r of parseTsvRows(await Deno.readTextFile(dwaPath))) {
+    const id = r["DWA ID"], title = r["DWA Title"]
+    if (id && title) dwaByTitle.set(title.trim().toLowerCase(), id)
+  }
+
+  const skills: Skill[] = []
+  const prereqs: Prereq[] = []
+  const seenDwas = new Set<string>()
+  const seenFos = new Set<string>()
+
+  const rows = parseCsvRows(await Deno.readTextFile(fosPath))
+  let currentFos: string | null = null
+  for (const r of rows) {
+    const first = r["Detailed Work Activity (DWA)"]?.trim()
+    const rank = r["Rank"]?.trim()
+    if (!first) continue
+    if (!rank) {
+      currentFos = first
+      const fid = `fos.${slug(currentFos)}`
+      if (!seenFos.has(fid)) {
+        skills.push(skill(fid, currentFos, { tags: ["field_of_study", ...domainTags(currentFos)] }))
+        seenFos.add(fid)
+      }
+      continue
+    }
+    if (!currentFos) continue
+    const dwaId = dwaByTitle.get(first.toLowerCase())
+    if (!dwaId) continue
+    const dwaSkillId = `onet.dwa.${dwaId}`
+    if (!seenDwas.has(dwaSkillId)) {
+      skills.push(skill(dwaSkillId, first, { tags: ["onet", "dwa", ...domainTags(first)] }))
+      seenDwas.add(dwaSkillId)
+    }
+    // DWA is a narrower learning outcome within the field of study
+    prereqs.push({ skill_id: dwaSkillId, prereq_id: `fos.${slug(currentFos)}`, source: "course_skill_atlas", type: "broader" })
+  }
+  console.log(`  ${seenFos.size} fields of study, ${seenDwas.size} DWAs, ${prereqs.length} FoS→DWA edges`)
   return { skills, prereqs, levels: [] }
 }
 
@@ -912,9 +1051,9 @@ function mergeGroup(group: Skill[], idMap: Map<string, string>): Skill {
     const aHex = /^csp\.[A-F0-9]{32}$/.test(a.id) ? 1 : 0
     const bHex = /^csp\.[A-F0-9]{32}$/.test(b.id) ? 1 : 0
     if (aHex !== bHex) return aHex - bHex
-    const aLcsh = a.id.startsWith("lcsh.") ? 1 : 0
-    const bLcsh = b.id.startsWith("lcsh.") ? 1 : 0
-    if (aLcsh !== bLcsh) return aLcsh - bLcsh
+    const aTax = (a.id.startsWith("lcsh.") || a.id.startsWith("dbpedia.")) ? 1 : 0
+    const bTax = (b.id.startsWith("lcsh.") || b.id.startsWith("dbpedia.")) ? 1 : 0
+    if (aTax !== bTax) return aTax - bTax
     return a.id.length - b.id.length
   })
   const canon = group[0]
@@ -1030,7 +1169,7 @@ async function mergeSkills(
     if (group.length === 1) {
       merged.push(group[0])
       idMap.set(group[0].id, group[0].id)
-      if (!group[0].id.startsWith("lcsh.")) ungrouped.push(group[0])
+      if (!group[0].id.startsWith("lcsh.") && !group[0].id.startsWith("dbpedia.")) ungrouped.push(group[0])
       continue
     }
     exactMerges += group.length - 1
@@ -1297,7 +1436,7 @@ function writeTsv(path: string, header: string[], rows: string[][]): string {
   return path
 }
 
-function writeSkillsTsv(skills: Skill[]) {
+function writeSkillsTsv(skills: Skill[], path = "skills.tsv") {
   const header = ["id", "ext_ids", "label", "description", "tags", "source", "grade_start", "grade_end"]
   const rows = skills.map(s => [
     s.id,
@@ -1309,13 +1448,17 @@ function writeSkillsTsv(skills: Skill[]) {
     s.grade_start !== null ? s.grade_start.toFixed(1) : "",
     s.grade_end !== null ? s.grade_end.toFixed(1) : "",
   ])
-  writeTsv("skills.tsv", header, rows)
+  writeTsv(path, header, rows)
 }
 
-function writePrereqsTsv(prereqs: Prereq[]) {
+function writePrereqsTsv(prereqs: Prereq[], path = "prereqs.tsv") {
   const header = ["skill_id", "prereq_id", "source", "type"]
   const rows = prereqs.map(p => [p.skill_id, p.prereq_id, p.source, p.type])
-  writeTsv("prereqs.tsv", header, rows)
+  writeTsv(path, header, rows)
+}
+
+function isTaxonomyId(id: string): boolean {
+  return id.startsWith("lcsh.") || id.startsWith("dbpedia.")
 }
 
 function writeLevelsTsv(levels: Level[]) {
@@ -1392,7 +1535,7 @@ function cleanPrereqs(prereqs: Prereq[], skills: Map<string, Skill>): Prereq[] {
     khan: 5, alcpl: 5, metacademy: 5, opensalt: 5, asn: 5,
     esco: 4, esco_optional: 2, junyi_hierarchy: 3, csp_grade: 3,
     junyi_logs: 2, assistments_logs: 2,
-    llm: 1, lcsh_broader: 1,
+    llm: 1, lcsh_broader: 1, dbpedia_broader: 1, course_skill_atlas: 3,
   }
 
   // Edge semantics: edgeKey(skill_id, prereq_id) = "skill_id depends on prereq_id"
@@ -1590,6 +1733,8 @@ async function main() {
     ["asn", parseAsn],
     ["lightcast", parseLightcast],
     ["lcsh", parseLcsh],
+    ["dbpedia", parseDbpedia],
+    ["course-skill-atlas", parseCourseSkillAtlas],
   ]
 
   const allSkills: Skill[] = []
@@ -1667,19 +1812,32 @@ async function main() {
 
   console.log(`\nTotals: ${finalSkills.length} skills, ${cleanedPrereqs.length} prereqs, ${mergeResult.levels.length} levels`)
 
-  writeSkillsTsv(finalSkills)
-  console.log("Wrote skills.tsv")
+  const curatedSkills = finalSkills.filter(s => !isTaxonomyId(s.id))
+  const taxonomySkills = finalSkills.filter(s => isTaxonomyId(s.id))
+  const curatedPrereqs = cleanedPrereqs.filter(p => !isTaxonomyId(p.skill_id) && !isTaxonomyId(p.prereq_id))
+  const taxonomyEdges = cleanedPrereqs.filter(p => isTaxonomyId(p.skill_id) || isTaxonomyId(p.prereq_id))
+
+  writeSkillsTsv(curatedSkills)
+  console.log(`Wrote skills.tsv (${curatedSkills.length} curated)`)
   const gz = new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] })
   const gzr = await gz.output()
   if (gzr.success) console.log("Wrote skills.tsv.gz")
   else console.error("Failed to gzip skills.tsv")
-  writePrereqsTsv(cleanedPrereqs)
-  console.log("Wrote prereqs.tsv")
+
+  writeSkillsTsv(taxonomySkills, "taxonomy.tsv")
+  console.log(`Wrote taxonomy.tsv (${taxonomySkills.length} taxonomy)`)
+  const gz2 = new Deno.Command("gzip", { args: ["-kf", "taxonomy.tsv"] })
+  await gz2.output()
+
+  writePrereqsTsv(curatedPrereqs)
+  console.log(`Wrote prereqs.tsv (${curatedPrereqs.length} curated edges)`)
+  writePrereqsTsv(taxonomyEdges, "taxonomy_edges.tsv")
+  console.log(`Wrote taxonomy_edges.tsv (${taxonomyEdges.length} taxonomy edges)`)
   writeLevelsTsv(mergeResult.levels)
   console.log("Wrote levels.tsv")
-  writeDot(mergedById, cleanedPrereqs)
+  writeDot(mergedById, curatedPrereqs)
   console.log("Wrote skills.dot")
-  writeVizJson(mergedById, cleanedPrereqs)
+  writeVizJson(mergedById, curatedPrereqs)
   console.log("Wrote viz.json")
 
   printGraphStats(finalSkills, cleanedPrereqs)

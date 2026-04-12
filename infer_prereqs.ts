@@ -147,14 +147,24 @@ async function main() {
     Deno.exit(1)
   }
 
-  console.log("Loading skills.tsv...")
+  console.log("Loading skills.tsv + taxonomy.tsv...")
   const skillRows = parseTsvRows(await Deno.readTextFile("skills.tsv"))
-  console.log(`  ${skillRows.length} skills`)
+  let taxLen = 0
+  try {
+    const taxRows = parseTsvRows(await Deno.readTextFile("taxonomy.tsv"))
+    for (const r of taxRows) skillRows.push(r)
+    taxLen = taxRows.length
+  } catch { /* ok */ }
+  console.log(`  ${skillRows.length} skills (${taxLen} from taxonomy)`)
 
-  console.log("Loading prereqs.tsv...")
+  console.log("Loading prereqs.tsv + taxonomy_edges.tsv...")
   const prereqRows = parseTsvRows(await Deno.readTextFile("prereqs.tsv"))
+  try {
+    const tax = parseTsvRows(await Deno.readTextFile("taxonomy_edges.tsv"))
+    for (const r of tax) prereqRows.push(r)
+  } catch { /* ok */ }
   const existingEdges = new Set(prereqRows.map(r => canonicalKey(r.skill_id, r.prereq_id)))
-  console.log(`  ${prereqRows.length} existing prereqs`)
+  console.log(`  ${prereqRows.length} existing edges`)
 
   let cache: Cache = { pairs: {}, version: 1 }
   try {
@@ -186,8 +196,10 @@ async function main() {
   const MAX_TOTAL = 100_000
   const MAX_PER_GROUP = 5_000
 
+  // Skip the bulk-source tags themselves (lcsh, dbpedia) — only domain tags enable cross-source pairing
+  const SKIP_TAGS = new Set(["lcsh", "dbpedia"])
   const eligibleGroups = [...tagGroups.entries()]
-    .filter(([, m]) => m.length >= 5 && m.length <= 5000)
+    .filter(([t, m]) => !SKIP_TAGS.has(t) && m.length >= 5 && m.length <= 200_000)
     .sort((a, b) => a[1].length - b[1].length)
 
   for (const [tag, members] of eligibleGroups) {
@@ -195,12 +207,19 @@ async function main() {
     groupsProcessed++
     let groupCount = 0
 
-    for (let i = 0; i < members.length && groupCount < MAX_PER_GROUP; i++) {
-      const srcA = members[i].id.split(".")[0]
-      for (let j = i + 1; j < members.length && groupCount < MAX_PER_GROUP; j++) {
-        const srcB = members[j].id.split(".")[0]
+    // Shuffle so cross-source pairs are reached without iterating all same-source pairs first
+    const shuffled = [...members]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    }
+
+    for (let i = 0; i < shuffled.length && groupCount < MAX_PER_GROUP; i++) {
+      const srcA = shuffled[i].id.split(".")[0]
+      for (let j = i + 1; j < shuffled.length && groupCount < MAX_PER_GROUP; j++) {
+        const srcB = shuffled[j].id.split(".")[0]
         if (srcA === srcB) continue
-        const a = members[i], b = members[j]
+        const a = shuffled[i], b = shuffled[j]
         const key = canonicalKey(a.id, b.id)
         if (seen.has(key) || existingEdges.has(key) || cache.pairs[key]) continue
 
