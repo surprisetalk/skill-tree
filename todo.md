@@ -20,3 +20,4 @@
 - [ ] which skills are most valuable? use occupation salaries
 - [x] USE VECTOR EMBEDDINGS TO MERGE SKILLS
 - [x] let's run every skill through a local llm to fill out more cols/dims and then use a local llm to find prerequisite pairs (infer_prereqs.ts: Dice similarity candidate selection + Claude Haiku confirmation, cached to data/llm_prereqs.json)
+- [x] graph-quality pipeline (pipeline.ts): dedup_standards → csp_hierarchy → semantic_bridges → csp_refine_grades → break_cycles → validate. Orphan rate 72.6% → 5.7%, 0 cycles.
