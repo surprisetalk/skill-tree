@@ -1,0 +1,848 @@
+{"label":"16 Personality Factor Questionnaire","qid":"","parents":[]}
+{"label":"2-digit numbers divided by 2-digit numbers","qid":"","parents":[]}
+{"label":"2-digit place value challenge","qid":"","parents":[]}
+{"label":"2-step estimation word problems","qid":"","parents":[]}
+{"label":"2-step word problems","qid":"","parents":[]}
+{"label":"3-digit place value challenge","qid":"","parents":[]}
+{"label":"6 items and the 6th item","qid":"","parents":[]}
+{"label":"Abel's theorem","qid":"Q318767","parents":[]}
+{"label":"Abnormal Behavior","qid":"Q102186784","parents":[{"qid":"Q51714514","label":"problem behavior"}]}
+{"label":"Absolute minima & maxima (closed intervals)","qid":"","parents":[]}
+{"label":"Absolute value of complex numbers","qid":"","parents":[]}
+{"label":"Absolute value to find distance","qid":"","parents":[]}
+{"label":"Absolute value to find distance challenge","qid":"","parents":[]}
+{"label":"Acceleration","qid":"Q11376","parents":[{"qid":"Q107715","label":"physical quantity"},{"qid":"Q30337763","label":"ISQ derived quantity"},{"qid":"Q2672914","label":"vector quantity"}]}
+{"label":"Accumulation of change","qid":"","parents":[]}
+{"label":"Accuracy and precision","qid":"Q272035","parents":[{"qid":"Q192276","label":"measure"},{"qid":"Q2091629","label":"magnitude"}]}
+{"label":"Active Learning","qid":"Q4677561","parents":[{"qid":"Q1041418","label":"semi-supervised learning"},{"qid":"Q7098942","label":"optimal design"},{"qid":"Q28324931","label":"incremental learning"}]}
+{"label":"AdaBoost","qid":"Q2823869","parents":[]}
+{"label":"Add & subtract complex numbers","qid":"","parents":[]}
+{"label":"Add & subtract matrices","qid":"","parents":[]}
+{"label":"Add & subtract polynomials","qid":"","parents":[]}
+{"label":"Add & subtract polynomials: find the error","qid":"","parents":[]}
+{"label":"Add & subtract polynomials: two variables (intro)","qid":"","parents":[]}
+{"label":"Add & subtract rational expressions","qid":"","parents":[]}
+{"label":"Add & subtract rational expressions: factored denominators","qid":"","parents":[]}
+{"label":"Add & subtract rational expressions: like denominators","qid":"","parents":[]}
+{"label":"Add & subtract rational expressions: unlike denominators","qid":"","parents":[]}
+{"label":"Add & subtract vectors","qid":"","parents":[]}
+{"label":"Add 1 or 10","qid":"","parents":[]}
+{"label":"Add 10s and 100s (no regrouping)","qid":"","parents":[]}
+{"label":"Add 1s or 10s (no regrouping)","qid":"","parents":[]}
+{"label":"Add 2- and 3-digit numbers (no regrouping)","qid":"","parents":[]}
+{"label":"Add 2-digit numbers (no regrouping)","qid":"","parents":[]}
+{"label":"Add 2-digit numbers by making tens","qid":"","parents":[]}
+{"label":"Add 2-digit numbers by making tens 2","qid":"","parents":[]}
+{"label":"Add 3 numbers","qid":"","parents":[]}
+{"label":"Add and subtract fractions challenge","qid":"","parents":[]}
+{"label":"Add and subtract fractions word problems (same denominator)","qid":"","parents":[]}
+{"label":"Add and subtract mixed numbers (no regrouping)","qid":"","parents":[]}
+{"label":"Add and subtract mixed numbers with unlike denominators (no regrouping)","qid":"","parents":[]}
+{"label":"Add and subtract on a number line","qid":"","parents":[]}
+{"label":"Add and subtract on the number line word problems","qid":"","parents":[]}
+{"label":"Add and subtract using a number line","qid":"","parents":[]}
+{"label":"Add and subtract within 100 word problems 1","qid":"","parents":[]}
+{"label":"Add and subtract within 100 word problems 2","qid":"","parents":[]}
+{"label":"Add and subtract within 100 word problems 3","qid":"","parents":[]}
+{"label":"Add decimals like 0.7+0.5","qid":"","parents":[]}
+{"label":"Add decimals like 0.76+0.21","qid":"","parents":[]}
+{"label":"Add decimals like 4+5.7","qid":"","parents":[]}
+{"label":"Add decimals like 40.1+7.6","qid":"","parents":[]}
+{"label":"Add decimals like 47.75+11.98","qid":"","parents":[]}
+{"label":"Add decimals like 5.53+6.1","qid":"","parents":[]}
+{"label":"Add decimals visually","qid":"","parents":[]}
+{"label":"Add fractions (denominators 10 & 100)","qid":"","parents":[]}
+{"label":"Add fractions with common denominators","qid":"","parents":[]}
+{"label":"Add fractions with unlike denominators","qid":"","parents":[]}
+{"label":"Add using groups of 10 and 100","qid":"","parents":[]}
+{"label":"Add within 10","qid":"","parents":[]}
+{"label":"Add within 1000","qid":"","parents":[]}
+{"label":"Add within 20","qid":"","parents":[]}
+{"label":"Add within 5","qid":"","parents":[]}
+{"label":"Adding & subtracting decimals word problems","qid":"","parents":[]}
+{"label":"Adding & subtracting in scientific notation","qid":"","parents":[]}
+{"label":"Adding & subtracting negative fractions","qid":"","parents":[]}
+{"label":"Adding & subtracting negative numbers","qid":"","parents":[]}
+{"label":"Adding Fractions with Different Denominators","qid":"","parents":[]}
+{"label":"Adding Fractions with the Same Denominator 2","qid":"","parents":[]}
+{"label":"Adding and Subtracting Fractions with Different Denominators - Mixed Exercises","qid":"","parents":[]}
+{"label":"Adding and Subtracting Fractions with Integer Multiples - Mixed Exercises","qid":"","parents":[]}
+{"label":"Adding and subtracting fractions with common denominators","qid":"","parents":[]}
+{"label":"Adding and subtracting fractions with different denominators","qid":"","parents":[]}
+{"label":"Adding decimals: hundredths","qid":"","parents":[]}
+{"label":"Adding decimals: tenths","qid":"","parents":[]}
+{"label":"Adding decimals: thousandths","qid":"","parents":[]}
+{"label":"Adding negative numbers","qid":"","parents":[]}
+{"label":"Adding negative numbers on the number line","qid":"","parents":[]}
+{"label":"Addition & subtraction: find the missing value","qid":"","parents":[]}
+{"label":"Addition Whole Numbers","qid":"","parents":[]}
+{"label":"Addition and Subtraction Fractions","qid":"","parents":[]}
+{"label":"Addition and Subtraction Integers","qid":"","parents":[]}
+{"label":"Addition and Subtraction Positive Decimals","qid":"","parents":[]}
+{"label":"Addition and Subtraction of Fractions with Unlike Denominators","qid":"","parents":[]}
+{"label":"Addition and Subtraction of Linear Expressions","qid":"","parents":[]}
+{"label":"Addition and Subtraction of Radicals: Combining Like Terms","qid":"","parents":[]}
+{"label":"Addition and Subtraction of Radicals: Simplify Then Combine","qid":"","parents":[]}
+{"label":"Addition and subtraction of angles","qid":"","parents":[]}
+{"label":"Addition and subtraction of large numbers","qid":"","parents":[]}
+{"label":"Addition and subtraction of three numbers","qid":"","parents":[]}
+{"label":"Addition and subtraction of time comprehensive problems","qid":"","parents":[]}
+{"label":"Addition and subtraction of time quantities","qid":"","parents":[]}
+{"label":"Addition and subtraction on a number line","qid":"","parents":[]}
+{"label":"Addition and subtraction practice with large numbers","qid":"","parents":[]}
+{"label":"Addition and subtraction with absolute values","qid":"","parents":[]}
+{"label":"Addition and subtraction word problems 1","qid":"","parents":[]}
+{"label":"Addition and subtraction word problems 2","qid":"","parents":[]}
+{"label":"Addition of Polynomials","qid":"","parents":[]}
+{"label":"Addition of fractions with same denominator 1","qid":"","parents":[]}
+{"label":"Addition of fractions with same denominator computation","qid":"","parents":[]}
+{"label":"Addition of one-decimal-place numbers 2","qid":"","parents":[]}
+{"label":"Addition of opposite-sign numbers","qid":"","parents":[]}
+{"label":"Addition of same-sign numbers","qid":"","parents":[]}
+{"label":"Addition of two-decimal-place numbers","qid":"","parents":[]}
+{"label":"Addition practice within 100,000","qid":"","parents":[]}
+{"label":"Addition within 10,000","qid":"","parents":[]}
+{"label":"Addition word problems within 10","qid":"","parents":[]}
+{"label":"Addition/Subtraction Expression: Left-to-Right Calculation","qid":"","parents":[]}
+{"label":"Addition/Subtraction Expression: Parentheses First","qid":"","parents":[]}
+{"label":"Addition/Subtraction or Multiplication/Division Only: With Parentheses","qid":"","parents":[]}
+{"label":"Addition/Subtraction or Multiplication/Division Only: Without Parentheses","qid":"","parents":[]}
+{"label":"Addition/subtraction method 1","qid":"","parents":[]}
+{"label":"Addition/subtraction method 2","qid":"","parents":[]}
+{"label":"Addition/subtraction method: direct addition or subtraction","qid":"","parents":[]}
+{"label":"Adjacent sides, opposite sides, opposite angles, and diagonals of quadrilaterals","qid":"","parents":[]}
+{"label":"Age Problems","qid":"","parents":[]}
+{"label":"Age Problems 1","qid":"","parents":[]}
+{"label":"Age Problems 2","qid":"","parents":[]}
+{"label":"Age word problems","qid":"","parents":[]}
+{"label":"Akaike information criterion","qid":"Q1662573","parents":[]}
+{"label":"Algebraic Proofs 1","qid":"","parents":[]}
+{"label":"Algebraic Proofs 2","qid":"","parents":[]}
+{"label":"Algebraic Simplification","qid":"","parents":[]}
+{"label":"Algebraic Solving","qid":"","parents":[]}
+{"label":"Algebraic equation","qid":"Q50698","parents":[{"qid":"Q11345","label":"equation"}]}
+{"label":"Algebraic expression","qid":"Q4724001","parents":[{"qid":"Q777407","label":"closed-form expression"}]}
+{"label":"Algebraic function","qid":"Q746863","parents":[{"qid":"Q215084","label":"analytic function"},{"qid":"Q824282","label":"elementary function"}]}
+{"label":"Algebraic method","qid":"","parents":[]}
+{"label":"Algebraic number","qid":"Q168817","parents":[{"qid":"Q11567","label":"complex number"},{"qid":"Q135457975","label":"computable complex number"}]}
+{"label":"Algebraic operation","qid":"Q3854337","parents":[{"qid":"Q3884033","label":"mathematical operation"}]}
+{"label":"Altitude (triangle)","qid":"","parents":[]}
+{"label":"Alzheimer's Disease","qid":"Q11081","parents":[{"qid":"Q2397106","label":"tauopathy"},{"qid":"Q438962","label":"aging-associated disease"},{"qid":"Q12136","label":"disease"}]}
+{"label":"Amplitude","qid":"Q159190","parents":[{"qid":"Q107715","label":"physical quantity"}]}
+{"label":"Amplitude of sinusoidal functions from equation","qid":"","parents":[]}
+{"label":"Analyze concavity","qid":"","parents":[]}
+{"label":"Analyze functions (calculator-active)","qid":"","parents":[]}
+{"label":"Analyze quadrilaterals","qid":"","parents":[]}
+{"label":"Analyze scalar multiplication","qid":"","parents":[]}
+{"label":"Analyze vertical asymptotes of rational functions","qid":"","parents":[]}
+{"label":"Analyzing motion problems (integral calculus)","qid":"","parents":[]}
+{"label":"Analyzing problems involving definite integrals","qid":"","parents":[]}
+{"label":"Analyzing related rates problems: equations","qid":"","parents":[]}
+{"label":"Analyzing related rates problems: expressions","qid":"","parents":[]}
+{"label":"Analyzing structure with linear inequalities","qid":"","parents":[]}
+{"label":"Angle","qid":"Q37293951","parents":[]}
+{"label":"Angle Between Circumcenter and Triangle Vertices","qid":"","parents":[]}
+{"label":"Angle basics","qid":"","parents":[]}
+{"label":"Angle between tangent and chord","qid":"","parents":[]}
+{"label":"Angle comprehensive problems","qid":"","parents":[]}
+{"label":"Angle formed by secants outside circle","qid":"","parents":[]}
+{"label":"Angle of complex numbers","qid":"","parents":[]}
+{"label":"Angle of incidence","qid":"Q1196575","parents":[{"qid":"Q1357788","label":"angular measure"}]}
+{"label":"Angle relationships with parallel lines","qid":"","parents":[]}
+{"label":"Angle types","qid":"","parents":[]}
+{"label":"Angles in circles","qid":"","parents":[]}
+{"label":"Angles of a polygon","qid":"","parents":[]}
+{"label":"Angles on Parallel Lines Cut by a Transversal","qid":"","parents":[]}
+{"label":"Angles, Squares, and Rectangles - Mixed Exercises","qid":"","parents":[]}
+{"label":"Animal Instinct","qid":"Q134722193","parents":[]}
+{"label":"Annotated Example","qid":"","parents":[]}
+{"label":"Antiderivatives and indefinite integrals","qid":"","parents":[]}
+{"label":"Application Problems of Continued Proportion Equations","qid":"","parents":[]}
+{"label":"Application Problems of Direct and Inverse Proportion","qid":"","parents":[]}
+{"label":"Application Problems of Fraction Operations","qid":"","parents":[]}
+{"label":"Application Problems of Proportion Equations","qid":"","parents":[]}
+{"label":"Application Problems with Polynomials","qid":"","parents":[]}
+{"label":"Application of addition and subtraction within 100,000","qid":"","parents":[]}
+{"label":"Application of angles formed by secants","qid":"","parents":[]}
+{"label":"Application of central angles","qid":"","parents":[]}
+{"label":"Application of chord-to-center distance","qid":"","parents":[]}
+{"label":"Application of circle properties","qid":"","parents":[]}
+{"label":"Application of common tangents","qid":"","parents":[]}
+{"label":"Application of commutative and associative properties","qid":"","parents":[]}
+{"label":"Application of commutative and associative properties of multiplication","qid":"","parents":[]}
+{"label":"Application of decimal division","qid":"","parents":[]}
+{"label":"Application of decimal multiplication","qid":"","parents":[]}
+{"label":"Application of distributive property","qid":"","parents":[]}
+{"label":"Application of inscribed angles","qid":"","parents":[]}
+{"label":"Application of integer division by integer","qid":"","parents":[]}
+{"label":"Application of kilometers","qid":"","parents":[]}
+{"label":"Application of parallel line transversal properties","qid":"","parents":[]}
+{"label":"Application of special triangles","qid":"","parents":[]}
+{"label":"Application of two-circle position relationships","qid":"","parents":[]}
+{"label":"Application problems involving function graphs","qid":"","parents":[]}
+{"label":"Application problems involving inequalities","qid":"","parents":[]}
+{"label":"Application problems involving speed","qid":"","parents":[]}
+{"label":"Application problems of time multiplication and division 1","qid":"","parents":[]}
+{"label":"Application problems of time multiplication and division 2","qid":"","parents":[]}
+{"label":"Applications of Adding and Subtracting Fractions","qid":"","parents":[]}
+{"label":"Applications of Adding and Subtracting Fractions with Different Denominators","qid":"","parents":[]}
+{"label":"Applications of Arithmetic Sequence","qid":"","parents":[]}
+{"label":"Applications of Arithmetic Series","qid":"","parents":[]}
+{"label":"Applications of Centroid Properties","qid":"","parents":[]}
+{"label":"Applications of Circle Area","qid":"","parents":[]}
+{"label":"Applications of Distance Formula","qid":"","parents":[]}
+{"label":"Applications of Dividing Fractions - Multiples and Time Units","qid":"","parents":[]}
+{"label":"Applications of Dividing Fractions - Unknown Divisor or Multiplicand","qid":"","parents":[]}
+{"label":"Applications of Dividing Fractions: Equal Division and Partitioning","qid":"","parents":[]}
+{"label":"Applications of Dividing Fractions: Ratio, Area, and Equivalence Problems","qid":"","parents":[]}
+{"label":"Applications of Dividing Fractions: Two-Step Combined Expressions","qid":"","parents":[]}
+{"label":"Applications of Fraction Number Lines","qid":"","parents":[]}
+{"label":"Applications of Greatest Common Divisor","qid":"","parents":[]}
+{"label":"Applications of Integer Division","qid":"","parents":[]}
+{"label":"Applications of Large Area Units in Daily Life","qid":"","parents":[]}
+{"label":"Applications of Least Common Multiple","qid":"","parents":[]}
+{"label":"Applications of Metric Tons and Kilograms in Daily Life","qid":"","parents":[]}
+{"label":"Applications of Perfect Square Trinomial (Difference)","qid":"","parents":[]}
+{"label":"Applications of Perimeter and Area","qid":"","parents":[]}
+{"label":"Applications of Polynomial Addition and Subtraction","qid":"","parents":[]}
+{"label":"Applications of Proportional Segments Intercepted by Parallel Lines","qid":"","parents":[]}
+{"label":"Applications of Pythagorean Theorem 1","qid":"","parents":[]}
+{"label":"Applications of Ratio","qid":"","parents":[]}
+{"label":"Applications of Ratio and Ratio Value","qid":"","parents":[]}
+{"label":"Applications of Ratios 1","qid":"","parents":[]}
+{"label":"Applications of Ratios 2","qid":"","parents":[]}
+{"label":"Applications of Rectangular Prism and Cube Volume","qid":"","parents":[]}
+{"label":"Applications of Similar Triangles","qid":"","parents":[]}
+{"label":"Applications of Square Root","qid":"","parents":[]}
+{"label":"Applications of Triangle Area 1","qid":"","parents":[]}
+{"label":"Applications of Triangle Similarity Properties","qid":"","parents":[]}
+{"label":"Applications of Weight","qid":"","parents":[]}
+{"label":"Applications of addition and subtraction 1","qid":"","parents":[]}
+{"label":"Applications of addition and subtraction with large numbers","qid":"","parents":[]}
+{"label":"Applications of addition of fractions with same denominator","qid":"","parents":[]}
+{"label":"Applications of angle addition and subtraction","qid":"","parents":[]}
+{"label":"Applications of area formulas","qid":"","parents":[]}
+{"label":"Applications of circles","qid":"","parents":[]}
+{"label":"Applications of common factors","qid":"","parents":[]}
+{"label":"Applications of common multiples","qid":"","parents":[]}
+{"label":"Applications of division","qid":"","parents":[]}
+{"label":"Applications of exponents","qid":"","parents":[]}
+{"label":"Applications of factors","qid":"","parents":[]}
+{"label":"Applications of fraction addition and subtraction","qid":"","parents":[]}
+{"label":"Applications of function values","qid":"","parents":[]}
+{"label":"Applications of greatest common factor","qid":"","parents":[]}
+{"label":"Applications of inequalities","qid":"","parents":[]}
+{"label":"Applications of integer multiples of fractions","qid":"","parents":[]}
+{"label":"Applications of interior, exterior, and boundary of figures","qid":"","parents":[]}
+{"label":"Applications of linear equations in two variables","qid":"","parents":[]}
+{"label":"Applications of linear functions","qid":"","parents":[]}
+{"label":"Applications of multiples","qid":"","parents":[]}
+{"label":"Applications of negative numbers","qid":"","parents":[]}
+{"label":"Applications of perimeter","qid":"","parents":[]}
+{"label":"Applications of prime factors","qid":"","parents":[]}
+{"label":"Applications of quadratic function graphs","qid":"","parents":[]}
+{"label":"Applications of subtraction of fractions with same denominator","qid":"","parents":[]}
+{"label":"Applications of the discriminant","qid":"","parents":[]}
+{"label":"Applications of triangle area 2","qid":"","parents":[]}
+{"label":"Applied Problems on Capacity","qid":"","parents":[]}
+{"label":"Appropriate units","qid":"","parents":[]}
+{"label":"Approximating square roots","qid":"","parents":[]}
+{"label":"Approximating with powers of 10","qid":"","parents":[]}
+{"label":"Approximation in daily life","qid":"","parents":[]}
+{"label":"Apriori algorithm","qid":"Q513511","parents":[]}
+{"label":"Arbitrary element","qid":"","parents":[]}
+{"label":"Arc (geometry)","qid":"","parents":[]}
+{"label":"Arc length","qid":"Q670036","parents":[{"qid":"Q36253","label":"length"},{"qid":"Q107715","label":"physical quantity"}]}
+{"label":"Arc length of polar curves","qid":"","parents":[]}
+{"label":"Arc measure","qid":"","parents":[]}
+{"label":"Arc measure with equations","qid":"","parents":[]}
+{"label":"Area & perimeter of rectangles word problems","qid":"","parents":[]}
+{"label":"Area & perimeter on the coordinate plane","qid":"","parents":[]}
+{"label":"Area Circle","qid":"","parents":[]}
+{"label":"Area Formulas for Rectangles and Squares","qid":"","parents":[]}
+{"label":"Area Irregular Figure","qid":"","parents":[]}
+{"label":"Area Rectangle","qid":"","parents":[]}
+{"label":"Area Trapezoid","qid":"","parents":[]}
+{"label":"Area Triangle","qid":"","parents":[]}
+{"label":"Area and Square Centimeters","qid":"","parents":[]}
+{"label":"Area and perimeter on the coordinate plane","qid":"","parents":[]}
+{"label":"Area between a curve and the x-axis","qid":"","parents":[]}
+{"label":"Area between two curves","qid":"","parents":[]}
+{"label":"Area between two curves given end points","qid":"","parents":[]}
+{"label":"Area between two polar curves","qid":"","parents":[]}
+{"label":"Area bounded by polar curves","qid":"","parents":[]}
+{"label":"Area bounded by polar curves intro","qid":"","parents":[]}
+{"label":"Area challenge","qid":"","parents":[]}
+{"label":"Area of a circle","qid":"Q4115331","parents":[{"qid":"Q15921574","label":"plane area"}]}
+{"label":"Area of circles","qid":"","parents":[]}
+{"label":"Area of composite figures","qid":"","parents":[]}
+{"label":"Area of composite shapes","qid":"","parents":[]}
+{"label":"Area of parallelograms","qid":"","parents":[]}
+{"label":"Area of parts of circles","qid":"","parents":[]}
+{"label":"Area of rectangles with fraction side lengths","qid":"","parents":[]}
+{"label":"Area of right triangles","qid":"","parents":[]}
+{"label":"Area of sectors","qid":"","parents":[]}
+{"label":"Area of sectors: comprehensive","qid":"","parents":[]}
+{"label":"Area of squares and rectangles","qid":"","parents":[]}
+{"label":"Area of trapezoids","qid":"","parents":[]}
+{"label":"Area of triangles","qid":"","parents":[]}
+{"label":"Area of triangles and quadrilaterals comprehensive problems","qid":"","parents":[]}
+{"label":"Area with polar functions (calculator-active)","qid":"","parents":[]}
+{"label":"Areas of shapes on grids","qid":"","parents":[]}
+{"label":"Arithmetic","qid":"Q12479","parents":[{"qid":"Q395","label":"mathematics"}]}
+{"label":"Arithmetic Operations of Numbers (Advanced)","qid":"","parents":[]}
+{"label":"Arithmetic Operations on Linear Expressions (General)","qid":"","parents":[]}
+{"label":"Arithmetic Operations on Polynomials","qid":"","parents":[]}
+{"label":"Arithmetic Operations with Exponents and Absolute Values","qid":"","parents":[]}
+{"label":"Arithmetic mean","qid":"Q19033","parents":[{"qid":"Q2796622","label":"mean"},{"qid":"Q3281360","label":"Pythagorean mean"},{"qid":"Q855729","label":"generalized mean"},{"qid":"Q729113","label":"weighted mean"},{"qid":"Q583095","label":"quasi-arithmetic mean"},{"qid":"Q1949963","label":"statistic"}]}
+{"label":"Arithmetic series","qid":"Q956213","parents":[{"qid":"Q170198","label":"series"}]}
+{"label":"Arithmetic series in sigma notation","qid":"","parents":[]}
+{"label":"Arousal","qid":"Q379784","parents":[{"qid":"Q9415","label":"emotion"},{"qid":"Q14859560","label":"response to stimulus"}]}
+{"label":"Arranging Polynomials in Ascending and Descending Powers","qid":"","parents":[]}
+{"label":"Associative Learning","qid":"Q14330970","parents":[{"qid":"Q133500","label":"learning"}]}
+{"label":"Astronomy","qid":"Q333","parents":[{"qid":"Q14632398","label":"physical science"},{"qid":"Q475023","label":"exact science"},{"qid":"Q7991","label":"natural science"},{"qid":"Q336","label":"science"}]}
+{"label":"Attitude Change","qid":"Q4818546","parents":[{"qid":"Q3769299","label":"human behavior"}]}
+{"label":"Attraction","qid":"Q1144661","parents":[{"qid":"Q1183543","label":"appliance"},{"qid":"Q811979","label":"architectural structure"},{"qid":"Q2800000","label":"attraction"},{"qid":"Q13226383","label":"facility"}]}
+{"label":"Attribution","qid":"Q230768","parents":[{"qid":"Q180160","label":"metadata"}]}
+{"label":"Auditory Attention","qid":"","parents":[]}
+{"label":"Average concentration problems","qid":"","parents":[]}
+{"label":"Average rate of change word problems","qid":"","parents":[]}
+{"label":"Average rate of change: graphs & tables","qid":"","parents":[]}
+{"label":"Average speed","qid":"Q1267186","parents":[{"qid":"Q2796622","label":"mean"},{"qid":"Q3711325","label":"speed"}]}
+{"label":"Average value of a function","qid":"","parents":[]}
+{"label":"Axiom of Choice","qid":"Q179692","parents":[]}
+{"label":"B-tree","qid":"Q677051","parents":[{"qid":"Q4544940","label":"(a,b)-tree"},{"qid":"Q621673","label":"search tree"},{"qid":"Q29791656","label":"balanced tree"},{"qid":"Q29793859","label":"BV-tree"},{"qid":"Q175263","label":"data structure"}]}
+{"label":"BASIC","qid":"","parents":[]}
+{"label":"Base Quantity and Comparison Quantity","qid":"","parents":[]}
+{"label":"Basic Concept of Continued Ratio","qid":"","parents":[]}
+{"label":"Basic Skills","qid":"Q4867051","parents":[{"qid":"Q205961","label":"skill"}]}
+{"label":"Basic applications of decimal division","qid":"","parents":[]}
+{"label":"Basic calculations of ratios","qid":"","parents":[]}
+{"label":"Basic concepts of time","qid":"","parents":[]}
+{"label":"Basic derivative rules: find the error","qid":"","parents":[]}
+{"label":"Basic derivative rules: table","qid":"","parents":[]}
+{"label":"Basic division","qid":"","parents":[]}
+{"label":"Basic multi-digit division","qid":"","parents":[]}
+{"label":"Basic multiplication","qid":"","parents":[]}
+{"label":"Basic ratios","qid":"","parents":[]}
+{"label":"Basic set notation","qid":"","parents":[]}
+{"label":"Basis (linear algebra)","qid":"","parents":[]}
+{"label":"Bayes Ball","qid":"","parents":[]}
+{"label":"Bayes net parameter learning","qid":"","parents":[]}
+{"label":"Bayes net structure learning","qid":"","parents":[]}
+{"label":"Bayes' rule","qid":"Q182505","parents":[]}
+{"label":"Bayes' theorem","qid":"Q182505","parents":[]}
+{"label":"Bayesian PCA","qid":"Q77696557","parents":[]}
+{"label":"Bayesian decision theory","qid":"","parents":[]}
+{"label":"Bayesian estimation of Bayes net parameters","qid":"","parents":[]}
+{"label":"Bayesian information criterion","qid":"Q1988242","parents":[]}
+{"label":"Bayesian linear regression","qid":"Q4874474","parents":[{"qid":"Q10861030","label":"linear regression"}]}
+{"label":"Bayesian logistic regression","qid":"","parents":[]}
+{"label":"Bayesian naive Bayes","qid":"","parents":[]}
+{"label":"Bayesian networks","qid":"Q812540","parents":[]}
+{"label":"Bayesian parameter estimation","qid":"","parents":[]}
+{"label":"Bayesian parameter estimation in exponential families","qid":"","parents":[]}
+{"label":"Bayesian parameter estimation: Gaussian distribution","qid":"","parents":[]}
+{"label":"Bayesian parameter estimation: multinomial distribution","qid":"","parents":[]}
+{"label":"Bayesian parameter estimation: multivariate Gaussians","qid":"","parents":[]}
+{"label":"Behavioral Control","qid":"","parents":[]}
+{"label":"Behavioral Potential","qid":"","parents":[]}
+{"label":"Behaviorism","qid":"Q168338","parents":[{"qid":"Q42240","label":"research"}]}
+{"label":"Bellman equations","qid":"","parents":[]}
+{"label":"Benchmark angles","qid":"","parents":[]}
+{"label":"Bernoulli trial","qid":"Q1077800","parents":[]}
+{"label":"Biclustering","qid":"Q2976575","parents":[{"qid":"Q622825","label":"cluster analysis"}]}
+{"label":"Binary logarithm","qid":"Q581168","parents":[{"qid":"Q11197","label":"logarithm"}]}
+{"label":"Binary number","qid":"Q3913","parents":[{"qid":"Q864135","label":"binary code"}]}
+{"label":"Binomial theorem","qid":"Q114727876","parents":[]}
+{"label":"Bioethics","qid":"Q194294","parents":[{"qid":"Q9465","label":"ethics"},{"qid":"Q538733","label":"applied ethics"}]}
+{"label":"Biology","qid":"Q420","parents":[{"qid":"Q7991","label":"natural science"},{"qid":"Q864928","label":"life sciences"}]}
+{"label":"Biomedicine","qid":"Q864601","parents":[{"qid":"Q11190","label":"medicine"},{"qid":"Q420","label":"biology"}]}
+{"label":"Bisection","qid":"Q3128632","parents":[{"qid":"Q25931602","label":"bifurcation"}]}
+{"label":"Boltzmann machines","qid":"","parents":[]}
+{"label":"Boolean algebras","qid":"","parents":[]}
+{"label":"Bootstrap aggregating","qid":"Q799897","parents":[]}
+{"label":"Box and Whisker","qid":"","parents":[]}
+{"label":"Brain Activity","qid":"","parents":[]}
+{"label":"Brand Preference","qid":"Q4956585","parents":[]}
+{"label":"Break apart 2-digit addition problems","qid":"","parents":[]}
+{"label":"Break apart 3-digit addition problems","qid":"","parents":[]}
+{"label":"Building and Construction","qid":"","parents":[]}
+{"label":"Buying and selling problems","qid":"","parents":[]}
+{"label":"Calculating Direct Proportion","qid":"","parents":[]}
+{"label":"Calculating Inverse Proportion","qid":"","parents":[]}
+{"label":"Calculating Quotient and Remainder in Polynomial Division","qid":"","parents":[]}
+{"label":"Calculating perimeter","qid":"","parents":[]}
+{"label":"Calculating the mean","qid":"","parents":[]}
+{"label":"Calculating the mean: data displays","qid":"","parents":[]}
+{"label":"Calculating the median","qid":"","parents":[]}
+{"label":"Calculating z-scores","qid":"","parents":[]}
+{"label":"Calculation of price increase, markup, and interest","qid":"","parents":[]}
+{"label":"Calculations of Direct and Inverse Proportion","qid":"","parents":[]}
+{"label":"Calculations with Similar Figures","qid":"","parents":[]}
+{"label":"Cancel zeros when dividing","qid":"","parents":[]}
+{"label":"Capacitance","qid":"Q164399","parents":[{"qid":"Q181175","label":"scalar quantity"},{"qid":"Q107715","label":"physical quantity"}]}
+{"label":"Capacitor","qid":"Q5322","parents":[{"qid":"Q11653","label":"electronic component"},{"qid":"Q6867168","label":"passive electronic component"},{"qid":"Q233003","label":"one-port circuit"}]}
+{"label":"Career Development Education","qid":"","parents":[]}
+{"label":"Cartesian coordinate system","qid":"Q62912","parents":[{"qid":"Q2588831","label":"orthogonal coordinate system"},{"qid":"Q91321041","label":"rectilinear coordinate system"}]}
+{"label":"Cases of solutions for linear equations in two variables","qid":"","parents":[]}
+{"label":"Cauchy criterion","qid":"","parents":[]}
+{"label":"Cauchy mean value theorem","qid":"Q3984001","parents":[]}
+{"label":"Center & radii of ellipses from equation","qid":"","parents":[]}
+{"label":"Centimeter and millimeter addition","qid":"","parents":[]}
+{"label":"Centimeter and millimeter conversion and comparison","qid":"","parents":[]}
+{"label":"Centimeter and millimeter subtraction","qid":"","parents":[]}
+{"label":"Central Facial Palsy","qid":"Q5062095","parents":[{"qid":"Q7562539","label":"facial paralysis"}]}
+{"label":"Central tendency","qid":"Q734219","parents":[{"qid":"Q28873709","label":"descriptive statistic"}]}
+{"label":"Centroid of Triangle","qid":"","parents":[]}
+{"label":"Chain rule intro","qid":"","parents":[]}
+{"label":"Chain rule with tables","qid":"","parents":[]}
+{"label":"Challenging add and subtract word problems (within 100)","qid":"","parents":[]}
+{"label":"Chemistry","qid":"","parents":[]}
+{"label":"Chernoff bounds","qid":"Q1070305","parents":[]}
+{"label":"Chicken and rabbit problem","qid":"","parents":[]}
+{"label":"Chickens and Rabbits Problems 1","qid":"","parents":[]}
+{"label":"Chickens and Rabbits Problems 2","qid":"","parents":[]}
+{"label":"Childhood","qid":"","parents":[]}
+{"label":"Chinese restaurant franchise","qid":"","parents":[]}
+{"label":"Chinese restaurant process","qid":"Q4407236","parents":[{"qid":"Q176737","label":"stochastic process"}]}
+{"label":"Cholesky decomposition","qid":"Q515375","parents":[{"qid":"Q1361088","label":"matrix decomposition"}]}
+{"label":"Choose an Equation from Given Information","qid":"","parents":[]}
+{"label":"Chord (geometry)","qid":"","parents":[]}
+{"label":"Chord, arc, and central angle","qid":"","parents":[]}
+{"label":"Chow-Liu trees","qid":"","parents":[]}
+{"label":"Church-Turing thesis","qid":"Q309157","parents":[]}
+{"label":"Circle Graph","qid":"Q5121450","parents":[{"qid":"Q7623978","label":"string graph"},{"qid":"Q7226422","label":"polygon-circle graph"},{"qid":"Q96415513","label":"word-representable graph"}]}
+{"label":"Circular motion","qid":"Q715746","parents":[{"qid":"Q2995427","label":"rotation around a fixed axis"}]}
+{"label":"Circular sector","qid":"Q203435","parents":[{"qid":"Q4365210","label":"plane figure"}]}
+{"label":"Circumcenter and Incenter of Polygons","qid":"","parents":[]}
+{"label":"Circumcenter of Triangle","qid":"","parents":[]}
+{"label":"Circumference","qid":"Q28474","parents":[{"qid":"Q670036","label":"arc length"},{"qid":"Q63344712","label":"geometric property"}]}
+{"label":"Circumference of a circle","qid":"Q138209048","parents":[{"qid":"Q843905","label":"circumference"}]}
+{"label":"Circumradius of Triangle","qid":"","parents":[]}
+{"label":"Classification of Three-Dimensional Shapes","qid":"","parents":[]}
+{"label":"Classification of quadrilaterals","qid":"","parents":[]}
+{"label":"Classification of triangles","qid":"","parents":[]}
+{"label":"Classification rule","qid":"Q1744627","parents":[{"qid":"Q8366","label":"algorithm"},{"qid":"Q11348","label":"function"},{"qid":"Q1151067","label":"rule"}]}
+{"label":"Classify complex numbers","qid":"","parents":[]}
+{"label":"Classify discontinuities","qid":"","parents":[]}
+{"label":"Classify numbers: rational & irrational","qid":"","parents":[]}
+{"label":"Classify shapes by line and angle types","qid":"","parents":[]}
+{"label":"Clustering high-dimensional data","qid":"Q5136711","parents":[]}
+{"label":"Cognitive Anxiety","qid":"","parents":[]}
+{"label":"Cognitive Behavioral Therapy","qid":"Q1147152","parents":[{"qid":"Q16262180","label":"behavior therapy"},{"qid":"Q183257","label":"psychotherapy"},{"qid":"Q199906","label":"clinical psychology"},{"qid":"Q538904","label":"applied psychology"},{"qid":"Q3919817","label":"behavioral sciences"},{"qid":"Q2354820","label":"evidence-based practice"},{"qid":"Q147638","label":"cognitive science"}]}
+{"label":"Cognitive Dissonance Theory","qid":"","parents":[]}
+{"label":"Cognitive Insight Therapy","qid":"","parents":[]}
+{"label":"Cognitive Process","qid":"Q2200417","parents":[{"qid":"Q781413","label":"cognitive process"},{"qid":"Q14912053","label":"nervous system process"}]}
+{"label":"Cognitive Style","qid":"Q2380771","parents":[]}
+{"label":"Cognitive appraisal","qid":"Q5141187","parents":[]}
+{"label":"Collectivism","qid":"Q237789","parents":[]}
+{"label":"Collinearity","qid":"Q1419761","parents":[{"qid":"Q63344712","label":"geometric property"}]}
+{"label":"Collision","qid":"Q238053","parents":[{"qid":"Q1190554","label":"occurrence"},{"qid":"Q52948","label":"interaction"}]}
+{"label":"Color","qid":"Q22006653","parents":[{"qid":"Q1439691","label":"photographic technique"},{"qid":"Q1001378","label":"cinematic technique"}]}
+{"label":"Combination coefficient","qid":"","parents":[]}
+{"label":"Combined vector operations","qid":"","parents":[]}
+{"label":"Combining like terms","qid":"","parents":[]}
+{"label":"Combining like terms with distribution","qid":"","parents":[]}
+{"label":"Combining like terms with negative coefficients","qid":"","parents":[]}
+{"label":"Combining like terms with negative coefficients & distribution","qid":"","parents":[]}
+{"label":"Combining like terms with rational coefficients","qid":"","parents":[]}
+{"label":"Common Denominators and Comparing Fractions with Different Denominators 1","qid":"","parents":[]}
+{"label":"Common Denominators and Comparing Fractions with Different Denominators 2","qid":"","parents":[]}
+{"label":"Common denominators","qid":"","parents":[]}
+{"label":"Common factors and greatest common factor","qid":"","parents":[]}
+{"label":"Common fractions and decimals","qid":"","parents":[]}
+{"label":"Common line-symmetric figures","qid":"","parents":[]}
+{"label":"Common multiples and least common multiple","qid":"","parents":[]}
+{"label":"Communication Psychology","qid":"Q20181823","parents":[{"qid":"Q9418","label":"psychology"}]}
+{"label":"Communications and Media","qid":"","parents":[]}
+{"label":"Commutative matrix","qid":"","parents":[]}
+{"label":"Commutative property of multiplication","qid":"","parents":[]}
+{"label":"Compare 2-digit numbers","qid":"","parents":[]}
+{"label":"Compare 2-digit numbers 2","qid":"","parents":[]}
+{"label":"Compare 3-digit numbers","qid":"","parents":[]}
+{"label":"Compare and order absolute values","qid":"","parents":[]}
+{"label":"Compare area and perimeter","qid":"","parents":[]}
+{"label":"Compare area with unit squares","qid":"","parents":[]}
+{"label":"Compare areas by multiplying","qid":"","parents":[]}
+{"label":"Compare decimal place value","qid":"","parents":[]}
+{"label":"Compare decimals (tenths and hundredths)","qid":"","parents":[]}
+{"label":"Compare decimals and fractions","qid":"","parents":[]}
+{"label":"Compare decimals challenge","qid":"","parents":[]}
+{"label":"Compare decimals through thousandths","qid":"","parents":[]}
+{"label":"Compare decimals visually","qid":"","parents":[]}
+{"label":"Compare decimals word problems","qid":"","parents":[]}
+{"label":"Compare features of functions","qid":"","parents":[]}
+{"label":"Compare fractions and mixed numbers","qid":"","parents":[]}
+{"label":"Compare fractions of different wholes","qid":"","parents":[]}
+{"label":"Compare fractions with different numerators and denominators","qid":"","parents":[]}
+{"label":"Compare fractions with the same numerator or denominator","qid":"","parents":[]}
+{"label":"Compare linear functions","qid":"","parents":[]}
+{"label":"Compare multi-digit numbers","qid":"","parents":[]}
+{"label":"Compare multi-digit numbers word problems","qid":"","parents":[]}
+{"label":"Compare numbers of objects 1","qid":"","parents":[]}
+{"label":"Compare numbers of objects 2","qid":"","parents":[]}
+{"label":"Compare numbers: place value challenge","qid":"","parents":[]}
+{"label":"Compare quadratic functions","qid":"","parents":[]}
+{"label":"Compare rational numbers","qid":"","parents":[]}
+{"label":"Compare shapes","qid":"","parents":[]}
+{"label":"Compare size","qid":"","parents":[]}
+{"label":"Compare with multiplication","qid":"","parents":[]}
+{"label":"Compare with multiplication word problems","qid":"","parents":[]}
+{"label":"Comparing Angle Sizes","qid":"","parents":[]}
+{"label":"Comparing Fraction Quantities","qid":"","parents":[]}
+{"label":"Comparing Fraction Sizes 2","qid":"","parents":[]}
+{"label":"Comparing Magnitudes","qid":"","parents":[]}
+{"label":"Comparing Magnitudes of Powers","qid":"","parents":[]}
+{"label":"Comparing Speeds","qid":"","parents":[]}
+{"label":"Comparing absolute values challenge","qid":"","parents":[]}
+{"label":"Comparing data displays","qid":"","parents":[]}
+{"label":"Comparing data distributions","qid":"","parents":[]}
+{"label":"Comparing distributions","qid":"","parents":[]}
+{"label":"Comparing fractions 1","qid":"","parents":[]}
+{"label":"Comparing fractions and decimals","qid":"","parents":[]}
+{"label":"Comparing fractions with same denominator","qid":"","parents":[]}
+{"label":"Comparing irrational numbers with a calculator","qid":"","parents":[]}
+{"label":"Comparing linear functions word problems","qid":"","parents":[]}
+{"label":"Comparing magnitudes of large numbers","qid":"","parents":[]}
+{"label":"Comparing magnitudes of numbers up to 100,000 (2)","qid":"","parents":[]}
+{"label":"Comparing magnitudes on number lines","qid":"","parents":[]}
+{"label":"Comparing numbers","qid":"","parents":[]}
+{"label":"Comparing numbers in scientific notation","qid":"","parents":[]}
+{"label":"Comparing numbers to 10","qid":"","parents":[]}
+{"label":"Comparing numbers within 10","qid":"","parents":[]}
+{"label":"Comparing numbers within 100,000 - 1","qid":"","parents":[]}
+{"label":"Comparing one-decimal-place numbers 1","qid":"","parents":[]}
+{"label":"Comparing one-decimal-place numbers 2","qid":"","parents":[]}
+{"label":"Comparing one-decimal-place numbers on a number line","qid":"","parents":[]}
+{"label":"Comparing probabilities","qid":"","parents":[]}
+{"label":"Comparing rates","qid":"","parents":[]}
+{"label":"Comparing simple fractions with different denominators 1","qid":"","parents":[]}
+{"label":"Comparing simple fractions with different denominators 2","qid":"","parents":[]}
+{"label":"Comparing two-decimal-place numbers","qid":"","parents":[]}
+{"label":"Comparing unit fractions","qid":"","parents":[]}
+{"label":"Comparison of Multiple Box Plots","qid":"","parents":[]}
+{"label":"Comparison of multi-digit decimals","qid":"","parents":[]}
+{"label":"Comparison of numbers and application","qid":"","parents":[]}
+{"label":"Compass and straightedge construction: Angles","qid":"","parents":[]}
+{"label":"Compass and straightedge construction: Perpendiculars and angle bisectors","qid":"","parents":[]}
+{"label":"Compass and straightedge construction: Segments","qid":"","parents":[]}
+{"label":"Complementary and Supplementary Angles","qid":"","parents":[]}
+{"label":"Complete solutions to 2-variable equations","qid":"","parents":[]}
+{"label":"Completing conditions to determine congruence","qid":"","parents":[]}
+{"label":"Complex","qid":"Q1497375","parents":[{"qid":"Q18247357","label":"group of structures or buildings"},{"qid":"Q618123","label":"geographical feature"}]}
+{"label":"Complex number conjugates","qid":"","parents":[]}
+{"label":"Complex numbers from absolute value & angle","qid":"","parents":[]}
+{"label":"Complex parallel line transversal properties","qid":"","parents":[]}
+{"label":"Complex parallelogram problems","qid":"","parents":[]}
+{"label":"Complex plane","qid":"Q328998","parents":[{"qid":"Q17285","label":"plane"}]}
+{"label":"Components of Cones","qid":"","parents":[]}
+{"label":"Components of Cylinders","qid":"","parents":[]}
+{"label":"Components of vectors","qid":"","parents":[]}
+{"label":"Compose shapes","qid":"","parents":[]}
+{"label":"Composite Figures with Multiple Right Triangles","qid":"","parents":[]}
+{"label":"Composite exponential function differentiation","qid":"","parents":[]}
+{"label":"Composite solids","qid":"","parents":[]}
+{"label":"Compound inequalities","qid":"","parents":[]}
+{"label":"Comprehensive Applications","qid":"","parents":[]}
+{"label":"Comprehensive Applications of Statistical Data","qid":"","parents":[]}
+{"label":"Comprehensive Capacity, Volume, and Cubic Capacity Problems","qid":"","parents":[]}
+{"label":"Comprehensive Cylinder Volume Problems","qid":"","parents":[]}
+{"label":"Comprehensive Multiplication and Division Problems","qid":"","parents":[]}
+{"label":"Comprehensive Sector Problems","qid":"","parents":[]}
+{"label":"Comprehensive Triangle Problems","qid":"","parents":[]}
+{"label":"Comprehensive Triangle and Polygon Problems","qid":"","parents":[]}
+{"label":"Comprehensive Triangle and Quadrilateral Area Problems","qid":"","parents":[]}
+{"label":"Comprehensive exercises on addition and subtraction up to 10,000","qid":"","parents":[]}
+{"label":"Comprehensive exercises on addition and subtraction within 10,000","qid":"","parents":[]}
+{"label":"Comprehensive exercises on approximation","qid":"","parents":[]}
+{"label":"Comprehensive exercises on calculations with two units","qid":"","parents":[]}
+{"label":"Comprehensive exercises on combined addition/subtraction and estimation","qid":"","parents":[]}
+{"label":"Comprehensive exercises on division by a single-digit number","qid":"","parents":[]}
+{"label":"Comprehensive exercises on division by single-digit numbers","qid":"","parents":[]}
+{"label":"Comprehensive exercises on equivalent fractions","qid":"","parents":[]}
+{"label":"Comprehensive exercises on estimation","qid":"","parents":[]}
+{"label":"Comprehensive exercises on expressing division of integers as fractions","qid":"","parents":[]}
+{"label":"Comprehensive exercises on fraction addition/subtraction and integer multiples","qid":"","parents":[]}
+{"label":"Comprehensive exercises on fraction multiplication","qid":"","parents":[]}
+{"label":"Comprehensive exercises on integer division","qid":"","parents":[]}
+{"label":"Comprehensive exercises on integer multiplication","qid":"","parents":[]}
+{"label":"Comprehensive exercises on integer number line","qid":"","parents":[]}
+{"label":"Comprehensive exercises on long multiplication","qid":"","parents":[]}
+{"label":"Comprehensive exercises on mixed numbers and improper fractions","qid":"","parents":[]}
+{"label":"Comprehensive exercises on mixed operations and estimation","qid":"","parents":[]}
+{"label":"Comprehensive exercises on multiplication and division of multi-digit numbers","qid":"","parents":[]}
+{"label":"Comprehensive exercises on multiplication: multiples and powers of ten/hundred","qid":"","parents":[]}
+{"label":"Comprehensive exercises on numbers 100 million and above","qid":"","parents":[]}
+{"label":"Comprehensive exercises on numbers over 100 million","qid":"","parents":[]}
+{"label":"Comprehensive exercises on numbers up to 10,000","qid":"","parents":[]}
+{"label":"Comprehensive exercises on numbers up to 100 million","qid":"","parents":[]}
+{"label":"Comprehensive exercises on numbers within 10,000","qid":"","parents":[]}
+{"label":"Comprehensive exercises on numbers within 100 million","qid":"","parents":[]}
+{"label":"Comprehensive exercises on understanding division","qid":"","parents":[]}
+{"label":"Comprehensive exercises on understanding fractions","qid":"","parents":[]}
+{"label":"Comprehensive exercises on vertical multiplication","qid":"","parents":[]}
+{"label":"Compression (physics)","qid":"","parents":[]}
+{"label":"Computation with Real Numbers","qid":"","parents":[]}
+{"label":"Computer Science","qid":"Q21198","parents":[{"qid":"Q816264","label":"formal science"}]}
+{"label":"Computer science and technology","qid":"","parents":[]}
+{"label":"Computers and Electronics","qid":"","parents":[]}
+{"label":"Computing function values","qid":"","parents":[]}
+{"label":"Computing integer multiples of fractions","qid":"","parents":[]}
+{"label":"Concavity intro","qid":"","parents":[]}
+{"label":"Concept Problems of Direct and Inverse Proportion","qid":"","parents":[]}
+{"label":"Concept of Probability","qid":"","parents":[]}
+{"label":"Concepts and applications of compass and straightedge construction","qid":"","parents":[]}
+{"label":"Concepts of linear inequalities","qid":"","parents":[]}
+{"label":"Conceptual understanding of linear functions","qid":"","parents":[]}
+{"label":"Conclusions from direct substitution (finding limits)","qid":"","parents":[]}
+{"label":"Conditions for IVT and EVT: graph","qid":"","parents":[]}
+{"label":"Conditions for MVT: graph","qid":"","parents":[]}
+{"label":"Cone","qid":"Q37299485","parents":[]}
+{"label":"Congruence","qid":"Q135073831","parents":[]}
+{"label":"Congruence & transformations","qid":"","parents":[]}
+{"label":"Congruent quadrilaterals and dividing parallelograms","qid":"","parents":[]}
+{"label":"Congruent segments","qid":"","parents":[]}
+{"label":"Congruent triangles and dividing isosceles triangles","qid":"","parents":[]}
+{"label":"Connecting f f' and f'' graphically","qid":"","parents":[]}
+{"label":"Connecting limits and graphical behavior","qid":"","parents":[]}
+{"label":"Consecutive Addition Expression","qid":"","parents":[]}
+{"label":"Consecutive Division Calculation Patterns","qid":"","parents":[]}
+{"label":"Consecutive Division Expression","qid":"","parents":[]}
+{"label":"Consecutive Division of Two Numbers Equals Division by Their Product","qid":"","parents":[]}
+{"label":"Consecutive Division: With Parentheses","qid":"","parents":[]}
+{"label":"Consecutive Multiplication: With Parentheses","qid":"","parents":[]}
+{"label":"Consecutive Subtraction Expression","qid":"","parents":[]}
+{"label":"Consecutive Subtraction of Two Numbers Equals Subtraction of Their Sum","qid":"","parents":[]}
+{"label":"Consecutive addition","qid":"","parents":[]}
+{"label":"Consecutive subtraction","qid":"","parents":[]}
+{"label":"Constant of proportionality from tables (with equations)","qid":"","parents":[]}
+{"label":"Construct exponential models","qid":"","parents":[]}
+{"label":"Construct scale drawings","qid":"","parents":[]}
+{"label":"Construct sinusoidal functions","qid":"","parents":[]}
+{"label":"Constructing probability distributions","qid":"","parents":[]}
+{"label":"Constructing scatter plots","qid":"","parents":[]}
+{"label":"Constructing triangles","qid":"","parents":[]}
+{"label":"Construction","qid":"Q385378","parents":[{"qid":"Q8187769","label":"economic activity"},{"qid":"Q3875186","label":"construction"}]}
+{"label":"Consumer Psychology","qid":"Q105082676","parents":[]}
+{"label":"Consumer Spending Problems","qid":"","parents":[]}
+{"label":"Contact force","qid":"Q2916417","parents":[{"qid":"Q11402","label":"force"}]}
+{"label":"Context","qid":"Q1123462","parents":[]}
+{"label":"Contextual Factor","qid":"","parents":[]}
+{"label":"Contextual and analytical applications of integration (calculator-active)","qid":"","parents":[]}
+{"label":"Continuity and common functions","qid":"","parents":[]}
+{"label":"Continuity at a point (algebraic)","qid":"","parents":[]}
+{"label":"Continuity over an interval","qid":"","parents":[]}
+{"label":"Continuous function","qid":"Q170058","parents":[{"qid":"Q116457584","label":"piecewise continuous function"}]}
+{"label":"Control Group","qid":"Q2148398","parents":[{"qid":"Q7836899","label":"group in an experiment"},{"qid":"Q4330518","label":"object of study"}]}
+{"label":"Control Precision","qid":"","parents":[]}
+{"label":"Control input","qid":"","parents":[]}
+{"label":"Convergent & divergent geometric series","qid":"","parents":[]}
+{"label":"Conversion and comparison of numbers up to 100 million","qid":"","parents":[]}
+{"label":"Conversion between percentages, fractions, and decimals","qid":"","parents":[]}
+{"label":"Conversion of Fraction Decimals Percents","qid":"","parents":[]}
+{"label":"Conversion of days, hours, minutes, seconds","qid":"","parents":[]}
+{"label":"Convert decimals to percents","qid":"","parents":[]}
+{"label":"Convert fractions to percents","qid":"","parents":[]}
+{"label":"Convert linear equations to standard form","qid":"","parents":[]}
+{"label":"Convert money word problems","qid":"","parents":[]}
+{"label":"Convert percents to decimals","qid":"","parents":[]}
+{"label":"Convert percents to fractions","qid":"","parents":[]}
+{"label":"Convert to smaller units (sec min & hr)","qid":"","parents":[]}
+{"label":"Convert units multi-step word problems (metric)","qid":"","parents":[]}
+{"label":"Converting Hectares, Ares, and Square Meters","qid":"","parents":[]}
+{"label":"Converting Metric Tons and Kilograms 1","qid":"","parents":[]}
+{"label":"Converting Square Kilometers, Hectares, Ares, and Square Meters","qid":"","parents":[]}
+{"label":"Converting and Comparing Kilograms and Grams","qid":"","parents":[]}
+{"label":"Converting and Comparing Liters and Milliliters","qid":"","parents":[]}
+{"label":"Converting between mixed numbers and improper fractions","qid":"","parents":[]}
+{"label":"Converting fractions to decimals","qid":"","parents":[]}
+{"label":"Converting percentages to fractions","qid":"","parents":[]}
+{"label":"Converting recursive & explicit forms of arithmetic sequences","qid":"","parents":[]}
+{"label":"Converting recursive & explicit forms of geometric sequences","qid":"","parents":[]}
+{"label":"Converting repeating decimals to fractions","qid":"","parents":[]}
+{"label":"Convex polygon","qid":"Q3259505","parents":[{"qid":"Q782746","label":"simple polygon"},{"qid":"Q4129097","label":"convex polytope"},{"qid":"Q4925424","label":"monotone polygon"},{"qid":"Q2122886","label":"star-shaped polygon"}]}
+{"label":"Cooperative Learning","qid":"Q303446","parents":[{"qid":"Q133500","label":"learning"}]}
+{"label":"Coordinate plane concept problems (advanced)","qid":"","parents":[]}
+{"label":"Coordinate plane word problems (quadrant 1)","qid":"","parents":[]}
+{"label":"Coordinate plane word problems: polygons","qid":"","parents":[]}
+{"label":"Coordinates of Points on Number Line","qid":"","parents":[]}
+{"label":"Coordination","qid":"Q1783823","parents":[{"qid":"Q1914636","label":"activity"}]}
+{"label":"Coprime numbers","qid":"","parents":[]}
+{"label":"Correlation and dependence","qid":"Q186290","parents":[{"qid":"Q930933","label":"relation"}]}
+{"label":"Correlational Research","qid":"Q112189167","parents":[]}
+{"label":"Corresponding Segments in Similar Triangles","qid":"","parents":[]}
+{"label":"Corresponding sides and points","qid":"","parents":[]}
+{"label":"Cortex","qid":"Q5173238","parents":[]}
+{"label":"Coulomb","qid":"Q40208020","parents":[]}
+{"label":"Coulomb's law","qid":"Q83152","parents":[]}
+{"label":"Counseling","qid":"Q4390239","parents":[{"qid":"Q11588306","label":"social services"},{"qid":"Q11024","label":"communication"},{"qid":"Q9353606","label":"health service"},{"qid":"Q5710255","label":"helping behavior"},{"qid":"Q183257","label":"psychotherapy"}]}
+{"label":"Count in order","qid":"","parents":[]}
+{"label":"Count in pictures","qid":"","parents":[]}
+{"label":"Count money (U.S.)","qid":"","parents":[]}
+{"label":"Count objects 1","qid":"","parents":[]}
+{"label":"Count objects 2","qid":"","parents":[]}
+{"label":"Count tens","qid":"","parents":[]}
+{"label":"Count with small numbers","qid":"","parents":[]}
+{"label":"Counting Methods","qid":"","parents":[]}
+{"label":"Counting by twos and fives","qid":"","parents":[]}
+{"label":"Counting days","qid":"Q5177134","parents":[]}
+{"label":"Counting money","qid":"Q138817557","parents":[{"qid":"Q335632","label":"mathematical finance"}]}
+{"label":"Counting on a number line","qid":"","parents":[]}
+{"label":"Cramer's rule","qid":"Q322666","parents":[]}
+{"label":"Cramer-Rao bound","qid":"","parents":[]}
+{"label":"Create bar graphs","qid":"","parents":[]}
+{"label":"Create double number lines","qid":"","parents":[]}
+{"label":"Create equations to solve for missing angles","qid":"","parents":[]}
+{"label":"Create histograms","qid":"","parents":[]}
+{"label":"Create picture graphs (picture more than 1)","qid":"","parents":[]}
+{"label":"Create rectangles with a given area","qid":"","parents":[]}
+{"label":"Create two-way frequency tables","qid":"","parents":[]}
+{"label":"Create two-way relative frequency tables","qid":"","parents":[]}
+{"label":"Creating box plots","qid":"","parents":[]}
+{"label":"Creating frequency tables","qid":"","parents":[]}
+{"label":"Creating largest or smallest number","qid":"","parents":[]}
+{"label":"Creating tables for approximating limits","qid":"","parents":[]}
+{"label":"Creative Art","qid":"","parents":[]}
+{"label":"Creep (deformation)","qid":"","parents":[]}
+{"label":"Crest (physics)","qid":"","parents":[]}
+{"label":"Criminal Behavior","qid":"Q126693638","parents":[]}
+{"label":"Cross multiplication factoring (advanced)","qid":"","parents":[]}
+{"label":"Cross multiplication method with sign changes","qid":"","parents":[]}
+{"label":"Cross multiplication method: constant term with multiple factors","qid":"","parents":[]}
+{"label":"Cross multiplication method: leading coefficient not 1","qid":"","parents":[]}
+{"label":"Cross multiplication method: negative constant term","qid":"","parents":[]}
+{"label":"Cross multiplication method: positive constant term","qid":"","parents":[]}
+{"label":"Cross section (geometry)","qid":"","parents":[]}
+{"label":"Cross sections of 3D objects (basic)","qid":"","parents":[]}
+{"label":"Crossing ten, hundred, and thousand","qid":"","parents":[]}
+{"label":"Cube roots","qid":"","parents":[]}
+{"label":"Cultural Psychology","qid":"Q1378247","parents":[{"qid":"Q9418","label":"psychology"},{"qid":"Q1143546","label":"cultural studies"}]}
+{"label":"Cumulative addition of fractions","qid":"","parents":[]}
+{"label":"Curve","qid":"Q161973","parents":[{"qid":"Q208920","label":"one-dimensional space"},{"qid":"Q211548","label":"locus"},{"qid":"Q1228250","label":"line"},{"qid":"Q207961","label":"shape"}]}
+{"label":"Curved mirror","qid":"Q1506584","parents":[{"qid":"Q35197","label":"mirror"}]}
+{"label":"Cut shapes into equal parts","qid":"","parents":[]}
+{"label":"Cutting and Combining Shapes","qid":"","parents":[]}
+{"label":"Cyclic quadrilateral","qid":"Q692086","parents":[{"qid":"Q36810","label":"quadrilateral"},{"qid":"Q1713493","label":"cyclic polygon"}]}
+{"label":"Cylinder (geometry)","qid":"","parents":[]}
+{"label":"Cylinders, Cones, and Spheres","qid":"","parents":[]}
+{"label":"D.4.8-understanding-concept-of-probabilities","qid":"","parents":[]}
+{"label":"DBSCAN","qid":"Q1114630","parents":[]}
+{"label":"DPLL procedure","qid":"","parents":[]}
+{"label":"Data Collection","qid":"Q4929239","parents":[{"qid":"Q1914636","label":"activity"},{"qid":"Q208165","label":"collecting"}]}
+{"label":"Data mining","qid":"Q172491","parents":[{"qid":"Q12772819","label":"discovery"},{"qid":"Q70708084","label":"text and data mining"}]}
+{"label":"Data set warm-up","qid":"","parents":[]}
+{"label":"Days, hours, minutes, seconds comprehensive problems","qid":"","parents":[]}
+{"label":"Decagon","qid":"Q184625","parents":[{"qid":"Q37555","label":"polygon"},{"qid":"Q28410576","label":"decatope"}]}
+{"label":"Decimal Approximation Method","qid":"","parents":[]}
+{"label":"Decimal Four Operations: Distributive Property","qid":"","parents":[]}
+{"label":"Decimal Mixed Four Operations","qid":"","parents":[]}
+{"label":"Decimal addition and subtraction estimation","qid":"","parents":[]}
+{"label":"Decimal division by decimal","qid":"","parents":[]}
+{"label":"Decimal division by integer 1","qid":"","parents":[]}
+{"label":"Decimal division comprehensive exercises","qid":"","parents":[]}
+{"label":"Decimal division with remainder","qid":"","parents":[]}
+{"label":"Decimal multiplication and division estimation","qid":"","parents":[]}
+{"label":"Decimal multiplication by 0.1, 0.01, and 0.001","qid":"","parents":[]}
+{"label":"Decimal multiplication by decimal","qid":"","parents":[]}
+{"label":"Decimal multiplication by integer comprehensive exercises","qid":"","parents":[]}
+{"label":"Decimal multiplication comprehensive exercises","qid":"","parents":[]}
+{"label":"Decimal multiplied by integer comprehensive problems","qid":"","parents":[]}
+{"label":"Decimal number lines","qid":"","parents":[]}
+{"label":"Decimal place value structure 1","qid":"","parents":[]}
+{"label":"Decimal point shift: dividing by 10 and 100","qid":"","parents":[]}
+{"label":"Decimal point shift: multiplying by 10 and 100","qid":"","parents":[]}
+{"label":"Decimals and length","qid":"","parents":[]}
+{"label":"Decimals in expanded form","qid":"","parents":[]}
+{"label":"Decimals in words","qid":"","parents":[]}
+{"label":"Decimals in written form","qid":"","parents":[]}
+{"label":"Decimals on the number line: hundredths","qid":"","parents":[]}
+{"label":"Decimals on the number line: hundredths 0-0.1","qid":"","parents":[]}
+{"label":"Decimals on the number line: tenths","qid":"","parents":[]}
+{"label":"Decimals on the number line: tenths 0-1","qid":"","parents":[]}
+{"label":"Decision tree model","qid":"Q5249246","parents":[]}
+{"label":"Decompose figures to find area 1","qid":"","parents":[]}
+{"label":"Decompose figures to find area 2","qid":"","parents":[]}
+{"label":"Decompose figures to find volume","qid":"","parents":[]}
+{"label":"Decompose fractions","qid":"","parents":[]}
+{"label":"Decompose fractions with denominators of 100","qid":"","parents":[]}
+{"label":"Decomposition and composition of decimals","qid":"","parents":[]}
+{"label":"Decomposition and composition of integers","qid":"","parents":[]}
+{"label":"Deductive Reasoning","qid":"Q484284","parents":[{"qid":"Q1156402","label":"reasoning"},{"qid":"Q408386","label":"inference"}]}
+{"label":"Defining transformations","qid":"","parents":[]}
+{"label":"Definite integral as the limit of a Riemann sum","qid":"","parents":[]}
+{"label":"Definite integrals of piecewise functions","qid":"","parents":[]}
+{"label":"Definite integrals over adjacent intervals","qid":"","parents":[]}
+{"label":"Definite integrals: common functions","qid":"","parents":[]}
+{"label":"Definite integrals: reverse power rule","qid":"","parents":[]}
+{"label":"Definition of triangle congruence","qid":"","parents":[]}
+{"label":"Degree (angle)","qid":"","parents":[]}
+{"label":"Degree of a polynomial","qid":"Q1473607","parents":[{"qid":"Q28920052","label":"non-negative integer"}]}
+{"label":"Delayed Gratification","qid":"Q816125","parents":[{"qid":"Q301468","label":"consumer behavior"},{"qid":"Q1405524","label":"self-control"}]}
+{"label":"Density word problems","qid":"","parents":[]}
+{"label":"Dependence","qid":"Q3044808","parents":[{"qid":"Q41176","label":"building"}]}
+{"label":"Dependent probability","qid":"","parents":[]}
+{"label":"Depressive State","qid":"","parents":[]}
+{"label":"Depth Perception","qid":"Q1749840","parents":[{"qid":"Q160402","label":"perception"},{"qid":"Q1937869","label":"orientation"}]}
+{"label":"Derivative","qid":"Q29175","parents":[{"qid":"Q11348","label":"function"},{"qid":"Q137924178","label":"rate of change"}]}
+{"label":"Derivative & the direction of a function","qid":"","parents":[]}
+{"label":"Derivative as a limit","qid":"","parents":[]}
+{"label":"Derivative as a limit: numerical","qid":"","parents":[]}
+{"label":"Derivative as slope of curve","qid":"","parents":[]}
+{"label":"Derivatives of aˣ and logₐx","qid":"","parents":[]}
+{"label":"Derivatives of sin(x) and cos(x)","qid":"","parents":[]}
+{"label":"Derivatives of tan(x) cot(x) sec(x) and csc(x)","qid":"","parents":[]}
+{"label":"Derivatives of 𝑒ˣ and ln(x)","qid":"","parents":[]}
+{"label":"Descartes' rule of signs","qid":"Q1379344","parents":[]}
+{"label":"Describing trends in scatter plots","qid":"","parents":[]}
+{"label":"Determinant of a 2x2 matrix","qid":"Q118867575","parents":[{"qid":"Q178546","label":"determinant"}]}
+{"label":"Determine absolute or conditional convergence","qid":"","parents":[]}
+{"label":"Determine congruent triangles","qid":"","parents":[]}
+{"label":"Determine if a function is invertible","qid":"","parents":[]}
+{"label":"Determine inverse matrices","qid":"","parents":[]}
+{"label":"Determine invertible matrices","qid":"","parents":[]}
+{"label":"Determine reflections (advanced)","qid":"","parents":[]}
+{"label":"Determine rotations","qid":"","parents":[]}
+{"label":"Determine similar triangles: AA","qid":"","parents":[]}
+{"label":"Determine similar triangles: SSS","qid":"","parents":[]}
+{"label":"Determine the domain of functions","qid":"","parents":[]}
+{"label":"Determine translations","qid":"","parents":[]}
+{"label":"Determining Direct Proportion","qid":"","parents":[]}
+{"label":"Determining Similar Triangles","qid":"","parents":[]}
+{"label":"Determining congruence using congruence criteria","qid":"","parents":[]}
+{"label":"Determining number of digits in scientific notation","qid":"","parents":[]}
+{"label":"Determining quadrants by sign properties","qid":"","parents":[]}
+{"label":"Determining quadrants through which a line passes","qid":"","parents":[]}
+{"label":"Diagonal","qid":"Q189791","parents":[{"qid":"Q166154","label":"line segment"}]}
+{"label":"Diameter","qid":"Q37221","parents":[{"qid":"Q166154","label":"line segment"},{"qid":"Q107715","label":"physical quantity"},{"qid":"Q36253","label":"length"},{"qid":"Q63344712","label":"geometric property"}]}
+{"label":"Dielectric","qid":"Q184996","parents":[{"qid":"Q79529","label":"chemical substance"}]}
+{"label":"Difference of Squares Calculations","qid":"","parents":[]}
+{"label":"Difference of Two Quantities","qid":"","parents":[]}
+{"label":"Difference of squares","qid":"Q1017274","parents":[{"qid":"Q1971429","label":"algebraic identity"}]}
+{"label":"Difference of squares intro","qid":"","parents":[]}
+{"label":"Differentiability at a point: algebraic","qid":"","parents":[]}
+{"label":"Differentiability at a point: graphical","qid":"","parents":[]}
+{"label":"Differential equations: exponential model equations","qid":"","parents":[]}
+{"label":"Differential equations: exponential model word problems","qid":"","parents":[]}
+{"label":"Differential equations: logistic model word problems","qid":"","parents":[]}
+{"label":"Differentiate composite functions (all function types)","qid":"","parents":[]}
+{"label":"Differentiate exponential functions","qid":"","parents":[]}
+{"label":"Differentiate integer powers (mixed positive and negative)","qid":"","parents":[]}
+{"label":"Differentiate logarithmic functions","qid":"","parents":[]}
+{"label":"Differentiate polar functions","qid":"","parents":[]}
+{"label":"Differentiate polynomials","qid":"","parents":[]}
+{"label":"Differentiate products","qid":"","parents":[]}
+{"label":"Differentiate quotients","qid":"","parents":[]}
+{"label":"Differentiate radical functions","qid":"","parents":[]}
+{"label":"Differentiate rational functions","qid":"","parents":[]}
+{"label":"Differentiate related functions","qid":"","parents":[]}
+{"label":"Differentiating functions: Find the error","qid":"","parents":[]}
+{"label":"Differentiating using multiple rules","qid":"","parents":[]}
+{"label":"Differentiating using multiple rules: strategy","qid":"","parents":[]}
+{"label":"Differentiation","qid":"Q210861","parents":[{"qid":"Q21143089","label":"cellular developmental process"},{"qid":"Q2218821","label":"differentiation"}]}
+{"label":"Diffraction","qid":"Q133900","parents":[{"qid":"Q1293220","label":"physical phenomenon"}]}
+{"label":"Dilate points","qid":"","parents":[]}
+{"label":"Dilate triangles","qid":"","parents":[]}
+{"label":"Dilations and properties","qid":"","parents":[]}
+{"label":"Dilations: center","qid":"","parents":[]}
+{"label":"Dilations: scale factor","qid":"","parents":[]}
