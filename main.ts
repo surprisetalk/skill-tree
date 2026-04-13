@@ -45,7 +45,7 @@ function parseGrade(s: string): number | null {
 }
 
 function parseTsvRows(text: string): Record<string, string>[] {
-  const lines = text.split("\n").filter(l => l.trim())
+  const lines = text.replace(/\r/g, "").split("\n").filter(l => l.trim())
   if (!lines.length) return []
   const hdr = lines[0].split("\t")
   return lines.slice(1).map(l => {

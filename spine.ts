@@ -8,6 +8,11 @@ const SPINE_SOURCES = new Set([
   "onet", "ngss", "asn", "fos", "esco",
 ]);
 
+// Filter applied to prereqs.tsv when first building the spine. Downstream
+// pipeline steps (spine_bridge_orphans.ts, spine_taxonomy_link.ts,
+// spine_taxonomy_deep_link.ts, spine_merge_wikidata.ts) later inject their own
+// edges (semantic_bridge, wikidata_p279, etc.) directly into spine_prereqs.tsv,
+// bypassing this set.
 const SPINE_EDGE_SOURCES = new Set([
   "khan", "metacademy", "alcpl", "mooccubex",
   "junyi_logs", "junyi_hierarchy", "assistments_logs",

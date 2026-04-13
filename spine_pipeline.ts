@@ -17,6 +17,7 @@ const steps = [
   "spine_taxonomy_link.ts",
   "spine_merge_wikidata.ts",
   "spine_taxonomy_deep_link.ts",
+  "spine_break_cycles.ts",
   "spine_html.ts",
 ];
 

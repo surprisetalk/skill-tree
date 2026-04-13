@@ -26,6 +26,23 @@ for (let i = 1; i < sLines.length; i++) {
   });
 }
 
+// Optional: per-skill value (skill_value.tsv). Normalize log-scale within kind.
+const rawValue = new Map<string, number>();
+try {
+  const vLines = (await Deno.readTextFile("skill_value.tsv")).split("\n").filter(x => x);
+  for (let i = 1; i < vLines.length; i++) {
+    const [id, v] = vLines[i].split("\t");
+    const f = parseFloat(v);
+    if (skills.has(id) && !isNaN(f)) rawValue.set(id, f);
+  }
+} catch { /* skill_value.tsv optional */ }
+const value = new Map<string, number>();
+if (rawValue.size) {
+  const logs = [...rawValue.values()].map(v => Math.log1p(v));
+  const lo = Math.min(...logs), hi = Math.max(...logs);
+  for (const [id, v] of rawValue) value.set(id, (Math.log1p(v) - lo) / Math.max(1e-9, hi - lo));
+}
+
 const pLines = (await Deno.readTextFile("spine_prereqs.tsv")).split("\n").filter(x => x);
 type Edge = { from: string; to: string; source: string; type: string };
 const edges: Edge[] = [];
@@ -59,6 +76,7 @@ console.log(`skills: ${skills.size}, edges: ${edges.length}, max depth: ${maxDep
 // Compact payload
 const nodePayload = [...skills.values()].map(s => ({
   i: s.id, l: s.label, s: s.source, g: (s.gs + s.ge) / 2, d: s.depth, t: s.tags,
+  v: value.get(s.id) ?? null,
 }));
 const edgePayload = edges.map(e => ({ f: e.from, t: e.to, s: e.source }));
 
@@ -77,7 +95,7 @@ const html = `<!DOCTYPE html>
   #canvas-wrap{position:absolute;top:40px;left:0;right:0;bottom:0;overflow:auto}
   canvas{display:block;position:absolute;top:0;left:0}
   #nodes{position:absolute;top:0;left:0}
-  .node{position:absolute;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);cursor:pointer;border:1px solid #0008}
+  .node{position:absolute;border-radius:50%;transform:translate(-50%,-50%);cursor:pointer;border:1px solid #0008}
   .node.hit{width:14px;height:14px;border:2px solid #fff;z-index:5}
   #tip{position:fixed;background:#000d;border:1px solid #444;padding:6px 10px;max-width:320px;border-radius:4px;pointer-events:none;display:none;z-index:20;font-size:12px}
   #tip .t{color:#fff;font-weight:600;margin-bottom:4px}
@@ -136,6 +154,9 @@ for(const [id,p] of pos){
   const d = document.createElement("div");
   d.className="node"; d.style.left=p.x+"px"; d.style.top=p.y+"px";
   d.style.background = COLS[p.n.s] ?? "#666";
+  const size = p.n.v == null ? 8 : Math.round(6 + p.n.v * 18);
+  d.style.width = size+"px"; d.style.height = size+"px";
+  if (p.n.v != null) d.style.boxShadow = "0 0 " + Math.round(p.n.v*10) + "px " + (COLS[p.n.s] ?? "#fff") + "88";
   d.dataset.id = id;
   nodesEl.appendChild(d);
   byId.set(id, d);
@@ -145,7 +166,8 @@ const tip = document.getElementById("tip");
 nodesEl.addEventListener("mousemove", ev => {
   const t = ev.target.closest(".node"); if(!t){ tip.style.display="none"; return; }
   const p = pos.get(t.dataset.id);
-  tip.innerHTML = '<div class="t">'+p.n.l+'</div><div class="m">'+p.n.s+' · grade '+p.n.g.toFixed(1)+' · depth '+p.n.d+'</div><div class="m">'+p.n.i+'</div>';
+  const vStr = p.n.v==null ? '' : ' · value '+p.n.v.toFixed(2);
+  tip.innerHTML = '<div class="t">'+p.n.l+'</div><div class="m">'+p.n.s+' · grade '+p.n.g.toFixed(1)+' · depth '+p.n.d+vStr+'</div><div class="m">'+p.n.i+'</div>';
   tip.style.left=(ev.clientX+12)+"px"; tip.style.top=(ev.clientY+12)+"px"; tip.style.display="block";
 });
 nodesEl.addEventListener("mouseleave", ()=>tip.style.display="none");
