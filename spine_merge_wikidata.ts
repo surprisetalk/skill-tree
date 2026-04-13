@@ -4,7 +4,7 @@
 //   - for each P279 parent, create a wd.{qid} skill row (if label not already
 //     in spine) and emit a broader edge spine_skill -> parent.
 
-const P279 = "data/wikidata/p279_spine.jsonl";
+const P279 = "data/wikidata/p279.jsonl";
 const SKILLS = "spine_skills.tsv";
 const EDGES = "spine_prereqs.tsv";
 

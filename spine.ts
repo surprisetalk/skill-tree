@@ -5,8 +5,13 @@
 
 const SPINE_SOURCES = new Set([
   "khan", "metacademy", "alcpl", "mooccubex", "junyi", "assistments",
-  "onet", "ngss", "asn", "fos", "esco",
+  "onet", "ngss", "asn", "fos", "esco", "csp", "opensalt",
 ]);
+
+// For CSP/OpenSALT (massive state-duplicated corpora), require a tag matching
+// a national/foundational framework so the spine gets K-2 literacy + SEL
+// coverage without dragging in 95+ redundant state variants.
+const NATIONAL_FRAMEWORK_TAG = /(?:^|;)(?:common core|next generation science|casel|national core arts|national standards for|national health education|21st century|deeper learning|depth of knowledge|ai4k12|actfl|p21|iste|world-readiness|ap computer|next generation|partnership for 21)/i;
 
 // Filter applied to prereqs.tsv when first building the spine. Downstream
 // pipeline steps (spine_bridge_orphans.ts, spine_taxonomy_link.ts,
@@ -56,6 +61,7 @@ for await (const c of rows("skills.tsv")) {
   if (!header) { header = c; skillLines.push(c.join("\t")); continue; }
   const src = c[6] ?? "";
   if (!SPINE_SOURCES.has(src)) continue;
+  if ((src === "csp" || src === "opensalt") && !NATIONAL_FRAMEWORK_TAG.test(c[5] ?? "")) continue;
   keepIds.add(c[0]);
   skillLines.push(c.join("\t"));
   const b = band(c[7] ?? "", c[8] ?? "");

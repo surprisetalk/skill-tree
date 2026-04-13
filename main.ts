@@ -201,11 +201,12 @@ async function parseAlcpl(): Promise<Result> {
 
     const preqsText = await Deno.readTextFile(`${DATA}/al-cpl/data/${domain}.preqs`)
     for (const line of preqsText.split("\n").filter(l => l.trim())) {
-      const [pre, tgt] = line.split(",")
-      if (pre && tgt) {
+      // AL-CPL format: 1st column = concept, 2nd column = prerequisite of concept (per README)
+      const [target, prereq] = line.split(",")
+      if (target && prereq) {
         prereqs.push({
-          skill_id: `alcpl.${domain}.${tgt.trim()}`,
-          prereq_id: `alcpl.${domain}.${pre.trim()}`,
+          skill_id: `alcpl.${domain}.${target.trim()}`,
+          prereq_id: `alcpl.${domain}.${prereq.trim()}`,
           source: "alcpl",
           type: "prerequisite",
         })
@@ -505,7 +506,7 @@ async function parseCsp(): Promise<Result> {
         const extIds = [std.asnIdentifier, std.id].filter(Boolean) as string[]
         skills.push(skill(id, label, {
           ext_ids: extIds,
-          tags: [ss.subject].filter(Boolean) as string[],
+          tags: [ss.subject, j.title].filter(Boolean) as string[],
           grade_start: gStart, grade_end: gEnd,
         }))
       }
@@ -550,7 +551,7 @@ async function parseOpensalt(): Promise<Result> {
       const hcs = sanitizeId(item.humanCodingScheme || "")
       skills.push(skill(id, label, {
         ext_ids: hcs ? [`opensalt.${hcs}`] : [],
-        tags: [item.CFItemType].filter(Boolean) as string[],
+        tags: [item.CFItemType, fw.title].filter(Boolean) as string[],
         grade_start: gradeNums.length ? Math.min(...gradeNums) : null,
         grade_end: gradeNums.length ? Math.max(...gradeNums) : null,
       }))
@@ -2072,7 +2073,8 @@ async function main() {
 
   console.log("  CSP grade sequencing...")
   const cspPrereqs = inferCspGradePrereqs(allSkills)
-  allPrereqs.push(...cspPrereqs)
+  for (const p of cspPrereqs) allPrereqs.push(p)
+  console.log(`  ${cspPrereqs.length} CSP grade prereqs`)
 
   console.log("  LLM prereqs...")
   const llmPrereqs = await loadLlmPrereqs()

@@ -1,18 +1,15 @@
-// Wikidata P279 (subclass-of) downloader.
-// Reads curated skill labels from skills.tsv, queries Wikidata for matching items,
-// and fetches P279 chains. Writes to data/wikidata/p279.jsonl (resumable).
+// Wikidata P279 (subclass-of) downloader via SPARQL batching.
+// Reads spine labels from spine_skills.tsv, queries WDQS for exact-label matches
+// and their P279 chain. Writes to data/wikidata/p279.jsonl (resumable, case-insensitive).
 //
 // Usage:
 //   deno run --allow-read --allow-write --allow-net data/wikidata.ts [MAX_LABELS]
-//
-// Rate limit: 1 req/sec on wbsearchentities + batched EntityData fetches.
-// Run in chunks — cache is incremental, re-running resumes from last position.
 
-const SKILLS_TSV = "skills.tsv"
+const SKILLS_TSV = "spine_skills.tsv"
 const OUT_DIR = "data/wikidata"
 const OUT_FILE = `${OUT_DIR}/p279.jsonl`
-const WBSEARCH = "https://www.wikidata.org/w/api.php"
-const ENTITY_DATA = "https://www.wikidata.org/wiki/Special:EntityData"
+const SPARQL = "https://query.wikidata.org/sparql"
+const BATCH = 40
 
 type Row = { label: string; qid: string; parents: Array<{ qid: string; label: string }> }
 
@@ -23,7 +20,7 @@ async function loadDone(): Promise<Set<string>> {
     for (const line of text.split("\n")) {
       if (!line.trim()) continue
       const r = JSON.parse(line) as Row
-      done.add(r.label)
+      done.add(r.label.toLowerCase())
     }
   } catch { /* no cache yet */ }
   return done
@@ -33,87 +30,97 @@ async function loadLabels(): Promise<string[]> {
   const text = await Deno.readTextFile(SKILLS_TSV)
   const lines = text.split("\n")
   const labels = new Set<string>()
-  const TECHNICAL_TAG = /\b(math|science|engineering|computer|physics|chemistry|biology|stem|technology)\b/
   for (let i = 1; i < lines.length; i++) {
     const parts = lines[i].split("\t")
     if (parts.length < 6) continue
     const label = parts[3]?.trim()
-    const tags = parts[5] ?? ""
     if (!label) continue
-    if (label.length < 4 || label.length > 80) continue
-    if (label.split(/\s+/).length > 10) continue // skip full-sentence standards
-    if (!TECHNICAL_TAG.test(tags)) continue
+    if (label.length < 4 || label.length > 60) continue
+    if (label.split(/\s+/).length > 6) continue
+    if (/[.!?]$/.test(label)) continue // skip sentence-shaped standards
     labels.add(label)
   }
   return [...labels].sort()
 }
 
-async function searchLabel(label: string): Promise<string | null> {
-  const url = `${WBSEARCH}?action=wbsearchentities&search=${encodeURIComponent(label)}&language=en&format=json&limit=1&type=item`
-  const res = await fetch(url, { headers: { "User-Agent": "skill-tree/1.0" } })
-  if (!res.ok) return null
-  const j = await res.json() as { search?: Array<{ id: string; match?: { type: string; text: string } }> }
-  const hit = j.search?.[0]
-  if (!hit) return null
-  // Require exact label match (case-insensitive) to avoid false positives
-  if (hit.match?.text?.toLowerCase() !== label.toLowerCase()) return null
-  return hit.id
-}
-
-async function fetchP279(qid: string): Promise<Array<{ qid: string; label: string }>> {
-  const url = `${ENTITY_DATA}/${qid}.json`
-  const res = await fetch(url, { headers: { "User-Agent": "skill-tree/1.0" } })
-  if (!res.ok) return []
-  const j = await res.json() as {
-    entities?: Record<string, {
-      claims?: { P279?: Array<{ mainsnak?: { datavalue?: { value?: { id?: string } } } }> }
-    }>
-  }
-  const ent = j.entities?.[qid]
-  const parents: string[] = []
-  for (const c of ent?.claims?.P279 ?? []) {
-    const pid = c.mainsnak?.datavalue?.value?.id
-    if (pid) parents.push(pid)
-  }
-  if (!parents.length) return []
-  // Batch-fetch parent labels
-  const labelsUrl = `${WBSEARCH}?action=wbgetentities&ids=${parents.join("|")}&props=labels&languages=en&format=json`
-  const lr = await fetch(labelsUrl, { headers: { "User-Agent": "skill-tree/1.0" } })
-  if (!lr.ok) return parents.map(q => ({ qid: q, label: "" }))
-  const lj = await lr.json() as { entities?: Record<string, { labels?: { en?: { value: string } } }> }
-  return parents.map(q => ({ qid: q, label: lj.entities?.[q]?.labels?.en?.value ?? "" }))
+function sparqlEscape(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 }
 
 async function sleep(ms: number) { await new Promise(r => setTimeout(r, ms)) }
 
+async function queryBatch(batch: string[]): Promise<Map<string, Row>> {
+  // Match lowercase English labels; each item's P279 parents with English labels.
+  // Excludes P31=human/city/country/film/book/etc. to skip proper nouns/titles.
+  const values = batch.map(l => `"${sparqlEscape(l.toLowerCase())}"@en`).join(" ")
+  const q = `SELECT ?label ?item ?itemLabel ?p279 ?p279Label WHERE {
+    VALUES ?label { ${values} }
+    ?item rdfs:label ?label .
+    ?item wdt:P279 ?p279 .
+    FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q5 }
+    FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q515 }
+    FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q6256 }
+    FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q11424 }
+    FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q571 }
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+  }`
+  const res = await fetch(SPARQL, {
+    method: "POST",
+    headers: {
+      "User-Agent": "skill-tree/1.0",
+      "Accept": "application/sparql-results+json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: `query=${encodeURIComponent(q)}`,
+  })
+  if (!res.ok) throw new Error(`SPARQL ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`)
+  const j = await res.json() as {
+    results: { bindings: Array<Record<string, { value: string }>> }
+  }
+  const out = new Map<string, Row>()
+  for (const b of j.results.bindings) {
+    const label = b.label.value
+    const qid = b.item.value.replace("http://www.wikidata.org/entity/", "")
+    const p279 = b.p279.value.replace("http://www.wikidata.org/entity/", "")
+    const pLabel = b.p279Label?.value ?? ""
+    let r = out.get(label)
+    if (!r) { r = { label, qid, parents: [] }; out.set(label, r) }
+    // Avoid duplicate parents; also skip self
+    if (p279 !== qid && !r.parents.some(p => p.qid === p279)) {
+      r.parents.push({ qid: p279, label: pLabel })
+    }
+  }
+  return out
+}
+
 async function main() {
-  const maxArg = parseInt(Deno.args[0] ?? "1000")
+  const maxArg = parseInt(Deno.args[0] ?? "10000")
   await Deno.mkdir(OUT_DIR, { recursive: true })
   const done = await loadDone()
   const labels = await loadLabels()
-  const todo = labels.filter(l => !done.has(l)).slice(0, maxArg)
+  const todo = labels.filter(l => !done.has(l.toLowerCase())).slice(0, maxArg)
   console.log(`${labels.length} candidate labels, ${done.size} done, processing ${todo.length}`)
 
   const out = await Deno.open(OUT_FILE, { create: true, append: true })
   let ok = 0, miss = 0
-  for (let i = 0; i < todo.length; i++) {
-    const label = todo[i]
-    try {
-      const qid = await searchLabel(label)
-      await sleep(1000)
-      if (!qid) {
-        await out.write(new TextEncoder().encode(JSON.stringify({ label, qid: "", parents: [] }) + "\n"))
-        miss++; continue
+  for (let i = 0; i < todo.length; i += BATCH) {
+    const batch = todo.slice(i, i + BATCH)
+    let hits: Map<string, Row> | null = null
+    for (let attempt = 0; attempt < 3 && !hits; attempt++) {
+      try { hits = await queryBatch(batch) }
+      catch (e) {
+        console.error(`  batch ${i} attempt ${attempt + 1}: ${(e as Error).message.slice(0, 100)}`)
+        await sleep(15000 * (attempt + 1))
       }
-      const parents = await fetchP279(qid)
-      await sleep(1000)
-      await out.write(new TextEncoder().encode(JSON.stringify({ label, qid, parents } as Row) + "\n"))
-      ok++
-    } catch (e) {
-      console.error(`  ${label}: ${e}`)
-      await sleep(5000)
     }
-    if ((i + 1) % 50 === 0) console.log(`  ${i + 1}/${todo.length}  ok=${ok} miss=${miss}`)
+    if (!hits) { console.error(`  batch ${i}: giving up`); continue }
+    for (const l of batch) {
+      const r = hits.get(l.toLowerCase()) ?? { label: l, qid: "", parents: [] }
+      if (r.qid) { r.label = l; ok++ } else { miss++ }
+      await out.write(new TextEncoder().encode(JSON.stringify(r) + "\n"))
+    }
+    await sleep(2500) // be polite to WDQS
+    if ((i / BATCH + 1) % 5 === 0) console.log(`  ${Math.min(i + BATCH, todo.length)}/${todo.length}  ok=${ok} miss=${miss}`)
   }
   out.close()
   console.log(`Done. ok=${ok} miss=${miss}`)
