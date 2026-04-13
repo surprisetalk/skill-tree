@@ -1,11 +1,12 @@
 - [ ] let's redo everything from scratch
-  - skills:title,description,prereqs[],occupations[],categories[],certs[]
+  - skills:title,description,prereqs[],occupations[],topics[],certs[]
+    - 42\tinvert a binary tree\t41,40\tprogrammer\tcomputer science,math\tcissp
   - - professional: ESCO, O*NET, lightcast
   - - k-12: csp, opensalt
-  - - categories (for tags): wikipedia, lcsh, dbpedia, ucsd science map
-  - -> generate prereqs.tsv using haiku to generate final
+  - - topics (for tags): wikipedia, lcsh, dbpedia, ucsd science map
+  - generate prereqs.tsv using haiku to generate final
   - goal: every skill can be reached from base kindergarten skills
-  - avoid: cycles, highly connected nodes, any subjective skills
+  - avoid: cycles, highly connected nodes, subjectivity
   - note: professions/occpuations are TAGS on nodes, not nodes themselves. we want to minimize the number of occupation tags on each node, and minimize number of covering nodes per tag
   
 - [x] Universal knowledge backbones. **LCSH and DBpedia downloaded.** Wikidata (https://www.wikidata.org) is arguably the single most valuable resource—100+ million items with 1+ billion relationships, completely free under CC0. Its P279 (subclass of) hierarchy already forms a massive knowledge DAG, and it interlinks with nearly every other knowledge system via dedicated properties. Query it via SPARQL at https://query.wikidata.org. The Library of Congress Subject Headings (LCSH) provide ~340,000 authority records with broader/narrower/related term relationships, downloadable as SKOS/RDF from https://id.loc.gov/ Wikipediadownload/—a clean, freely available subject graph spanning all fields. DBpedia (https://www.dbpedia.org) offers a 768-class, 3,000-property cross-domain ontology explicitly structured as a DAG (classes may have multiple superclasses since v3.7), with 228M+ entities, all under CC BY-SA. Wikipedia's category graph contains ~1.7 million categories Wikiworkshop but requires significant cleaning (it contains cycles and administrative categories); access via SQL dumps at https://dumps.wikimedia.org or the wikicat Python library (https://github.com/xhluca/wikicat). GitHub
