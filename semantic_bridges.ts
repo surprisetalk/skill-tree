@@ -57,7 +57,8 @@ console.log(`  ${embIds.length} embeddings`);
 
 console.log("loading embeddings.bin…");
 const embBuf = await Deno.readFile("embeddings.bin");
-const emb = new Float32Array(embBuf.buffer, embBuf.byteOffset, embBuf.byteLength / 4);
+// embeddings.bin starts with a 4-byte uint32 count header (main.ts writeEmbeddings).
+const emb = new Float32Array(embBuf.buffer, embBuf.byteOffset + 4, (embBuf.byteLength - 4) / 4);
 
 // --- build candidate index: source -> array of (embedding_row_idx, id, grade)
 type Cand = { row: number; id: string; grade: string };

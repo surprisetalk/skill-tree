@@ -25,7 +25,8 @@ const embIds = (await Deno.readTextFile("embeddings_ids.tsv")).split("\n").slice
 const idxOf = new Map<string, number>();
 for (let i = 0; i < embIds.length; i++) idxOf.set(embIds[i], i);
 const embBuf = await Deno.readFile("embeddings.bin");
-const emb = new Float32Array(embBuf.buffer, embBuf.byteOffset, embBuf.byteLength / 4);
+// embeddings.bin starts with a 4-byte uint32 count header (main.ts writeEmbeddings).
+const emb = new Float32Array(embBuf.buffer, embBuf.byteOffset + 4, (embBuf.byteLength - 4) / 4);
 
 function vec(row: number): Float32Array {
   return emb.subarray(row * EMB_DIM, (row + 1) * EMB_DIM);
