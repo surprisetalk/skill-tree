@@ -1,0 +1,128 @@
+import { assert, assertEquals, assertGreater } from "jsr:@std/assert@1";
+
+Deno.test("stage 1: build/1_skills.tsv exists with expected schema", () => {
+  const text = Deno.readTextFileSync("build/1_skills.tsv");
+  const lines = text.split("\n").filter((l) => l.length);
+  assertGreater(lines.length, 20000, "too few rows");
+  assertEquals(lines[0], "id\ttitle\tdescription\tsources\ttags");
+
+  for (let i = 1; i < Math.min(lines.length, 200); i++) {
+    const cols = lines[i].split("\t");
+    assertEquals(cols.length, 5, `row ${i} has ${cols.length} cols, not 5`);
+    assert(cols[0].length > 0, `row ${i} empty id`);
+    assert(cols[1].length > 0, `row ${i} empty title`);
+    assert(cols[3].length > 0, `row ${i} empty sources`);
+    assert(/^[a-z0-9-]+$/.test(cols[0]), `row ${i} bad slug: ${cols[0]}`);
+  }
+});
+
+Deno.test("stage 1 stats: all four sources represented", () => {
+  const s = JSON.parse(Deno.readTextFileSync("build/1_stats.json"));
+  for (const src of ["esco", "onet", "lightcast", "opensalt"]) {
+    assertGreater(s.per_source[src], 0, `${src} has 0 rows`);
+  }
+  assertGreater(s.dedupe_collisions, 0, "no dedupe collisions — likely broken");
+});
+
+Deno.test("stage 1: ids are unique", () => {
+  const text = Deno.readTextFileSync("build/1_skills.tsv");
+  const ids = text.split("\n").slice(1).filter((l) => l.length).map((l) => l.split("\t")[0]);
+  const set = new Set(ids);
+  assertEquals(ids.length, set.size, "duplicate ids in output");
+});
+
+Deno.test("stage 2: embeddings file matches ids and is correct shape", () => {
+  const ids = Deno.readTextFileSync("build/2_ids.tsv").split("\n").filter((l) => l.length);
+  const bin = Deno.readFileSync("build/2_embeddings.bin");
+  const DIM = 768;
+  assertEquals(bin.byteLength, ids.length * DIM * 4, "bin size doesn't match ids × dim × 4");
+  const f32 = new Float32Array(bin.buffer);
+
+  const N = Math.min(ids.length, 500);
+  for (let i = 0; i < N; i++) {
+    let norm = 0;
+    for (let j = 0; j < DIM; j++) {
+      const v = f32[i * DIM + j];
+      assert(Number.isFinite(v), `row ${i}[${j}] not finite`);
+      norm += v * v;
+    }
+    assertGreater(norm, 0, `row ${i} is zero vector`);
+  }
+});
+
+Deno.test("stage 2 stats: dim=768 and no NaNs", () => {
+  const s = JSON.parse(Deno.readTextFileSync("build/2_stats.json"));
+  assertEquals(s.dim, 768);
+  assertEquals(s.nan_count, 0);
+  assertGreater(s.total, 0);
+});
+
+Deno.test("stage 3: tagged.tsv has 7 columns and tags are reasonable", () => {
+  const lines = Deno.readTextFileSync("build/3_tagged.tsv").split("\n").filter((l) => l.length);
+  assertEquals(lines[0], "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics");
+  for (let i = 1; i < Math.min(lines.length, 500); i++) {
+    const c = lines[i].split("\t");
+    assertEquals(c.length, 7, `row ${i} has ${c.length} cols`);
+  }
+});
+
+Deno.test("stage 3: known skills land on sensible tags", () => {
+  const lines = Deno.readTextFileSync("build/3_tagged.tsv").split("\n").filter((l) => l.length);
+  const byId = new Map<string, string[]>();
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    byId.set(c[0], c);
+  }
+  const js = byId.get("javascript");
+  assert(js, "missing javascript row");
+  assert(js![5].includes("software-developer") || js![6].includes("programming"), `javascript tags look wrong: occ=${js![5]} topics=${js![6]}`);
+  const bio = byId.get("biology");
+  assert(bio, "missing biology row");
+  assert(bio![5].includes("biologist") || bio![6].includes("biology"), `biology tags look wrong`);
+});
+
+Deno.test("stage 3 stats: IDF pruning dropped the worst embedding-match offenders", () => {
+  const s = JSON.parse(Deno.readTextFileSync("build/3_stats.json"));
+  // Direct tags (ESCO relations, OpenSALT frameworks) can legitimately cluster beyond the IDF cap.
+  // Just check that no degenerate embedding-match winner (chief-executives-style) slipped through.
+  for (const [name, n] of s.top_occupations) {
+    if (/chief-executives|marketing-managers|sales-managers/.test(name)) {
+      throw new Error(`degenerate ${name} not pruned: ${n}`);
+    }
+  }
+  assert(s.top_occupations[0][1] < 10000, `top occupation clustered too hard: ${s.top_occupations[0][1]}`);
+});
+
+Deno.test("stage 4: difficulty.tsv is 1..20 integer band", () => {
+  const lines = Deno.readTextFileSync("build/4_difficulty.tsv").split("\n").filter((l) => l.length);
+  assertEquals(lines[0], "id\tdifficulty\tdifficulty_raw");
+  for (let i = 1; i < Math.min(lines.length, 500); i++) {
+    const [, band, raw] = lines[i].split("\t");
+    const b = Number(band);
+    assert(Number.isInteger(b) && b >= 1 && b <= 20, `row ${i} band out of range: ${band}`);
+    assert(Number.isFinite(Number(raw)), `row ${i} non-finite raw`);
+  }
+});
+
+Deno.test("stage 4: monotonic sanity — addition before calculus", () => {
+  const lines = Deno.readTextFileSync("build/4_difficulty.tsv").split("\n").filter((l) => l.length);
+  const map = new Map(lines.slice(1).map((l) => l.split("\t")).map((c) => [c[0], Number(c[1])]));
+  const add = map.get("addition"), calc = map.get("calculus");
+  if (add !== undefined && calc !== undefined) {
+    assert(add <= calc, `addition (${add}) should be ≤ calculus (${calc})`);
+  }
+});
+
+Deno.test("stage 4 stats: kendall-τ vs anchors above 0.5", () => {
+  const s = JSON.parse(Deno.readTextFileSync("build/4_stats.json"));
+  assert(s.kendall_tau_vs_anchor > 0.5, `kendall τ = ${s.kendall_tau_vs_anchor}`);
+});
+
+Deno.test("stage 1: no embedded tabs or newlines in fields", () => {
+  const text = Deno.readTextFileSync("build/1_skills.tsv");
+  const lines = text.split("\n").filter((l) => l.length);
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split("\t");
+    assertEquals(cols.length, 5, `row ${i} bad column count → embedded tab?`);
+  }
+});

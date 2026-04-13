@@ -1,4 +1,4 @@
-# uncompressed large files (gzipped versions tracked in git)
+# raw data — large originals
 data/junyi/Log_Problem.csv
 data/junyi/Info_UserData.csv
 data/assistments/skill_builder_data.csv
@@ -6,50 +6,15 @@ data/mooccubex/*.json
 !data/mooccubex/*.json.gz
 data/course-skill-atlas/manhattan_euclidean_distances_all.csv
 data/course-skill-atlas/abilities_scores
-
-# too large even compressed
 data/junyi/Log_Problem.csv.gz
 data/dbpedia/article_categories_en.ttl.bz2
-
-# decompressed versions of files tracked as compressed
 data/lcsh/*.nt
 
-# embedding cache
-.cache/
-
-# venv
-.venv/
-
-# secrets
-.env
-
-# store .gz, uncompressed over 100MB
+# pipeline stage caches + final output
+build/
 skills.tsv
-
-# derived pipeline outputs (main.ts, pipeline.ts)
-prereqs.tsv
-levels.tsv
-skills.dot
 skills.tsv.gz
-skills_sources.tsv
-viz.json
 
-# spine pipeline outputs
-spine.html
-spine_skills.tsv
-spine_prereqs.tsv
-
-# embed_taxonomy.ts outputs
-embeddings.bin
-embeddings_ids.tsv
-embed_taxonomy.log
-taxonomy.tsv
-taxonomy.tsv.gz
-taxonomy_edges.tsv
-taxonomy_embeddings.bin
-taxonomy_embeddings_ids.tsv
-
-# eval / scoring outputs
-eval_report.tsv
-skill_value.tsv
-data/eval_edges.json
+.cache/
+.venv/
+.env
