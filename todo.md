@@ -1,14 +1,22 @@
 - [ ] let's redo everything from scratch
-  - skills:title,description,prereqs[],occupations[],topics[],certs[]
-    - 42\tinvert a binary tree\t41,40\tprogrammer\tcomputer science,math\tcissp
-  - - professional: ESCO, O*NET, lightcast
-  - - k-12: csp, opensalt
-  - - topics (for tags): wikipedia, lcsh, dbpedia, ucsd science map
-  - generate prereqs.tsv using haiku to generate final
+  - skills:id,title,description,difficulty,prereqs[],occupations[],topics[],certs[]
+    - invert-binary-tree\tinvert a binary tree\t...\t41,40\tprogrammer\tcs,math\tcissp
+  - sources
+    - professional: ESCO, O*NET, lightcast
+    - k-12: csp, opensalt
+    - topics (for tags): wikipedia, lcsh, dbpedia
   - goal: every skill can be reached from base kindergarten skills
   - avoid: cycles, highly connected nodes, subjectivity
   - note: professions/occpuations are TAGS on nodes, not nodes themselves. we want to minimize the number of occupation tags on each node, and minimize number of covering nodes per tag
-  
+  - use progressive passes of haiku to add difficulty levels by doing random ranked comparisons. use the difficulties and subjects to cluster, then use llms to work backward to fill in prereqs from most difficult to slightly less difficult
+  - pipeline
+    1. list skills
+    2. calc embeddings
+    3. guess occupations,topics,certs based on embeddings
+    4. difficulty 1-20 using random ranking competitions
+    5. link prereqs by working backward from most difficult to least difficult
+    6. clean/compress/infill
+
 - [x] Universal knowledge backbones. **LCSH and DBpedia downloaded.** Wikidata (https://www.wikidata.org) is arguably the single most valuable resource—100+ million items with 1+ billion relationships, completely free under CC0. Its P279 (subclass of) hierarchy already forms a massive knowledge DAG, and it interlinks with nearly every other knowledge system via dedicated properties. Query it via SPARQL at https://query.wikidata.org. The Library of Congress Subject Headings (LCSH) provide ~340,000 authority records with broader/narrower/related term relationships, downloadable as SKOS/RDF from https://id.loc.gov/ Wikipediadownload/—a clean, freely available subject graph spanning all fields. DBpedia (https://www.dbpedia.org) offers a 768-class, 3,000-property cross-domain ontology explicitly structured as a DAG (classes may have multiple superclasses since v3.7), with 228M+ entities, all under CC BY-SA. Wikipedia's category graph contains ~1.7 million categories Wikiworkshop but requires significant cleaning (it contains cycles and administrative categories); access via SQL dumps at https://dumps.wikimedia.org or the wikicat Python library (https://github.com/xhluca/wikicat). GitHub
 - [x] Skills and competency taxonomies. ESCO (https://esco.ec.europa.eu) is the European Commission's taxonomy of 13,890+ skills/competence concepts linked to ~3,000 occupational profiles, downloadable in RDF/CSV/JSON-LD under the EUPL license in 28 languages. O*NET (https://www.onetcenter.org/database.html) provides public domain taxonomies of 33 knowledge areas, 35 skills, and 52 abilities across 1,016 occupations with quantitative importance ratings—downloadable as tab-delimited files, updated quarterly. Lightcast Open Skills (https://lightcast.io/open-skills) offers 32,000+ skills extracted from hundreds of millions of job postings in a 3-tier hierarchy, updated biweekly. Learn & Work Ecosystem Library
 - [x] Prerequisite and dependency datasets. MOOCCubeX (https://github.com/THU-KEG/MOOCCubeX) from Tsinghua University is the richest open prerequisite dataset: 4,216 courses, 637,572 concepts, and explicit prerequisite relations in CS, math, and psychology, with 296M+ behavioral records. Semantic Scholar The Liang et al. (2017) University Course Dataset provides 1,008 annotated concept prerequisite pairs. Semantic Scholar The Course-Skill Atlas (Nature Scientific Data, 2024: https://www.nature.com/articles/s41597-024-03931-8) maps skills from 3+ million course syllabi at ~3,000 U.S. institutions to O*NET categories. LectureBank (Li et al., AAAI 2019) provides 1,352 lecture files with 208 labeled prerequisite relations for NLP education. Semantic Scholar
