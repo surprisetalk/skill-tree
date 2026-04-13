@@ -73,6 +73,8 @@ const totalSkills = idToSource.size;
 
 console.log("scanning prereqs.tsv…");
 const outEdges = new Map<string, string[]>();
+const inEdgesPrereq = new Map<string, string[]>();
+const outEdgesPrereq = new Map<string, string[]>();
 const inDeg = new Map<string, number>();
 const typeCounts = new Map<string, number>();
 const edgeSourceCounts = new Map<string, number>();
@@ -81,6 +83,21 @@ let danglingPrereq = 0;
 let crossBand = 0;
 let k12ToProEdges = 0;
 const nodesWithAnyEdge = new Set<string>();
+
+// Union-find for WCC over all edges (undirected)
+const parent = new Map<string, string>();
+const findRoot = (x: string): string => {
+  let p = parent.get(x) ?? x;
+  if (p === x) return x;
+  const r = findRoot(p);
+  parent.set(x, r);
+  return r;
+};
+const union = (a: string, b: string) => {
+  const ra = findRoot(a), rb = findRoot(b);
+  if (ra !== rb) parent.set(ra, rb);
+};
+for (const id of idToSource.keys()) parent.set(id, id);
 
 for await (const r of rows(PREREQS)) {
   typeCounts.set(r.type, (typeCounts.get(r.type) ?? 0) + 1);
@@ -94,6 +111,11 @@ for await (const r of rows(PREREQS)) {
   nodesWithAnyEdge.add(r.prereq_id);
   (outEdges.get(r.prereq_id) ?? outEdges.set(r.prereq_id, []).get(r.prereq_id)!).push(r.skill_id);
   inDeg.set(r.skill_id, (inDeg.get(r.skill_id) ?? 0) + 1);
+  union(r.skill_id, r.prereq_id);
+  if (r.type === "prerequisite") {
+    (outEdgesPrereq.get(r.prereq_id) ?? outEdgesPrereq.set(r.prereq_id, []).get(r.prereq_id)!).push(r.skill_id);
+    (inEdgesPrereq.get(r.skill_id) ?? inEdgesPrereq.set(r.skill_id, []).get(r.skill_id)!).push(r.prereq_id);
+  }
   const bs = idToBand.get(r.skill_id)!;
   const bp = idToBand.get(r.prereq_id)!;
   if (bs !== bp) crossBand++;
@@ -101,6 +123,26 @@ for await (const r of rows(PREREQS)) {
   const kp = sourceKind(idToSource.get(r.prereq_id) ?? "");
   if ((ks === "pro" && kp === "k12") || (ks === "k12" && kp === "pro")) k12ToProEdges++;
 }
+
+// Also ingest taxonomy_edges.tsv for connectivity/reachability (not for cycle check)
+const TAX = "taxonomy_edges.tsv";
+let taxEdgeCount = 0;
+try {
+  await Deno.stat(TAX);
+  console.log("scanning taxonomy_edges.tsv…");
+  for await (const r of rows(TAX)) {
+    if (!idToSource.has(r.skill_id) || !idToSource.has(r.prereq_id)) continue;
+    nodesWithAnyEdge.add(r.skill_id);
+    nodesWithAnyEdge.add(r.prereq_id);
+    union(r.skill_id, r.prereq_id);
+    // taxonomy edges (broader) contribute to reachability too: treat broader as
+    // weak prereq for K→Pro ladder purposes (ESCO→O*NET dim → K-12 hub).
+    (outEdgesPrereq.get(r.prereq_id) ?? outEdgesPrereq.set(r.prereq_id, []).get(r.prereq_id)!).push(r.skill_id);
+    (inEdgesPrereq.get(r.skill_id) ?? inEdgesPrereq.set(r.skill_id, []).get(r.skill_id)!).push(r.prereq_id);
+    taxEdgeCount++;
+  }
+  console.log(`  ${taxEdgeCount.toLocaleString()} taxonomy edges merged into connectivity graph`);
+} catch { /* missing file is fine */ }
 
 // Kahn topo sort for cycle detection
 console.log("cycle check…");
@@ -164,6 +206,70 @@ console.log(`max out-degree:      ${maxOut}`);
 console.log(`max in-degree:       ${maxIn}`);
 console.log(`nodes with >100 out: ${highOutCount}`);
 console.log(`nodes in cycles:     ${inCycles.toLocaleString()}`);
+
+// === Connectivity: WCC over all edges ===
+console.log("\n=== connectivity (all edge types, undirected) ===");
+const compSize = new Map<string, number>();
+for (const id of idToSource.keys()) {
+  const r = findRoot(id);
+  compSize.set(r, (compSize.get(r) ?? 0) + 1);
+}
+const sizes = [...compSize.values()].sort((a, b) => b - a);
+const singletons = sizes.filter((s) => s === 1).length;
+const nonTrivial = sizes.filter((s) => s > 1).length;
+console.log(`weakly-connected components: ${sizes.length.toLocaleString()} (${singletons.toLocaleString()} singletons, ${nonTrivial.toLocaleString()} multi-node)`);
+console.log(`largest component:           ${sizes[0].toLocaleString()} skills (${(100 * sizes[0] / totalSkills).toFixed(1)}%)`);
+console.log(`top 5 components:            ${sizes.slice(0, 5).map((n) => n.toLocaleString()).join(", ")}`);
+
+// === Reachability: K→Pro via prerequisite edges only ===
+console.log("\n=== reachability (prerequisite edges only) ===");
+const k12Ids: string[] = [];
+const proIds: string[] = [];
+for (const [id, src] of idToSource) {
+  const kind = sourceKind(src);
+  const band = idToBand.get(id)!;
+  if (kind === "k12" && (band === "K-5" || band === "6-8")) k12Ids.push(id);
+  if (kind === "pro") proIds.push(id);
+}
+console.log(`K-8 k12 skills: ${k12Ids.length.toLocaleString()}`);
+console.log(`pro skills:     ${proIds.length.toLocaleString()}`);
+
+const sampleSize = 500;
+const sample = <T>(arr: T[], n: number): T[] => {
+  if (arr.length <= n) return arr;
+  const step = arr.length / n;
+  return Array.from({ length: n }, (_, i) => arr[Math.floor(i * step)]);
+};
+const bfsReaches = (starts: string[], graph: Map<string, string[]>, targets: Set<string>): number => {
+  let hits = 0;
+  for (const s of starts) {
+    const seen = new Set<string>([s]);
+    const stack = [s];
+    let found = targets.has(s);
+    while (stack.length && !found) {
+      const n = stack.pop()!;
+      const outs = graph.get(n);
+      if (!outs) continue;
+      for (const m of outs) {
+        if (seen.has(m)) continue;
+        seen.add(m);
+        if (targets.has(m)) { found = true; break; }
+        stack.push(m);
+      }
+    }
+    if (found) hits++;
+  }
+  return hits;
+};
+
+const proSet = new Set(proIds);
+const k12Set = new Set(k12Ids);
+const k12Sample = sample(k12Ids, sampleSize);
+const proSample = sample(proIds, sampleSize);
+const k12Hits = bfsReaches(k12Sample, outEdgesPrereq, proSet);
+const proHits = bfsReaches(proSample, inEdgesPrereq, k12Set);
+console.log(`K-8 → Pro forward reach:  ${k12Hits}/${k12Sample.length} (${(100 * k12Hits / k12Sample.length).toFixed(1)}%)`);
+console.log(`Pro → K-8 backward reach: ${proHits}/${proSample.length} (${(100 * proHits / proSample.length).toFixed(1)}%)`);
 
 if (danglingSkill > 0 || danglingPrereq > 0 || inCycles > 0) {
   console.error("\nFAIL: dangling refs or cycles present");

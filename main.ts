@@ -2096,8 +2096,13 @@ async function main() {
 
   const curatedSkills = finalSkills.filter(s => !isTaxonomyId(s.id))
   const taxonomySkills = finalSkills.filter(s => isTaxonomyId(s.id))
-  const curatedPrereqs = cleanedPrereqs.filter(p => !isTaxonomyId(p.skill_id) && !isTaxonomyId(p.prereq_id))
-  const taxonomyEdges = cleanedPrereqs.filter(p => isTaxonomyId(p.skill_id) || isTaxonomyId(p.prereq_id))
+  // Split edges by semantic type: prereqs.tsv is pure learning dependencies,
+  // taxonomy_edges.tsv holds all "broader" (taxonomic containment) edges plus any
+  // edge touching an LCSH/DBpedia taxonomy node.
+  const isTaxonomyEdge = (p: Prereq) =>
+    p.type === "broader" || isTaxonomyId(p.skill_id) || isTaxonomyId(p.prereq_id)
+  const curatedPrereqs = cleanedPrereqs.filter(p => !isTaxonomyEdge(p))
+  const taxonomyEdges = cleanedPrereqs.filter(isTaxonomyEdge)
 
   writeSkillsTsv(curatedSkills)
   console.log(`Wrote skills.tsv (${curatedSkills.length} curated)`)

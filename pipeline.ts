@@ -12,7 +12,10 @@ const steps = [
   "csp_hierarchy.ts",
   "semantic_bridges.ts",
   "csp_refine_grades.ts",
+  "onet_hub_align.ts",
+  "onet_hub_prereqs.ts",
   "break_cycles.ts",
+  "split_edges.ts",
   "validate.ts",
 ];
 
