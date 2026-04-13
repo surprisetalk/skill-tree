@@ -321,6 +321,37 @@ async function parseEsco(): Promise<Result> {
     const relId = uriToId.get(r["relatedSkillUri"])
     if (origId && relId) prereqs.push({ skill_id: origId, prereq_id: relId, source: rel === "essential" ? "esco" : "esco_optional", type: "prerequisite" })
   }
+
+  // Occupations as skills + essential/optional skills as prereqs of the occupation
+  try {
+    const occText = await Deno.readTextFile(`${DATA}/esco/occupations_en.csv`)
+    for (const r of parseCsvRows(occText)) {
+      const uri = r["conceptUri"]
+      if (!uri) continue
+      const id = `esco.occ.${lastSeg(uri)}`
+      uriToId.set(uri, id)
+      skills.push(skill(id, r["preferredLabel"] || "", {
+        tags: ["occupation", "esco", ...domainTags(r["preferredLabel"] || "")],
+        ext_urls: [uri],
+        description: r["description"] || r["definition"] || "",
+        ext_ids: [uri],
+      }))
+    }
+    const occRelText = await Deno.readTextFile(`${DATA}/esco/occupationSkillRelations_en.csv`)
+    for (const r of parseCsvRows(occRelText)) {
+      const occId = uriToId.get(r["occupationUri"])
+      const skId = uriToId.get(r["skillUri"])
+      if (!occId || !skId) continue
+      const rel = r["relationType"]
+      prereqs.push({
+        skill_id: occId, prereq_id: skId,
+        source: rel === "essential" ? "esco" : "esco_optional",
+        type: "prerequisite",
+      })
+    }
+  } catch (e) {
+    console.error(`  ESCO occupations skipped: ${e}`)
+  }
   return { skills, prereqs, levels: [] }
 }
 

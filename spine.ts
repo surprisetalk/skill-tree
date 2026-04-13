@@ -5,13 +5,14 @@
 
 const SPINE_SOURCES = new Set([
   "khan", "metacademy", "alcpl", "mooccubex", "junyi", "assistments",
-  "onet", "ngss", "asn", "fos",
+  "onet", "ngss", "asn", "fos", "esco",
 ]);
 
 const SPINE_EDGE_SOURCES = new Set([
   "khan", "metacademy", "alcpl", "mooccubex",
   "junyi_logs", "junyi_hierarchy", "assistments_logs",
   "esco", "esco_optional", "ngss_progression", "opensalt", "llm",
+  "course_skill_atlas",
 ]);
 
 async function* rows(path: string): AsyncGenerator<string[]> {
