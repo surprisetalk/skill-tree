@@ -25,3 +25,31 @@ data/lcsh/*.nt
 
 # store .gz, uncompressed over 100MB
 skills.tsv
+
+# derived pipeline outputs (main.ts, pipeline.ts)
+prereqs.tsv
+levels.tsv
+skills.dot
+skills.tsv.gz
+skills_sources.tsv
+viz.json
+
+# spine pipeline outputs
+spine.html
+spine_skills.tsv
+spine_prereqs.tsv
+
+# embed_taxonomy.ts outputs
+embeddings.bin
+embeddings_ids.tsv
+embed_taxonomy.log
+taxonomy.tsv
+taxonomy.tsv.gz
+taxonomy_edges.tsv
+taxonomy_embeddings.bin
+taxonomy_embeddings_ids.tsv
+
+# eval / scoring outputs
+eval_report.tsv
+skill_value.tsv
+data/eval_edges.json
