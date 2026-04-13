@@ -20,7 +20,7 @@ const NATIONAL_FRAMEWORK_TAG = /(?:^|;)(?:common core|next generation science|ca
 // bypassing this set.
 const SPINE_EDGE_SOURCES = new Set([
   "khan", "metacademy", "alcpl", "mooccubex",
-  "junyi_logs", "junyi_hierarchy", "assistments_logs",
+  "junyi_hierarchy",
   "esco", "esco_optional", "ngss_progression", "opensalt", "llm",
   "course_skill_atlas",
 ]);

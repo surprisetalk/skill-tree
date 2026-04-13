@@ -1425,8 +1425,10 @@ async function inferJunyiLogPrereqs(): Promise<Prereq[]> {
   }
 
   const prereqs: Prereq[] = []
-  const MIN_STUDENTS = 10
-  const THRESHOLD = 0.8
+  // Higher thresholds: eval showed precision ~18% at MIN_STUDENTS=10; bumping
+  // these to drop spurious co-occurrence pairs that aren't real prereqs.
+  const MIN_STUDENTS = 50
+  const THRESHOLD = 0.9
   for (const [key, counts] of exercisePairs) {
     const total = counts.ab + counts.ba
     if (total < MIN_STUDENTS) continue
@@ -1481,8 +1483,8 @@ async function inferAssistmentsPrereqs(): Promise<Prereq[]> {
   }
 
   const prereqs: Prereq[] = []
-  const MIN_STUDENTS = 5
-  const THRESHOLD = 0.8
+  const MIN_STUDENTS = 30
+  const THRESHOLD = 0.9
   for (const [key, counts] of skillPairs) {
     const total = counts.ab + counts.ba
     if (total < MIN_STUDENTS) continue
@@ -2061,15 +2063,9 @@ async function main() {
   allPrereqs.push(...junyiHierPrereqs)
   console.log(`  ${junyiHierPrereqs.length} junyi hierarchy prereqs`)
 
-  console.log("  Junyi logs...")
-  const junyiLogPrereqs = await inferJunyiLogPrereqs()
-  allPrereqs.push(...junyiLogPrereqs)
-  console.log(`  ${junyiLogPrereqs.length} junyi log prereqs`)
-
-  console.log("  ASSISTments logs...")
-  const assistPrereqs = await inferAssistmentsPrereqs()
-  allPrereqs.push(...assistPrereqs)
-  console.log(`  ${assistPrereqs.length} assistments prereqs`)
+  // Junyi/ASSISTments log inference disabled: precision was 18-32% in
+  // eval_report.tsv even after tightening MIN_STUDENTS thresholds. Temporal
+  // co-occurrence in student logs is too noisy to be a reliable prereq signal.
 
   console.log("  CSP grade sequencing...")
   const cspPrereqs = inferCspGradePrereqs(allSkills)

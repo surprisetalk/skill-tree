@@ -104,9 +104,13 @@ async function apiFetch(path: string, opts: { method?: string; body?: unknown } 
 
 function makePrompt(batch: Sample[]): string {
   const listing = batch.map((s, i) => `${i + 1}. Skill: "${s.skill_label}"\n   Claimed prereq: "${s.prereq_label}"`).join("\n")
-  return `You are auditing a prerequisite graph. For each numbered pair, decide whether the claimed prereq is a genuine learning prerequisite of the skill — i.e., a learner should meaningfully master the prereq before the skill. Use your judgment for borderline cases (broader concepts that aren't strictly sequenced count as "unclear", not "yes").
+  return `You are auditing a prerequisite graph. For each pair, decide if the claimed prereq is useful background for the skill.
 
-Respond with ONLY a JSON array of verdicts, one per pair, each one of: "yes", "no", "unclear".
+Answer "yes" if a learner would clearly benefit from knowing the prereq before tackling the skill, OR if the prereq is a broader/foundational concept the skill builds on. Be inclusive — taxonomic ancestors (e.g. "arithmetic" -> "addition") count as "yes".
+Answer "no" if the relation is reversed (skill is actually a prereq of the claimed prereq), unrelated, or the labels are non-comparable noise.
+Reserve "unclear" for genuinely ambiguous cases only — prefer "yes" or "no" when you can.
+
+Respond with ONLY a JSON array, one verdict per pair: "yes" | "no" | "unclear".
 
 ${listing}`
 }
