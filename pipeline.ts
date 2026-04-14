@@ -2282,6 +2282,52 @@ function stage6PostProc() {
   }
   console.log(`[stage 6] heuristic orphan fix: added edges for ${orphanFixed} of ${orphanSkills.size} orphans (of which ${orphanFixedViaWiki} via Wikidata parents)`);
 
+  // --- Cross-domain edge filter: drop edges with zero topic overlap AND zero slug-token overlap ---
+  // Catches spurious edges like "Latin → Desktop Piano and Drums" without killing legitimate
+  // cross-domain pairs (e.g. history-event → history-event have overlapping topics).
+  // Seed edges exempt — they're expert-validated.
+  const seedEdgeKeys = new Set<string>();
+  try {
+    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
+    for (const line of seedLines) {
+      const c = line.split("\t");
+      if (c[4] === "1") continue;
+      seedEdgeKeys.add(`${c[1]}\t${c[0]}`); // edge format: skill \t prereq
+    }
+  } catch { /* none */ }
+  const significantTokens = (id: string): Set<string> => {
+    const out = new Set<string>();
+    for (const w of id.split("-")) if (w.length >= 4 && !stopWords.has(w)) out.add(w);
+    return out;
+  };
+  // Count per-skill prereq edges so we don't orphan a skill by dropping its last prereq
+  const outPerSkill = new Map<string, number>();
+  for (const [s] of final) outPerSkill.set(s, (outPerSkill.get(s) ?? 0) + 1);
+  const beforeCrossDomain = final.length;
+  let droppedCrossDomain = 0, preservedLastEdge = 0;
+  for (let i = final.length - 1; i >= 0; i--) {
+    const [s, p] = final[i];
+    if (seedEdgeKeys.has(`${s}\t${p}`)) continue;
+    const srcTopics = skill.get(p)?.topics;
+    const dstTopics = skill.get(s)?.topics;
+    if (!srcTopics || !dstTopics) continue;
+    if (srcTopics.size < 2 || dstTopics.size < 2) continue;
+    let topicOverlap = 0;
+    for (const t of srcTopics) if (dstTopics.has(t)) topicOverlap++;
+    if (topicOverlap > 0) continue;
+    const srcTok = significantTokens(p);
+    const dstTok = significantTokens(s);
+    let tokOverlap = 0;
+    for (const t of srcTok) if (dstTok.has(t)) tokOverlap++;
+    if (tokOverlap > 0) continue;
+    // Would dropping this orphan the child?
+    if ((outPerSkill.get(s) ?? 0) <= 1) { preservedLastEdge++; continue; }
+    final.splice(i, 1);
+    outPerSkill.set(s, (outPerSkill.get(s) ?? 0) - 1);
+    droppedCrossDomain++;
+  }
+  console.log(`[stage 6] cross-domain filter: dropped ${droppedCrossDomain} of ${beforeCrossDomain} edges (preserved ${preservedLastEdge} last-edge)`);
+
   // --- Seed-edge ingestion from stage 1e (expert-labeled ground truth) ---
   let seedAdded = 0, seedSkippedDiff = 0, seedSkippedMissing = 0, seedSkippedDup = 0, seedHoldout = 0;
   try {
@@ -2304,9 +2350,11 @@ function stage6PostProc() {
       if (holdout) { seedHoldout++; continue; }
       if (!skill.has(src) || !skill.has(dst)) { seedSkippedMissing++; continue; }
       if (src === dst) { seedSkippedDup++; continue; }
-      // Enforce DAG: prereq must be strictly easier by raw difficulty
+      // Enforce DAG + band ordering: prereq must be strictly easier (raw) and not exceed skill's band
       const rs = rawDiff.get(src) ?? 0, rd = rawDiff.get(dst) ?? 0;
       if (rs >= rd) { seedSkippedDiff++; continue; }
+      const bs = band.get(src) ?? 0, bd = band.get(dst) ?? 0;
+      if (bs > bd) { seedSkippedDiff++; continue; }
       const key = `${dst}\t${src}`; // edge schema: skill_id \t prereq_id (dst has src as prereq)
       if (existingEdges.has(key)) { seedSkippedDup++; continue; }
       final.push([dst, src]);
@@ -2450,6 +2498,18 @@ function stage7Finalize() {
     const arr = prereqs.get(s) ?? []; arr.push(p); prereqs.set(s, arr);
   }
 
+  // --- Description enrichment via Wikipedia REST summaries (for skills with thin descriptions) ---
+  const wikiSummary = new Map<string, string>();
+  try {
+    for (const line of Deno.readTextFileSync(`${BUILD}/1h_wiki_summaries.tsv`).split("\n")) {
+      if (!line) continue;
+      const [id, ...rest] = line.split("\t");
+      const text = rest.join("\t");
+      if (id && text) wikiSummary.set(id, text);
+    }
+    console.log(`[stage 7] loaded ${wikiSummary.size} Wikipedia summaries`);
+  } catch { /* skip */ }
+
   // --- Topic enrichment via Wikidata P279 parent labels, + framework stoplist ---
   const idToQid = new Map<string, string>();
   try {
@@ -2494,10 +2554,28 @@ function stage7Finalize() {
   for (const [q, n] of parentFreq) if (n >= abstractThreshold) blockedQids.add(q);
   console.log(`[stage 7] blocking ${blockedQids.size} abstract parent QIDs (≥${abstractThreshold} skills, of ${wikiSkillCount} wiki-resolved)`);
 
+  // --- Cruft-orphan drop: skills with no prereqs, no descendants, no coherent content ---
+  // Must not drop canonical ids that other skills alias to.
+  const aliasCanonicals = new Set<string>();
+  try {
+    const aliasLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
+    for (let i = 1; i < aliasLines.length; i++) aliasCanonicals.add(aliasLines[i].split("\t")[1]);
+  } catch { /* none */ }
+  const childCount = new Map<string, number>();
+  for (const [, p] of prereqs) for (const pid of p) childCount.set(pid, (childCount.get(pid) ?? 0) + 1);
+  const isOrphanLeaf = (id: string) => (prereqs.get(id) || []).length === 0 && (childCount.get(id) ?? 0) === 0;
+  const isCruft = (s: { id: string; title: string; description: string }) => {
+    if (aliasCanonicals.has(s.id)) return false;
+    if (s.id.split("-").length >= 5 && (s.description || "").length < 60) return true;
+    if (/^review-records|^prepare-inserts|^seal-containers/.test(s.id)) return true;
+    return false;
+  };
+
   // Emit
   const rows = ["id\ttitle\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tcerts"];
-  let wikiEnriched = 0, frameworkFiltered = 0;
+  let wikiEnriched = 0, frameworkFiltered = 0, descEnriched = 0, dropped = 0;
   for (const s of skills) {
+    if (isOrphanLeaf(s.id) && isCruft(s)) { dropped++; continue; }
     const d = diff.get(s.id);
     if (d === undefined) throw new Error(`skill ${s.id} missing from difficulty.tsv`);
     const ps = (prereqs.get(s.id) ?? []).join(",");
@@ -2521,23 +2599,29 @@ function stage7Finalize() {
     }
     if (parentTopics.length) wikiEnriched++;
     const topics = [...new Set([...filtered, ...parentTopics])].slice(0, TOPIC_CAP).join(",");
-    rows.push([s.id, s.title, s.description, d.toString(), ps, s.occupations, topics, ""].join("\t"));
+    // Description enrichment: replace thin descriptions with Wikipedia summary when available
+    let desc = s.description;
+    const wikiText = wikiSummary.get(s.id);
+    if (wikiText && desc.length < 80) { desc = wikiText; descEnriched++; }
+    rows.push([s.id, s.title, desc, d.toString(), ps, s.occupations, topics, ""].join("\t"));
   }
   Deno.writeTextFileSync("skills.tsv", rows.join("\n") + "\n");
-  console.log(`[stage 7] topic enrichment: wiki_enriched=${wikiEnriched}, framework_filtered=${frameworkFiltered}`);
+  console.log(`[stage 7] topic enrichment: wiki_enriched=${wikiEnriched}, framework_filtered=${frameworkFiltered}, desc_enriched=${descEnriched}, cruft_dropped=${dropped}`);
 
   // gzip (keep original)
   new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] }).outputSync();
   const src = Deno.readFileSync("skills.tsv");
 
-  // Reachability BFS from lowest-difficulty anchors
+  // Reachability BFS from roots, restricted to emitted skills
+  const emittedIds = new Set<string>();
+  for (let i = 1; i < rows.length; i++) emittedIds.add(rows[i].split("\t")[0]);
   const adj = new Map<string, string[]>();
   for (const l of edgeLines) {
     const [s, p] = l.split("\t");
-    // prereq p → skill s edge (learning order: prereq before skill)
+    if (!emittedIds.has(s) || !emittedIds.has(p)) continue;
     const arr = adj.get(p) ?? []; arr.push(s); adj.set(p, arr);
   }
-  const roots = skills.filter((s) => !prereqs.has(s.id)).map((s) => s.id);
+  const roots = skills.filter((s) => emittedIds.has(s.id) && !prereqs.has(s.id)).map((s) => s.id);
   const visited = new Set<string>(roots);
   const queue = [...roots];
   while (queue.length) {
@@ -2545,14 +2629,19 @@ function stage7Finalize() {
     for (const v of adj.get(u) ?? []) if (!visited.has(v)) { visited.add(v); queue.push(v); }
   }
 
+  const emitted = rows.length - 1;
   writeStats(7, {
-    skills_emitted: skills.length,
+    skills_emitted: emitted,
+    skills_dropped_cruft: dropped,
     edges: edgeLines.length,
     skills_with_prereqs: prereqs.size,
-    orphan_skills: skills.length - prereqs.size,
+    orphan_skills: emitted - prereqs.size,
     roots: roots.length,
     reachable_from_roots: visited.size,
-    unreachable: skills.length - visited.size,
+    unreachable: emitted - visited.size,
+    wiki_desc_enriched: descEnriched,
+    wiki_topic_enriched: wikiEnriched,
+    framework_topics_filtered: frameworkFiltered,
     file_bytes: src.byteLength,
   });
 }
