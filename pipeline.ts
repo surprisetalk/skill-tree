@@ -66,7 +66,8 @@ function writeStats(stage: number, stats: Record<string, unknown>) {
 function stage1List() {
   console.log("[stage 1] reading sources…");
   const summarizeCache = loadSummarizeCache();
-  console.log(`[stage 1] summarize cache: ${summarizeCache.size} entries`);
+  const onetDescCache = loadOnetDescCache();
+  console.log(`[stage 1] caches: summarize=${summarizeCache.size}, onet_desc=${onetDescCache.size}`);
   const raw: Skill[] = [];
 
   // ESCO
@@ -269,7 +270,7 @@ function stage1List() {
   }
 
   // Apply summarize cache: replace long titles with concise summaries, keep original as description
-  let summarized = 0;
+  let summarized = 0, onetEnriched = 0;
   for (const s of raw) {
     const candidate = slugify(s.title);
     const summary = summarizeCache.get(candidate);
@@ -279,8 +280,13 @@ function stage1List() {
       if (!s.description) s.description = original;
       summarized++;
     }
+    // Apply ONET description enrichment if still missing a description
+    if (!s.description && s.sources.includes("onet")) {
+      const desc = onetDescCache.get(candidate);
+      if (desc) { s.description = desc; onetEnriched++; }
+    }
   }
-  console.log(`[stage 1] applied ${summarized} summaries`);
+  console.log(`[stage 1] applied ${summarized} summaries, ${onetEnriched} onet descriptions`);
 
   // Dedupe by fuzzy key
   console.log(`[stage 1] raw rows: ${raw.length}; deduping…`);
@@ -519,6 +525,147 @@ async function stage1bInfill() {
   console.log(`[stage 1b] batch submitted. Re-run \`pipeline.ts infill\` to poll for results.`);
 }
 
+// ---------- stage 1d: enrich ONET Task/DWA descriptions ----------
+
+const ONET_DESC_CACHE = `${BUILD}/1d_onet_desc.tsv`;
+const ONET_DESC_BATCH_STATE = `${BUILD}/1d_batch.json`;
+const ONET_DESC_SYSTEM = `Expand the given workplace task into a 1-2 sentence description of what the task involves. Be concrete and factual. No preamble. No quotation marks. Return only the description.`;
+
+function loadOnetDescCache(): Map<string, string> {
+  try {
+    const text = Deno.readTextFileSync(ONET_DESC_CACHE);
+    const m = new Map<string, string>();
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      const tab = line.indexOf("\t");
+      if (tab < 0) continue;
+      m.set(line.slice(0, tab), line.slice(tab + 1) || "");
+    }
+    return m;
+  } catch { return new Map(); }
+}
+
+function appendOnetDesc(map: Record<string, string>) {
+  const enc = new TextEncoder();
+  const fh = Deno.openSync(ONET_DESC_CACHE, { create: true, append: true });
+  for (const [id, v] of Object.entries(map)) {
+    fh.writeSync(enc.encode(`${id}\t${v.replace(/[\t\n\r]/g, " ")}\n`));
+  }
+  fh.close();
+}
+
+async function submitOnetDescBatch(chunk: { id: string; title: string }[]): Promise<{ batchId: string; idMap: Record<string, string> }> {
+  const idMap: Record<string, string> = {};
+  const requests = await Promise.all(chunk.map(async (t, i) => {
+    const cid = await shortId(t.id, i);
+    idMap[cid] = t.id;
+    return {
+      custom_id: cid,
+      params: {
+        model: CLAUDE_MODEL,
+        max_tokens: 80,
+        system: [{ type: "text", text: ONET_DESC_SYSTEM, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: `Task: ${t.title}` }],
+      },
+    };
+  }));
+  const body = JSON.stringify({ requests });
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages/batches", {
+        method: "POST",
+        headers: ANTHROPIC_HEADERS,
+        body,
+      });
+      if (res.ok) { const j = await res.json(); return { batchId: j.id, idMap }; }
+      const txt = await res.text();
+      if (res.status === 429 || res.status >= 500) {
+        const delay = Math.min(60 * attempt, 300);
+        console.warn(`  [retry ${attempt}/8] ${res.status} — sleeping ${delay}s`);
+        await new Promise((r) => setTimeout(r, delay * 1000));
+        continue;
+      }
+      throw new Error(`onet-desc submit ${res.status}: ${txt}`);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (/onet-desc submit [1-4]\d\d/.test(msg)) throw err;
+      const delay = Math.min(30 * attempt, 300);
+      console.warn(`  [retry ${attempt}/8] network: ${msg.slice(0, 80)} — sleeping ${delay}s`);
+      await new Promise((r) => setTimeout(r, delay * 1000));
+    }
+  }
+  throw new Error("onet-desc submit: retries exhausted");
+}
+
+async function stage1dOnetDesc() {
+  if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+
+  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
+  const targets: { id: string; title: string }[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    if (c[3] === "onet" && !c[2] && c[1].length < 120) targets.push({ id: c[0], title: c[1] });
+  }
+  const cache = loadOnetDescCache();
+
+  // Track IDs already in flight
+  let state: { batches: { id: string; idMap: Record<string, string> }[] } | null = null;
+  try { state = JSON.parse(Deno.readTextFileSync(ONET_DESC_BATCH_STATE)); } catch { /* none */ }
+  const inFlight = new Set<string>();
+  if (state) for (const b of state.batches) for (const v of Object.values(b.idMap)) inFlight.add(v);
+
+  const buildTodo = () => targets.filter((t) => !cache.has(t.id) && !inFlight.has(t.id));
+  let todo = buildTodo();
+  console.log(`[stage 1d] targets: ${targets.length}, cached: ${cache.size}, in-flight: ${inFlight.size}, to submit: ${todo.length}`);
+
+  // Poll existing batches
+  if (state) {
+    const remaining: typeof state.batches = [];
+    for (const b of state.batches) {
+      const p = await pollBatch(b.id);
+      console.log(`  batch ${b.id} status=${p.status} counts=${JSON.stringify(p.counts)}`);
+      if (p.status === "ended") {
+        if (!p.resultsUrl) { console.warn(`  no results_url for ${b.id}`); continue; }
+        const results = await downloadBatchResults(p.resultsUrl, b.idMap);
+        appendOnetDesc(results);
+        for (const id of Object.keys(results)) cache.set(id, results[id]);
+        for (const v of Object.values(b.idMap)) inFlight.delete(v);
+      } else remaining.push(b);
+    }
+    if (remaining.length === 0) {
+      try { Deno.removeSync(ONET_DESC_BATCH_STATE); } catch { /* ignore */ }
+      state = { batches: [] };
+    } else {
+      Deno.writeTextFileSync(ONET_DESC_BATCH_STATE, JSON.stringify({ batches: remaining }));
+      state = { batches: remaining };
+    }
+    todo = buildTodo();
+  }
+  if (todo.length === 0 && (!state || state.batches.length === 0)) {
+    writeStats(13, { targets: targets.length, cached: cache.size });
+    console.log(`[stage 1d] all done — ${cache.size}/${targets.length} cached`);
+    return;
+  }
+
+  // Fill parallel submission slots
+  const CHUNK = Number(Deno.env.get("ONET_CHUNK") ?? "5000");
+  const PARALLEL = Number(Deno.env.get("ONET_PARALLEL") ?? "3");
+  const inFlightBatches = state?.batches ?? [];
+  const slots = Math.max(0, PARALLEL - inFlightBatches.length);
+  const batches = [...inFlightBatches];
+  let off = 0;
+  for (let n = 0; n < slots && off < todo.length; n++) {
+    const chunk = todo.slice(off, off + CHUNK);
+    if (Deno.env.get("INFILL_LIMIT")) chunk.length = Math.min(chunk.length, Number(Deno.env.get("INFILL_LIMIT")));
+    const b = await submitOnetDescBatch(chunk);
+    batches.push({ id: b.batchId, idMap: b.idMap });
+    Deno.writeTextFileSync(ONET_DESC_BATCH_STATE, JSON.stringify({ batches }));
+    console.log(`[stage 1d] batch ${b.batchId}: ${chunk.length} requests submitted`);
+    off += chunk.length;
+  }
+  console.log(`[stage 1d] ${batches.length} batch(es) in-flight. Rerun to poll + submit next.`);
+}
+
 // ---------- stage 1c: summarize long titles ----------
 
 const SUMMARIZE_CACHE = `${BUILD}/1c_summarize.tsv`;
@@ -624,6 +771,11 @@ async function stage1cSummarize() {
 }
 
 // ---------- stage 2: embed ----------
+
+// Prefer deduped tagged output if present (stage 3b); falls back to stage 3.
+function taggedTsvPath(): string {
+  try { Deno.statSync(`${BUILD}/3b_tagged_deduped.tsv`); return `${BUILD}/3b_tagged_deduped.tsv`; } catch { return `${BUILD}/3_tagged.tsv`; }
+}
 
 const OLLAMA = "http://localhost:11434";
 const EMBED_MODEL = "nomic-embed-text";
@@ -1136,7 +1288,35 @@ async function stage3Tag() {
   const finalize = (pass: { out: { idx: number; score: number }[][] }, mask: Uint8Array, k: number): number[][] =>
     pass.out.map((row) => row.filter((r) => mask[r.idx]).slice(0, k).map((r) => r.idx));
 
-  const occFinal = finalize(occPass, occMask, OCC_K);
+  // For occupations: after picking top-k, drop occupations that are semantically distant from each other
+  // (cosine between them < OCC_PAIR_MIN). Weeds out bizarre pairings like plumbers+hairdressers.
+  const OCC_PAIR_MIN = Number(Deno.env.get("OCC_PAIR_MIN") ?? "0.5");
+  const occFinalizeWithPairFilter = (pass: { out: { idx: number; score: number }[][] }, mask: Uint8Array, k: number): number[][] => {
+    const results: number[][] = [];
+    let droppedByPair = 0;
+    for (const row of pass.out) {
+      const kept = row.filter((r) => mask[r.idx]);
+      if (kept.length <= 1) { results.push(kept.slice(0, k).map((r) => r.idx)); continue; }
+      // Keep top-1 always; for each subsequent, check cosine against all already-kept
+      const finalIdxs: number[] = [kept[0].idx];
+      for (let j = 1; j < kept.length && finalIdxs.length < k; j++) {
+        const rj = kept[j].idx;
+        let minCos = 1;
+        for (const ki of finalIdxs) {
+          let sc = 0;
+          for (let d = 0; d < DIM; d++) sc += occMat[rj * DIM + d] * occMat[ki * DIM + d];
+          if (sc < minCos) minCos = sc;
+        }
+        if (minCos >= OCC_PAIR_MIN) finalIdxs.push(rj);
+        else droppedByPair++;
+      }
+      results.push(finalIdxs);
+    }
+    console.log(`[stage 3] occ pair filter: dropped ${droppedByPair} distant-pair occupations`);
+    return results;
+  };
+
+  const occFinal = occFinalizeWithPairFilter(occPass, occMask, OCC_K);
   const topicFinal = finalize(topicPass, topicMask, TOPIC_K);
 
   const directEsco = parseEscoSkillOccupations();
@@ -1204,6 +1384,8 @@ async function stage3Tag() {
   }
   console.log(`[stage 3] direct tags: ${directOccHits} esco-occ, ${directTopicHits} esco-topic, ${frameworkHits} opensalt-framework`);
   Deno.writeTextFileSync(`${BUILD}/3_tagged.tsv`, rows.join("\n") + "\n");
+  // Stage 3b output, if it exists, is now stale — remove so stages 4+ reread from stage 3 until dedupe re-runs
+  try { Deno.removeSync(`${BUILD}/3b_tagged_deduped.tsv`); } catch { /* ignore */ }
 
   const topN = (counts: Map<string, number>, n: number) =>
     [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
@@ -1244,7 +1426,7 @@ function gradeToDifficulty(token: string): number | null {
 }
 
 function stage4Difficulty() {
-  const lines = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
   const hdr = lines[0].split("\t");
   const iTags = hdr.indexOf("tags");
   const iSources = hdr.indexOf("sources");
@@ -1377,33 +1559,39 @@ function stage4Difficulty() {
   }
   } // end kNN guard
 
-  // Non-grade skills (ESCO/ONET/Lightcast) get a maturity bonus — they're workplace-level, not curriculum.
-  // Raw range 0..13 from grades; stretch to 1..17 and add +3 for non-OpenSALT sources so they land 4..20.
+  // Tie-break equal raw values using embedding-based diversity + source priority so quantile bins split cleanly
+  // Add small random jitter seeded by id hash so ties resolve deterministically but distribute
   const sorted = [...out].sort((a, b) => a - b);
   const rawMin = sorted[0], rawMax = sorted[sorted.length - 1];
-  const stretched = new Float32Array(skills.length);
+  const jittered = new Float32Array(skills.length);
   for (let i = 0; i < skills.length; i++) {
-    const r = out[i];
-    const norm = rawMax > rawMin ? (r - rawMin) / (rawMax - rawMin) : 0.5;
-    let v = 1 + norm * 16; // 1..17
-    const src = skills[i].sources;
-    if (!src.includes("opensalt")) v += 3; // workplace sources push to 4..20
-    stretched[i] = v;
+    // Deterministic jitter based on id (simple hash), scaled by 1% of range
+    let h = 0;
+    for (let k = 0; k < skills[i].id.length; k++) h = ((h * 31) + skills[i].id.charCodeAt(k)) | 0;
+    const jit = ((h >>> 0) % 1000) / 1000; // [0,1)
+    jittered[i] = out[i] + (jit - 0.5) * 0.001; // tiny tie-break
   }
 
-  // Final quantile bin over stretched scores
-  const stSorted = [...stretched].sort((a, b) => a - b);
-  const bands = Array.from({ length: 19 }, (_, i) => stSorted[Math.floor(stSorted.length * (i + 1) / 20)]);
-  const toBand = (x: number) => {
-    for (let b = 0; b < 19; b++) if (x <= bands[b]) return b + 1;
-    return 20;
-  };
+  // Non-OpenSALT skills get a bonus so workplace content lands higher than K-12 curriculum.
+  // Apply bonus to JITTERED raw, then quantile-bin directly (no separate stretch — avoids pile-up).
+  const biased = new Float32Array(skills.length);
+  for (let i = 0; i < skills.length; i++) {
+    biased[i] = jittered[i] + (skills[i].sources.includes("opensalt") ? 0 : 3);
+  }
+
+  // 20 equal-sized quantile bins over biased scores → guaranteed even distribution
+  const idxOrder = [...Array(skills.length).keys()].sort((a, b) => biased[a] - biased[b]);
   const band = new Int32Array(skills.length);
   const bandCounts = new Array(20).fill(0);
-  for (let i = 0; i < skills.length; i++) {
-    band[i] = toBand(stretched[i]);
-    bandCounts[band[i] - 1]++;
+  const bandSize = skills.length / 20;
+  for (let rank = 0; rank < skills.length; rank++) {
+    const i = idxOrder[rank];
+    const b = Math.min(20, Math.floor(rank / bandSize) + 1);
+    band[i] = b;
+    bandCounts[b - 1]++;
   }
+  const bands = Array.from({ length: 19 }, (_, i) => biased[idxOrder[Math.floor(skills.length * (i + 1) / 20)]]);
+  void rawMin; void rawMax; void bands; // retained for stats compat
 
   // Write
   const rows = ["id\tdifficulty\tdifficulty_raw"];
@@ -1451,7 +1639,7 @@ const PREREQ_CACHE = `${BUILD}/5_prereqs.tsv`;
 const PREREQ_SYSTEM = `You identify true prerequisites for a skill. Given a skill and a numbered list of candidate prerequisites (all from easier/earlier material), return the numbers of candidates that MUST be understood first before learning the skill. Be strict — only include genuinely foundational dependencies, not merely related or adjacent topics. Return ONLY a comma-separated list of numbers (e.g. "2,5,9") or the word "none". No explanation.`;
 
 function parseSkillsWithDifficulty(): { skills: { id: string; title: string; description: string; topics: string }[]; diff: Int32Array; raw: Float32Array } {
-  const tagged = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n").filter((l) => l.length);
+  const tagged = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
   const taggedHdr = tagged[0].split("\t");
   const iTitle = taggedHdr.indexOf("title");
   const iDesc = taggedHdr.indexOf("description");
@@ -1513,12 +1701,13 @@ function computePrereqCandidates(): Map<string, number[]> {
 
   const K = Number(Deno.env.get("PREREQ_K") ?? "15");
   const MIN_DIFF = Number(Deno.env.get("PREREQ_MIN_DIFF_DELTA") ?? "0.3"); // require strictly lower raw difficulty
+  const ANCESTOR_K = Number(Deno.env.get("PREREQ_ANCESTOR_K") ?? "5"); // of the K slots, reserve for low-diff ancestors
   const out = new Map<string, number[]>();
   const outLines: string[] = [];
 
   const t0 = performance.now();
   for (let i = 0; i < skills.length; i++) {
-    // Pool: within-topic skills with strictly lower raw difficulty
+    // Pool: within-topic skills with strictly lower raw difficulty (peer candidates)
     const pool = new Set<number>();
     for (const t of skills[i].topics.split(",")) {
       if (!t) continue;
@@ -1535,23 +1724,44 @@ function computePrereqCandidates(): Map<string, number[]> {
       for (let j = 0; j < skills.length; j++) if (raw[j] + MIN_DIFF <= raw[i]) candidates.push(j);
     }
 
-    // Top-K by cosine similarity
+    // Ancestor seed: reserve ANCESTOR_K slots for much-lower-difficulty skills in same top-topic.
+    // Catches foundational prereqs (e.g. "programming fundamentals" for "javascript").
+    const ancestorSet = new Set<number>();
+    const topics = skills[i].topics.split(",").filter((t) => t);
+    if (topics.length > 0 && ANCESTOR_K > 0) {
+      const ancestorMaxDiff = raw[i] - 2; // require ≥2 raw units lower
+      for (const t of topics) {
+        const arr = topicIdx.get(t);
+        if (!arr) continue;
+        // Sort arr by raw difficulty ascending, pick lowest few
+        const sorted = [...arr].sort((a, b) => raw[a] - raw[b]);
+        for (let k = 0; k < sorted.length && ancestorSet.size < ANCESTOR_K; k++) {
+          if (raw[sorted[k]] <= ancestorMaxDiff) ancestorSet.add(sorted[k]);
+          else break;
+        }
+        if (ancestorSet.size >= ANCESTOR_K) break;
+      }
+    }
+
+    // Top (K - ancestorSet.size) by cosine similarity among candidates (exclude ancestors we'll add directly)
     const sOff = i * DIM;
     const top: { idx: number; score: number }[] = [];
+    const remainingK = Math.max(1, K - ancestorSet.size);
     for (const j of candidates) {
+      if (ancestorSet.has(j)) continue;
       let sc = 0;
       const aOff = j * DIM;
       for (let d = 0; d < DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];
-      if (top.length < K) {
+      if (top.length < remainingK) {
         top.push({ idx: j, score: sc });
-        if (top.length === K) top.sort((a, b) => a.score - b.score);
+        if (top.length === remainingK) top.sort((a, b) => a.score - b.score);
       } else if (sc > top[0].score) {
         top[0] = { idx: j, score: sc };
         top.sort((a, b) => a.score - b.score);
       }
     }
     top.sort((a, b) => b.score - a.score);
-    const idxs = top.map((t) => t.idx);
+    const idxs = [...ancestorSet, ...top.map((t) => t.idx)].slice(0, K);
     out.set(skills[i].id, idxs);
     outLines.push(`${skills[i].id}\t${idxs.join(",")}`);
     if ((i + 1) % 5000 === 0) {
@@ -1692,6 +1902,7 @@ async function stage5Prereq() {
 
   if (state) {
     console.log(`[stage 5] resuming ${state.batches.length} batch(es)`);
+    const skillOrder = skills.map((s) => s.id);
     const remaining: typeof state.batches = [];
     for (const b of state.batches) {
       const p = await pollBatch(b.id);
@@ -1711,7 +1922,11 @@ async function stage5Prereq() {
           if (!skillId) continue;
           if (j.result?.type !== "succeeded") { err++; continue; }
           const raw = (j.result.message.content?.[0]?.text ?? "").replace(/[\t\n\r]/g, " ");
-          fh.writeSync(enc.encode(`${skillId}\t${raw}\n`));
+          // Resolve positional indexes to prereq ids so responses survive skill-array reorders (e.g. from dedupe)
+          const cands = candidates.get(skillId) ?? [];
+          const picks = parsePrereqResponse(raw, cands.length);
+          const resolved = picks.map((p) => skillOrder[cands[p]]).filter((x) => x).join(",");
+          fh.writeSync(enc.encode(`${skillId}\t${resolved}\n`));
           ok++;
         }
         fh.close();
@@ -1789,7 +2004,7 @@ async function stage5Prereq() {
 // ---------- stage 6: post-process prereqs ----------
 
 function stage6PostProc() {
-  const tagLines = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n").filter((l) => l.length);
+  const tagLines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
   const hdr = tagLines[0].split("\t");
   const iTitle = hdr.indexOf("title");
   const iTags = hdr.indexOf("tags");
@@ -1827,18 +2042,49 @@ function stage6PostProc() {
     pick.set(line.slice(0, tab), line.slice(tab + 1));
   }
 
-  // Build raw edge list
+  // Build raw edge list. Detect format: resolved-ids (contains hyphens) vs legacy positional (digits only).
   let raw: [string, string][] = [];
   for (const [id, resp] of pick) {
-    const cands = candidates.get(id) ?? [];
-    const picks = parsePrereqResponse(resp, cands.length);
-    for (const p of picks) {
-      const prereqId = order[cands[p]];
-      if (prereqId) raw.push([id, prereqId]);
+    if (!resp || resp === "none") continue;
+    const isResolved = /-/.test(resp) || /[a-z]/.test(resp);
+    if (isResolved) {
+      for (const pid of resp.split(",")) if (pid) raw.push([id, pid]);
+    } else {
+      const cands = candidates.get(id) ?? [];
+      const picks = parsePrereqResponse(resp, cands.length);
+      for (const p of picks) {
+        const prereqId = order[cands[p]];
+        if (prereqId) raw.push([id, prereqId]);
+      }
     }
   }
+  // Apply dedupe alias if exists
+  try {
+    const aliasLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
+    const alias = new Map<string, string>();
+    for (let i = 1; i < aliasLines.length; i++) {
+      const [d, c] = aliasLines[i].split("\t");
+      alias.set(d, c);
+    }
+    raw = raw.map(([s, p]) => [alias.get(s) ?? s, alias.get(p) ?? p] as [string, string])
+      .filter(([s, p]) => s !== p);
+    console.log(`[stage 6] applied ${alias.size} aliases`);
+  } catch { /* no dedupe */ }
   const beforeTotal = raw.length;
   console.log(`[stage 6] raw edges: ${beforeTotal}`);
+
+  // --- Filter 0: drop band-inverted edges (prereq.band > skill.band) ---
+  // These occur when the non-OpenSALT +3 bonus crosses a grade-anchor boundary.
+  // Raw-diff ordering was preserved in stage 5, but band-level ordering can invert.
+  const diffLines2 = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length);
+  const band = new Map<string, number>();
+  for (let i = 1; i < diffLines2.length; i++) {
+    const c = diffLines2[i].split("\t");
+    band.set(c[0], Number(c[1]));
+  }
+  const beforeBandFilter = raw.length;
+  raw = raw.filter(([s, p]) => (band.get(p) ?? 0) <= (band.get(s) ?? 20));
+  console.log(`[stage 6] dropped ${beforeBandFilter - raw.length} band-inverted edges`);
 
   // --- Filter 1: drop onet:tech prereqs that are cross-domain noise ---
   // Keep if: skill itself is onet:tech (tech→tech), OR prereq slug appears in skill's topics.
@@ -1926,7 +2172,7 @@ function stage6PostProc() {
 // ---------- stage 7: finalize skills.tsv ----------
 
 function stage7Finalize() {
-  const taggedLines = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n").filter((l) => l.length);
+  const taggedLines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
   const thdr = taggedLines[0].split("\t");
   const iTitle = thdr.indexOf("title");
   const iDesc = thdr.indexOf("description");
@@ -1992,14 +2238,199 @@ function stage7Finalize() {
   });
 }
 
+// ---------- stage 3b: dedupe near-identical skills (runs after tag, before difficulty) ----------
+
+// One-time migration: convert 5_prereqs.tsv from positional indexes to resolved prereq ids.
+// Old format: skill_id \t "1,3,5"  New format: skill_id \t prereq_id1,prereq_id2,prereq_id3
+function migratePrereqsToResolvedIds() {
+  const path = `${BUILD}/5_prereqs.tsv`;
+  let text: string;
+  try { text = Deno.readTextFileSync(path); } catch { return; }
+  const lines = text.split("\n").filter((l) => l.length);
+  if (!lines.length) return;
+  // Detect format: if any non-none response starts with non-digit or contains hyphen → already resolved
+  const sample = lines.slice(0, 50).map((l) => l.split("\t")[1] || "");
+  const looksResolved = sample.some((s) => s && s !== "none" && /-/.test(s));
+  if (looksResolved) return; // already migrated
+
+  console.log(`[migration] converting ${lines.length} prereq responses to resolved-id format`);
+  // Need: skill id order and candidates
+  const taggedLines = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n").filter((l) => l.length);
+  const order: string[] = taggedLines.slice(1).map((l) => l.split("\t")[0]);
+  const candLines = Deno.readTextFileSync(`${BUILD}/5_candidates.tsv`).split("\n").filter((l) => l.length);
+  const candidates = new Map<string, number[]>();
+  for (const line of candLines) {
+    const tab = line.indexOf("\t");
+    const id = line.slice(0, tab);
+    const rest = line.slice(tab + 1);
+    candidates.set(id, rest ? rest.split(",").map(Number) : []);
+  }
+
+  const resolved = new Map<string, string>();
+  for (const line of lines) {
+    const tab = line.indexOf("\t");
+    const id = line.slice(0, tab);
+    const resp = line.slice(tab + 1);
+    const cands = candidates.get(id) ?? [];
+    const picks = parsePrereqResponse(resp, cands.length);
+    const prereqIds = picks.map((p) => order[cands[p]]).filter((x) => x);
+    resolved.set(id, prereqIds.join(","));
+  }
+  const out = [...resolved.entries()].map(([id, v]) => `${id}\t${v}`).join("\n") + "\n";
+  Deno.writeTextFileSync(path + ".bak", text);
+  Deno.writeTextFileSync(path, out);
+  console.log(`[migration] migrated ${resolved.size} rows; backup at ${path}.bak`);
+}
+
+function stage3bDedupe() {
+  migratePrereqsToResolvedIds();
+  const lines = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n").filter((l) => l.length);
+  const hdrCols = lines[0].split("\t");
+  type Row = { id: string; title: string; description: string; sources: string; tags: string; occupations: string; topics: string };
+  const rows: Row[] = lines.slice(1).map((l) => {
+    const c = l.split("\t");
+    return { id: c[0], title: c[1], description: c[2], sources: c[3], tags: c[4], occupations: c[5], topics: c[6] };
+  });
+
+  // Load embeddings
+  const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
+  const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
+  const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
+  const DIM = EMBED_DIM;
+  const idToIdx = new Map<string, number>();
+  for (let i = 0; i < ids.length; i++) idToIdx.set(ids[i], i);
+  const vecs = new Float32Array(rows.length * DIM);
+  for (let i = 0; i < rows.length; i++) {
+    const embIdx = idToIdx.get(rows[i].id);
+    if (embIdx === undefined) throw new Error(`no embedding for ${rows[i].id}`);
+    vecs.set(normalize(emb.subarray(embIdx * DIM, (embIdx + 1) * DIM)), i * DIM);
+  }
+
+  const DEDUPE_COSINE = Number(Deno.env.get("DEDUPE_COSINE") ?? "0.96");
+
+  // Bucket by top-topic (pre-difficulty) — catches duplicates at any difficulty
+  const buckets = new Map<string, number[]>();
+  for (let i = 0; i < rows.length; i++) {
+    const topic = rows[i].topics.split(",")[0] || "_notopic";
+    const arr = buckets.get(topic) ?? []; arr.push(i); buckets.set(topic, arr);
+  }
+  console.log(`[stage 3b] ${buckets.size} buckets, largest=${Math.max(...[...buckets.values()].map((a) => a.length))}`);
+
+  // Merge map: idx → canonical idx
+  const parent = new Int32Array(rows.length);
+  for (let i = 0; i < rows.length; i++) parent[i] = i;
+  function find(i: number): number { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
+  function union(a: number, b: number) {
+    const ra = find(a), rb = find(b);
+    if (ra === rb) return;
+    // Canonical = shortest title (prefer well-formed ids: lowercase + hyphens only)
+    const keep = rows[ra].title.length <= rows[rb].title.length ? ra : rb;
+    const drop = keep === ra ? rb : ra;
+    parent[drop] = keep;
+  }
+
+  // Jaccard similarity of title word sets — prevents merging semantically-close but lexically-unrelated items
+  const wordSet = (s: string): Set<string> => {
+    const out = new Set<string>();
+    for (const w of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)) {
+      if (w.length >= 2 && !/^(the|a|an|of|for|and|to|in|on|at|by|with|is|are|be|or)$/.test(w)) out.add(w);
+    }
+    return out;
+  };
+  const jaccard = (a: Set<string>, b: Set<string>): number => {
+    if (a.size === 0 || b.size === 0) return 0;
+    let inter = 0;
+    for (const x of a) if (b.has(x)) inter++;
+    return inter / (a.size + b.size - inter);
+  };
+  const JACCARD_MIN = Number(Deno.env.get("DEDUPE_JACCARD") ?? "0.7");
+  const wordSets = rows.map((r) => wordSet(r.title));
+
+  let merged = 0, rejectedByJaccard = 0, skippedHuge = 0;
+  for (const [, idxs] of buckets) {
+    if (idxs.length < 2) continue;
+    if (idxs.length > 1500) { skippedHuge++; continue; } // huge generic topics: skip to stay quadratic-tractable
+    for (let a = 0; a < idxs.length; a++) {
+      for (let b = a + 1; b < idxs.length; b++) {
+        // quick Jaccard gate before cosine (cheaper)
+        const j = jaccard(wordSets[idxs[a]], wordSets[idxs[b]]);
+        if (j < JACCARD_MIN) continue;
+        let sc = 0;
+        const oa = idxs[a] * DIM, ob = idxs[b] * DIM;
+        for (let d = 0; d < DIM; d++) sc += vecs[oa + d] * vecs[ob + d];
+        if (sc < DEDUPE_COSINE) continue;
+        union(idxs[a], idxs[b]);
+        merged++;
+      }
+    }
+  }
+  console.log(`[stage 3b] skipped ${skippedHuge} oversize buckets`);
+  void rejectedByJaccard;
+  console.log(`[stage 3b] ${merged} union-merges`);
+
+  // Build id → canonical_id alias map (preserves stable survivors)
+  const alias = new Map<string, string>();
+  let survivors = 0, dropped = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const canonical = find(i);
+    if (canonical === i) survivors++;
+    else { alias.set(rows[i].id, rows[canonical].id); dropped++; }
+  }
+  console.log(`[stage 3b] survivors=${survivors}, dropped=${dropped}`);
+
+  // Write deduped tagged.tsv with merged ext_ids + unioned occupations/topics from merged skills
+  const groupBy = new Map<number, number[]>();
+  for (let i = 0; i < rows.length; i++) {
+    const c = find(i);
+    const arr = groupBy.get(c) ?? []; arr.push(i); groupBy.set(c, arr);
+  }
+  const outLines = [hdrCols.join("\t")];
+  for (const [canonicalIdx, groupIdxs] of groupBy) {
+    const canonical = rows[canonicalIdx];
+    // Union occupation/topic tags from the group
+    const occs = new Set<string>();
+    const topics = new Set<string>();
+    const allTags = new Set<string>(canonical.tags.split(","));
+    for (const i of groupIdxs) {
+      for (const o of rows[i].occupations.split(",").filter((x) => x)) occs.add(o);
+      for (const t of rows[i].topics.split(",").filter((x) => x)) topics.add(t);
+      for (const tg of rows[i].tags.split(",").filter((x) => x)) allTags.add(tg);
+    }
+    outLines.push([
+      canonical.id, canonical.title, canonical.description,
+      canonical.sources, [...allTags].join(","),
+      [...occs].slice(0, 3).join(","), [...topics].slice(0, 3).join(","),
+    ].join("\t"));
+  }
+  Deno.writeTextFileSync(`${BUILD}/3b_tagged_deduped.tsv`, outLines.join("\n") + "\n");
+
+  // Write alias file (both directions)
+  const aliasLines = ["dropped_id\tcanonical_id"];
+  for (const [drop, keep] of alias) aliasLines.push(`${drop}\t${keep}`);
+  Deno.writeTextFileSync(`${BUILD}/3b_aliases.tsv`, aliasLines.join("\n") + "\n");
+
+  writeStats(35, {
+    before: rows.length,
+    dropped,
+    after: survivors,
+    reduction_pct: 100 * dropped / rows.length,
+    buckets: buckets.size,
+    skipped_huge_buckets: skippedHuge,
+    dedupe_cosine: DEDUPE_COSINE,
+    jaccard_min: JACCARD_MIN,
+  });
+}
+
 // ---------- dispatch ----------
 
 const stages: Record<string, () => void | Promise<void>> = {
   list: stage1List,
   infill: stage1bInfill,
   summarize: stage1cSummarize,
+  "onet-desc": stage1dOnetDesc,
   embed: stage2Embed,
   tag: stage3Tag,
+  dedupe: stage3bDedupe,
   difficulty: stage4Difficulty,
   prereq: stage5Prereq,
   postproc: stage6PostProc,

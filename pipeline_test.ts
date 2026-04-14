@@ -135,6 +135,76 @@ Deno.test("final: every non-orphan skill reachable from some root", () => {
   assert(s.roots > 0, "no root skills");
 });
 
+Deno.test("final: every prereq id exists as a skill id", () => {
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const ids = new Set<string>();
+  for (let i = 1; i < lines.length; i++) ids.add(lines[i].split("\t")[0]);
+  let missing = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const p = lines[i].split("\t")[4];
+    if (!p) continue;
+    for (const pid of p.split(",")) if (pid && !ids.has(pid)) missing++;
+  }
+  assertEquals(missing, 0, `${missing} dangling prereq references`);
+});
+
+Deno.test("final: no self-loops in prereq column", () => {
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  let loops = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    if (!c[4]) continue;
+    if (c[4].split(",").includes(c[0])) loops++;
+  }
+  assertEquals(loops, 0, `${loops} self-loops`);
+});
+
+Deno.test("final: difficulty monotonic across prereq chains (sampled)", () => {
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const diff = new Map<string, number>();
+  const prereqs = new Map<string, string[]>();
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    diff.set(c[0], Number(c[3]));
+    if (c[4]) prereqs.set(c[0], c[4].split(","));
+  }
+  // DFS from N random nodes, verify no ancestor has higher difficulty
+  const ids = [...prereqs.keys()];
+  for (let n = 0; n < 500; n++) {
+    const start = ids[Math.floor(Math.random() * ids.length)];
+    const target = diff.get(start)!;
+    const stack = [...(prereqs.get(start) ?? [])];
+    const seen = new Set<string>([start]);
+    while (stack.length) {
+      const u = stack.pop()!;
+      if (seen.has(u)) continue;
+      seen.add(u);
+      assert(diff.get(u)! <= target, `ancestor ${u} b${diff.get(u)} > ${start} b${target}`);
+      for (const p of prereqs.get(u) ?? []) if (!seen.has(p)) stack.push(p);
+    }
+  }
+});
+
+Deno.test("final: roots are a non-trivial fraction of skills", () => {
+  const s = JSON.parse(Deno.readTextFileSync("build/7_stats.json"));
+  assert(s.roots > 100, `only ${s.roots} roots — graph may be over-connected`);
+  assert(s.roots < s.skills_emitted * 0.2, `${s.roots} roots >20% of skills — too many orphans`);
+});
+
+Deno.test("dedupe: if stage 3b ran, alias file references real ids", () => {
+  try {
+    Deno.statSync("build/3b_aliases.tsv");
+  } catch { return; /* dedupe didn't run, skip */ }
+  const aliasLines = Deno.readTextFileSync("build/3b_aliases.tsv").split("\n").filter((l) => l.length);
+  const skillIds = new Set<string>();
+  const skillLines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  for (let i = 1; i < skillLines.length; i++) skillIds.add(skillLines[i].split("\t")[0]);
+  for (let i = 1; i < aliasLines.length; i++) {
+    const [, canonical] = aliasLines[i].split("\t");
+    assert(skillIds.has(canonical), `alias canonical ${canonical} not in skills.tsv`);
+  }
+});
+
 Deno.test("final: final_edges preserves strict raw-difficulty ordering", () => {
   const skillLines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
   const diff = new Map<string, number>();
