@@ -2524,6 +2524,596 @@ function stage3bDedupe() {
   });
 }
 
+// ---------- stage 1e: seed edges from expert-labeled prereq datasets ----------
+
+// Load current skill id space. Prefer deduped output if present.
+function loadSkillIndex(): { idSet: Set<string>; titleToId: Map<string, string>; slugToId: Map<string, string> } {
+  const path = taggedTsvPath();
+  const lines = Deno.readTextFileSync(path).split("\n").filter((l) => l.length);
+  const idSet = new Set<string>();
+  const titleToId = new Map<string, string>();
+  const slugToId = new Map<string, string>();
+  for (let i = 1; i < lines.length; i++) {
+    const [id, title] = lines[i].split("\t");
+    if (!id) continue;
+    idSet.add(id);
+    const t = (title || "").toLowerCase().trim();
+    if (t && !titleToId.has(t)) titleToId.set(t, id);
+    slugToId.set(id, id); // id is already a slug
+    const altSlug = slugify(title || "");
+    if (altSlug && !slugToId.has(altSlug)) slugToId.set(altSlug, id);
+  }
+  return { idSet, titleToId, slugToId };
+}
+
+// Resolve a free-form concept label (Wikipedia title, Khan slug, Chinese phrase, etc.) to an id.
+function resolveConcept(
+  raw: string,
+  idx: { idSet: Set<string>; titleToId: Map<string, string>; slugToId: Map<string, string> },
+): string | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/_/g, " ").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) return null;
+  const lc = cleaned.toLowerCase();
+  if (idx.titleToId.has(lc)) return idx.titleToId.get(lc)!;
+  const slug = slugify(cleaned);
+  if (idx.idSet.has(slug)) return slug;
+  if (idx.slugToId.has(slug)) return idx.slugToId.get(slug)!;
+  // Try the raw slug (without paren stripping)
+  const rawSlug = slugify(raw.replace(/_/g, " "));
+  if (idx.idSet.has(rawSlug)) return rawSlug;
+  if (idx.slugToId.has(rawSlug)) return idx.slugToId.get(rawSlug)!;
+  return null;
+}
+
+function h32(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h;
+}
+
+async function stage1eSeedEdges() {
+  console.log("[stage 1e] seeding edges from expert-labeled datasets…");
+  const idx = loadSkillIndex();
+  console.log(`[stage 1e] skill index: ${idx.idSet.size} ids`);
+
+  // Collect raw pairs first; resolve in 2 passes (exact → embedding fallback)
+  type RawPair = { rawSrc: string; rawDst: string; source: string; raw: string };
+  const rawPairs: RawPair[] = [];
+  const perSource: Record<string, { total: number; resolved: number; holdout: number; fallback: number }> = {};
+  const addRaw = (rawSrc: string, rawDst: string, source: string, raw: string) => {
+    rawPairs.push({ rawSrc, rawDst, source, raw });
+    (perSource[source] ??= { total: 0, resolved: 0, holdout: 0, fallback: 0 }).total++;
+  };
+
+  // 1. Khan Academy khandata.tsv
+  {
+    const lines = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split("\n").filter((l) => l.length);
+    const header = lines[0].split("\t");
+    const iName = header.indexOf("Data Name");
+    const iPre = header.indexOf("Prereq(s)");
+    const iCode = header.indexOf("Code");
+    const iDisp = header.indexOf("Display Name");
+    const codeToName = new Map<string, string>();
+    const nameToDisplay = new Map<string, string>();
+    for (let i = 1; i < lines.length; i++) {
+      const c = lines[i].split("\t");
+      if (c[iCode] && c[iName]) codeToName.set(c[iCode].trim(), c[iName].trim());
+      if (c[iName] && c[iDisp]) nameToDisplay.set(c[iName].trim(), c[iDisp].trim());
+    }
+    for (let i = 1; i < lines.length; i++) {
+      const c = lines[i].split("\t");
+      const target = (c[iName] || "").trim();
+      const preReqs = (c[iPre] || "").trim();
+      if (!target || !preReqs || preReqs === "root") continue;
+      const dstLabel = nameToDisplay.get(target) || target;
+      for (const p of preReqs.split(";").map((x) => x.trim()).filter(Boolean)) {
+        const pName = codeToName.get(p) || p;
+        const srcLabel = nameToDisplay.get(pName) || pName;
+        addRaw(srcLabel, dstLabel, "khan", `${pName}->${target}`);
+      }
+    }
+  }
+
+  // 2. AL-CPL .preqs per domain
+  for (const domain of ["data_mining", "geometry", "physics", "precalculus"]) {
+    const path = `data/al-cpl/data/${domain}.preqs`;
+    let text: string;
+    try { text = Deno.readTextFileSync(path); } catch { continue; }
+    for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
+      const [pre, tgt] = line.split(",");
+      if (!pre || !tgt) continue;
+      addRaw(pre, tgt, `alcpl_${domain}`, line);
+    }
+  }
+
+  // 3. Metacademy Wikipedia-mapped pairs
+  {
+    const text = Deno.readTextFileSync("data/metacademy/Metacademy-prerequisite-pairs-transformed-to-wikipedia.csv");
+    const rows = parseCsv(text);
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const pre = r[0];
+      const tgt = r[3];
+      if (!pre || !tgt) continue;
+      addRaw(pre, tgt, "metacademy", `${pre}->${tgt}`);
+    }
+  }
+
+  // 4. MOOCCubeX cs/math/psy — gzipped JSONL, Chinese → translations.json → English
+  const translations: Record<string, string> = (() => {
+    try { return JSON.parse(Deno.readTextFileSync("data/mooccubex/translations.json")); } catch { return {}; }
+  })();
+  for (const domain of ["cs", "math", "psy"]) {
+    const gzPath = `data/mooccubex/${domain}.json.gz`;
+    let bytes: Uint8Array;
+    try { bytes = Deno.readFileSync(gzPath); } catch { continue; }
+    const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream("gzip"));
+    const text = await new Response(stream).text();
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      let obj: { c1?: string; c2?: string; ground_truth?: number };
+      try { obj = JSON.parse(line); } catch { continue; }
+      if (obj.ground_truth !== 1 || !obj.c1 || !obj.c2) continue;
+      const pre = translations[obj.c1] || obj.c1;
+      const tgt = translations[obj.c2] || obj.c2;
+      addRaw(pre, tgt, `moocx_${domain}`, `${obj.c1}->${obj.c2}`);
+    }
+  }
+
+  // 5. OpenSALT precedes associations
+  {
+    const dir = "data/opensalt";
+    for (const f of Deno.readDirSync(dir)) {
+      if (!f.name.endsWith(".json") || f.name === "index.json") continue;
+      let doc: { CFItems?: { identifier: string; humanCodingScheme?: string; fullStatement?: string }[]; CFAssociations?: { associationType?: string; originNodeURI?: { identifier?: string; title?: string }; destinationNodeURI?: { identifier?: string; title?: string } }[] };
+      try { doc = JSON.parse(Deno.readTextFileSync(`${dir}/${f.name}`)); } catch { continue; }
+      const itemMap = new Map<string, { code: string; statement: string }>();
+      for (const it of doc.CFItems || []) {
+        itemMap.set(it.identifier, { code: it.humanCodingScheme || "", statement: it.fullStatement || "" });
+      }
+      for (const a of doc.CFAssociations || []) {
+        if ((a.associationType || "").toLowerCase() !== "precedes") continue;
+        const o = a.originNodeURI || {}, d = a.destinationNodeURI || {};
+        const labelOf = (x: { identifier?: string; title?: string }) => {
+          if (x.identifier && itemMap.has(x.identifier)) {
+            const { statement } = itemMap.get(x.identifier)!;
+            return statement || x.title || x.identifier || "";
+          }
+          return x.title || x.identifier || "";
+        };
+        addRaw(labelOf(o), labelOf(d), "opensalt_precedes", `${o.identifier || o.title}->${d.identifier || d.title}`);
+      }
+    }
+  }
+
+  console.log(`[stage 1e] collected ${rawPairs.length} raw pairs across ${Object.keys(perSource).length} sources`);
+
+  // Pass 1: exact resolution. Collect unresolved labels for embedding fallback.
+  const labelToId = new Map<string, string | null>(); // memoized resolution
+  const resolveExact = (lbl: string): string | null => {
+    if (labelToId.has(lbl)) return labelToId.get(lbl)!;
+    const r = resolveConcept(lbl, idx);
+    labelToId.set(lbl, r);
+    return r;
+  };
+
+  const unresolved = new Set<string>();
+  for (const p of rawPairs) {
+    if (!resolveExact(p.rawSrc)) unresolved.add(p.rawSrc);
+    if (!resolveExact(p.rawDst)) unresolved.add(p.rawDst);
+  }
+  console.log(`[stage 1e] pass 1 resolved ${labelToId.size - unresolved.size}/${labelToId.size} labels exactly; ${unresolved.size} remaining`);
+
+  // Pass 2: embedding fallback. Embed unresolved labels via Ollama, find nearest skill embedding.
+  // Cosine alone is noisy: "earning" cosine-matches many unrelated concepts via weak semantic overlap.
+  // Require token overlap between label and resolved skill title to filter false positives.
+  const FALLBACK_THRESHOLD = 0.90;
+  const STOP = new Set(["the","a","an","of","in","on","for","to","and","or","is","at","by","with","from","as","be","that","this"]);
+  const sigTokens = (s: string): Set<string> => {
+    const out = new Set<string>();
+    for (const t of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean)) {
+      if (t.length >= 3 && !STOP.has(t)) out.add(t);
+    }
+    return out;
+  };
+  const titleById = new Map<string, string>();
+  {
+    const tlines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
+    for (let i = 1; i < tlines.length; i++) {
+      const [id, title] = tlines[i].split("\t");
+      if (id) titleById.set(id, title || "");
+    }
+  }
+  if (unresolved.size > 0) {
+    // Load skill embeddings
+    const embIds = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
+    const embBin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
+    const skillVecs = new Float32Array(embBin.buffer, embBin.byteOffset, embBin.byteLength / 4);
+    console.log(`[stage 1e] loaded ${embIds.length} skill embeddings for fallback`);
+    // Normalize skill vectors in-place copy
+    const nSkills = embIds.length;
+    const nvecs = new Float32Array(nSkills * EMBED_DIM);
+    for (let i = 0; i < nSkills; i++) {
+      nvecs.set(normalize(skillVecs.subarray(i * EMBED_DIM, (i + 1) * EMBED_DIM)), i * EMBED_DIM);
+    }
+    // Only consider embeddings for ids still in idx.idSet (stage 3b may have deduped)
+    const activeIds: string[] = [];
+    const activeVecs: Float32Array[] = [];
+    for (let i = 0; i < nSkills; i++) {
+      if (idx.idSet.has(embIds[i])) {
+        activeIds.push(embIds[i]);
+        activeVecs.push(nvecs.subarray(i * EMBED_DIM, (i + 1) * EMBED_DIM));
+      }
+    }
+    const matIds = activeIds;
+    const mat = new Float32Array(matIds.length * EMBED_DIM);
+    for (let i = 0; i < matIds.length; i++) mat.set(activeVecs[i], i * EMBED_DIM);
+    console.log(`[stage 1e] active skill vectors: ${matIds.length}`);
+
+    // Embed unresolved labels in parallel (Ollama is local, CPU-bound)
+    const labels = [...unresolved];
+    const labelVecs = new Float32Array(labels.length * EMBED_DIM);
+    const CONCURRENCY = 16;
+    let done = 0;
+    const t0 = performance.now();
+    for (let start = 0; start < labels.length; start += CONCURRENCY) {
+      const batch = labels.slice(start, start + CONCURRENCY);
+      const results = await Promise.all(batch.map(async (lbl) => {
+        try { return await embedOne(lbl); } catch { return null; }
+      }));
+      for (let j = 0; j < results.length; j++) {
+        const v = results[j];
+        if (!v) continue;
+        labelVecs.set(normalize(v), (start + j) * EMBED_DIM);
+      }
+      done += batch.length;
+      if (done % 500 === 0 || done === labels.length) {
+        const rate = done / ((performance.now() - t0) / 1000);
+        console.log(`[stage 1e] embedded ${done}/${labels.length} (${rate.toFixed(1)}/s)`);
+      }
+    }
+
+    // For each label, find best skill. Dot product (both normalized).
+    const dim = EMBED_DIM;
+    let fallbackMatched = 0;
+    for (let li = 0; li < labels.length; li++) {
+      const lv = labelVecs.subarray(li * dim, (li + 1) * dim);
+      if (lv[0] === 0 && lv[1] === 0) continue; // failed embed
+      let best = -1, bestScore = FALLBACK_THRESHOLD;
+      for (let si = 0; si < matIds.length; si++) {
+        const sv = mat.subarray(si * dim, (si + 1) * dim);
+        let dot = 0;
+        for (let k = 0; k < dim; k++) dot += lv[k] * sv[k];
+        if (dot > bestScore) { bestScore = dot; best = si; }
+      }
+      if (best >= 0) {
+        // Token-overlap guard: at least one significant token shared between label and skill title.
+        const labelToks = sigTokens(labels[li]);
+        const titleToks = sigTokens(titleById.get(matIds[best]) || matIds[best]);
+        let overlap = 0;
+        for (const t of labelToks) if (titleToks.has(t)) overlap++;
+        if (overlap === 0 || labelToks.size === 0) continue;
+        labelToId.set(labels[li], matIds[best]);
+        fallbackMatched++;
+      }
+    }
+    console.log(`[stage 1e] fallback matched ${fallbackMatched}/${labels.length} at cosine ≥ ${FALLBACK_THRESHOLD} + token-overlap guard`);
+  }
+
+  // Pass 3: emit edges using labelToId
+  type Edge = { src: string; dst: string; source: string; confidence: number; holdout: boolean; fallback: boolean };
+  const edgesArr: Edge[] = [];
+  for (const p of rawPairs) {
+    const src = labelToId.get(p.rawSrc);
+    const dst = labelToId.get(p.rawDst);
+    if (!src || !dst) continue;
+    if (src === dst) continue;
+    const srcExact = resolveConcept(p.rawSrc, idx) === src;
+    const dstExact = resolveConcept(p.rawDst, idx) === dst;
+    const fallback = !(srcExact && dstExact);
+    const holdout = (h32(p.source + "|" + p.raw) % 10) === 0;
+    const confidence = fallback ? 0.85 : 1.0;
+    edgesArr.push({ src, dst, source: p.source, confidence, holdout, fallback });
+    const s = perSource[p.source];
+    s.resolved++;
+    if (holdout) s.holdout++;
+    if (fallback) s.fallback++;
+  }
+
+  // Dedupe
+  const seen = new Map<string, Edge>();
+  for (const e of edgesArr) {
+    const k = `${e.src}\t${e.dst}\t${e.source}`;
+    const prev = seen.get(k);
+    if (!prev || (prev.fallback && !e.fallback)) seen.set(k, e); // prefer non-fallback
+  }
+  const uniq = [...seen.values()];
+
+  const out = ["src_id\tdst_id\tsource\tconfidence\tholdout\tfallback"];
+  for (const e of uniq) out.push(`${e.src}\t${e.dst}\t${e.source}\t${e.confidence.toFixed(2)}\t${e.holdout ? "1" : "0"}\t${e.fallback ? "1" : "0"}`);
+  Deno.writeTextFileSync(`${BUILD}/1e_seed_edges.tsv`, out.join("\n") + "\n");
+
+  writeStats(110, {
+    total_raw_pairs: rawPairs.length,
+    total_resolved_edges: uniq.length,
+    exact_edges: uniq.filter((e) => !e.fallback).length,
+    fallback_edges: uniq.filter((e) => e.fallback).length,
+    holdout_edges: uniq.filter((e) => e.holdout).length,
+    unique_labels: labelToId.size,
+    labels_resolved: [...labelToId.values()].filter((v) => v !== null).length,
+    per_source: perSource,
+    resolve_rate: Object.fromEntries(
+      Object.entries(perSource).map(([k, s]) => [k, s.total ? +(s.resolved / s.total).toFixed(3) : 0]),
+    ),
+  });
+}
+
+// ---------- stage 1f: resolve each skill to a Wikipedia article + Wikidata QID ----------
+
+// Hits MediaWiki search API. Cached. Resumable. Overnight-tolerant.
+// Cache format: JSONL one line per skill. Order independent. Re-runs resume from missing ids only.
+async function stage1fWikiResolve() {
+  console.log("[stage 1f] resolving skills to Wikipedia articles…");
+  const idx = loadSkillIndex();
+  const allIds = [...idx.idSet];
+  const titleByIdLocal = new Map<string, string>();
+  {
+    const tlines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
+    for (let i = 1; i < tlines.length; i++) {
+      const [id, title] = tlines[i].split("\t");
+      if (id) titleByIdLocal.set(id, title || "");
+    }
+  }
+
+  const cachePath = `${BUILD}/1f_wiki.jsonl`;
+  const done = new Set<string>();
+  try {
+    const text = Deno.readTextFileSync(cachePath);
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      try { done.add(JSON.parse(line).id); } catch { /* skip malformed */ }
+    }
+  } catch { /* fresh */ }
+  console.log(`[stage 1f] cache: ${done.size} resolved; ${allIds.length - done.size} remaining`);
+
+  const todo = allIds.filter((id) => !done.has(id));
+  if (todo.length === 0) {
+    console.log("[stage 1f] nothing to do");
+    writeStats(111, { total_skills: allIds.length, resolved: done.size, remaining: 0 });
+    return;
+  }
+
+  const fh = Deno.openSync(cachePath, { append: true, create: true, write: true });
+  const enc = new TextEncoder();
+
+  // MediaWiki search: ~200 req/s safe with parallelism. Use srlimit=1 for top hit.
+  // wbsearchentities for Wikidata QID resolution alongside.
+  const CONCURRENCY = 8;
+  let progress = 0;
+  let matched = 0, missed = 0, errors = 0;
+  const t0 = performance.now();
+
+  async function fetchOne(id: string): Promise<{ id: string; query: string; wiki_title?: string; pageid?: number; qid?: string; score?: number; ts: number }> {
+    const title = titleByIdLocal.get(id) || id.replace(/-/g, " ");
+    const query = title.slice(0, 200);
+    const url = `https://en.wikipedia.org/w/api.php?action=query&format=json&list=search&srsearch=${encodeURIComponent(query)}&srlimit=1&srprop=size&origin=*`;
+    try {
+      const r = await fetch(url, { headers: { "user-agent": "skill-tree/1.0 (research)" } });
+      if (!r.ok) throw new Error(`http ${r.status}`);
+      const j = await r.json();
+      const hit = j?.query?.search?.[0];
+      if (!hit) return { id, query, ts: Date.now() };
+      // Resolve to QID
+      const qidUrl = `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageprops&pageids=${hit.pageid}&origin=*`;
+      const r2 = await fetch(qidUrl, { headers: { "user-agent": "skill-tree/1.0 (research)" } });
+      const j2 = r2.ok ? await r2.json() : null;
+      const qid = j2?.query?.pages?.[hit.pageid]?.pageprops?.wikibase_item;
+      return { id, query, wiki_title: hit.title, pageid: hit.pageid, qid, score: hit.size || 0, ts: Date.now() };
+    } catch (_e) {
+      errors++;
+      return { id, query, ts: Date.now() };
+    }
+  }
+
+  for (let start = 0; start < todo.length; start += CONCURRENCY) {
+    const batch = todo.slice(start, start + CONCURRENCY);
+    const results = await Promise.all(batch.map(fetchOne));
+    for (const r of results) {
+      fh.writeSync(enc.encode(JSON.stringify(r) + "\n"));
+      if (r.wiki_title) matched++; else missed++;
+    }
+    progress += batch.length;
+    if (progress % 200 === 0 || progress === todo.length) {
+      const rate = progress / ((performance.now() - t0) / 1000);
+      const eta = (todo.length - progress) / rate;
+      console.log(`[stage 1f] ${progress}/${todo.length} (${rate.toFixed(1)}/s, eta ${(eta / 60).toFixed(1)} min, matched=${matched} missed=${missed} errors=${errors})`);
+    }
+  }
+  fh.close();
+
+  writeStats(111, {
+    total_skills: allIds.length,
+    previously_resolved: done.size,
+    newly_processed: todo.length,
+    matched_this_run: matched,
+    missed_this_run: missed,
+    errors_this_run: errors,
+    seconds: (performance.now() - t0) / 1000,
+  });
+}
+
+// ---------- stage 1g: fetch Wikidata P279/P31 parent chains for resolved QIDs ----------
+
+async function stage1gWdParents() {
+  console.log("[stage 1g] fetching Wikidata parent chains…");
+  const wiki: { id: string; qid?: string }[] = [];
+  try {
+    const text = Deno.readTextFileSync(`${BUILD}/1f_wiki.jsonl`);
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      try { wiki.push(JSON.parse(line)); } catch { /* skip */ }
+    }
+  } catch {
+    throw new Error("stage 1f must run first");
+  }
+  const qids = new Set<string>();
+  for (const w of wiki) if (w.qid) qids.add(w.qid);
+  console.log(`[stage 1g] unique QIDs: ${qids.size}`);
+
+  const cachePath = `${BUILD}/1g_wd_parents.jsonl`;
+  const done = new Set<string>();
+  try {
+    const text = Deno.readTextFileSync(cachePath);
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      try { done.add(JSON.parse(line).qid); } catch { /* skip */ }
+    }
+  } catch { /* fresh */ }
+  const todo = [...qids].filter((q) => !done.has(q));
+  console.log(`[stage 1g] remaining: ${todo.length}`);
+  if (todo.length === 0) {
+    writeStats(112, { total_qids: qids.size, resolved: done.size, remaining: 0 });
+    return;
+  }
+
+  const fh = Deno.openSync(cachePath, { append: true, create: true, write: true });
+  const enc = new TextEncoder();
+  const CONCURRENCY = 4; // SPARQL endpoint rate-limits around 30 req/s; be polite
+  const t0 = performance.now();
+
+  // VALUES-batched SPARQL: ~30 QIDs per query. Transitive P279* closure up to 5 hops.
+  const BATCH = 25;
+  async function fetchBatch(batch: string[]): Promise<Map<string, string[]>> {
+    const values = batch.map((q) => `wd:${q}`).join(" ");
+    const query = `
+      SELECT ?item ?parent WHERE {
+        VALUES ?item { ${values} }
+        ?item wdt:P279*|wdt:P31/wdt:P279* ?parent .
+        FILTER(?parent != ?item)
+      }
+      LIMIT 5000
+    `;
+    const url = `https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(query)}`;
+    const r = await fetch(url, { headers: { "user-agent": "skill-tree/1.0 (research)", accept: "application/sparql-results+json" } });
+    if (!r.ok) throw new Error(`sparql ${r.status}`);
+    const j = await r.json();
+    const out = new Map<string, string[]>();
+    for (const b of batch) out.set(b, []);
+    for (const row of j.results?.bindings || []) {
+      const item = (row.item?.value || "").split("/").pop();
+      const parent = (row.parent?.value || "").split("/").pop();
+      if (!item || !parent || !out.has(item)) continue;
+      out.get(item)!.push(parent);
+    }
+    return out;
+  }
+
+  let progress = 0;
+  for (let start = 0; start < todo.length; start += BATCH * CONCURRENCY) {
+    const group = todo.slice(start, start + BATCH * CONCURRENCY);
+    const batches: string[][] = [];
+    for (let i = 0; i < group.length; i += BATCH) batches.push(group.slice(i, i + BATCH));
+    const results = await Promise.all(batches.map(async (b) => {
+      try { return await fetchBatch(b); } catch (_e) { return new Map<string, string[]>(b.map((q) => [q, []])); }
+    }));
+    for (const m of results) {
+      for (const [qid, parents] of m) {
+        fh.writeSync(enc.encode(JSON.stringify({ qid, parents }) + "\n"));
+      }
+    }
+    progress += group.length;
+    const rate = progress / ((performance.now() - t0) / 1000);
+    console.log(`[stage 1g] ${progress}/${todo.length} (${rate.toFixed(1)}/s)`);
+  }
+  fh.close();
+
+  writeStats(112, {
+    total_qids: qids.size,
+    previously_resolved: done.size,
+    processed_this_run: todo.length,
+    seconds: (performance.now() - t0) / 1000,
+  });
+}
+
+// ---------- stage 1h: Wikipedia lead-paragraph summaries for resolved articles ----------
+
+async function stage1hWikiDescs() {
+  console.log("[stage 1h] fetching Wikipedia summary lead paragraphs…");
+  const wiki: { id: string; wiki_title?: string }[] = [];
+  try {
+    const text = Deno.readTextFileSync(`${BUILD}/1f_wiki.jsonl`);
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      try { wiki.push(JSON.parse(line)); } catch { /* skip */ }
+    }
+  } catch {
+    throw new Error("stage 1f must run first");
+  }
+  const todo0 = wiki.filter((w) => w.wiki_title);
+
+  const cachePath = `${BUILD}/1h_wiki_summaries.tsv`;
+  const done = new Set<string>();
+  try {
+    const text = Deno.readTextFileSync(cachePath);
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      const id = line.split("\t")[0];
+      if (id) done.add(id);
+    }
+  } catch { /* fresh */ }
+  const todo = todo0.filter((w) => !done.has(w.id));
+  console.log(`[stage 1h] todo: ${todo.length} (cached ${done.size})`);
+  if (todo.length === 0) {
+    writeStats(113, { total_candidates: todo0.length, resolved: done.size, remaining: 0 });
+    return;
+  }
+
+  const fh = Deno.openSync(cachePath, { append: true, create: true, write: true });
+  const enc = new TextEncoder();
+  const CONCURRENCY = 8;
+  const t0 = performance.now();
+  let progress = 0, got = 0, failed = 0;
+
+  async function fetchOne(w: { id: string; wiki_title?: string }): Promise<{ id: string; extract: string }> {
+    const title = w.wiki_title!;
+    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`;
+    try {
+      const r = await fetch(url, { headers: { "user-agent": "skill-tree/1.0 (research)" } });
+      if (!r.ok) return { id: w.id, extract: "" };
+      const j = await r.json();
+      return { id: w.id, extract: (j.extract || "").replace(/[\t\n\r]+/g, " ").slice(0, 2000) };
+    } catch {
+      return { id: w.id, extract: "" };
+    }
+  }
+
+  for (let start = 0; start < todo.length; start += CONCURRENCY) {
+    const batch = todo.slice(start, start + CONCURRENCY);
+    const results = await Promise.all(batch.map(fetchOne));
+    for (const r of results) {
+      fh.writeSync(enc.encode(`${r.id}\t${r.extract}\n`));
+      if (r.extract) got++; else failed++;
+    }
+    progress += batch.length;
+    if (progress % 400 === 0 || progress === todo.length) {
+      const rate = progress / ((performance.now() - t0) / 1000);
+      const eta = (todo.length - progress) / rate;
+      console.log(`[stage 1h] ${progress}/${todo.length} (${rate.toFixed(1)}/s, eta ${(eta / 60).toFixed(1)} min, got=${got} failed=${failed})`);
+    }
+  }
+  fh.close();
+
+  writeStats(113, {
+    total_candidates: todo0.length,
+    previously_resolved: done.size,
+    processed_this_run: todo.length,
+    got_extract: got,
+    failed: failed,
+    seconds: (performance.now() - t0) / 1000,
+  });
+}
+
 // ---------- dispatch ----------
 
 const stages: Record<string, () => void | Promise<void>> = {
@@ -2531,6 +3121,10 @@ const stages: Record<string, () => void | Promise<void>> = {
   infill: stage1bInfill,
   summarize: stage1cSummarize,
   "onet-desc": stage1dOnetDesc,
+  "seed-edges": stage1eSeedEdges,
+  "wiki-resolve": stage1fWikiResolve,
+  "wd-parents": stage1gWdParents,
+  "wiki-descs": stage1hWikiDescs,
   embed: stage2Embed,
   tag: stage3Tag,
   dedupe: stage3bDedupe,
