@@ -118,6 +118,38 @@ Deno.test("stage 4 stats: kendall-τ vs anchors above 0.5", () => {
   assert(s.kendall_tau_vs_anchor > 0.5, `kendall τ = ${s.kendall_tau_vs_anchor}`);
 });
 
+Deno.test("final skills.tsv schema", () => {
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  assertEquals(lines[0], "id\ttitle\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tcerts");
+  for (let i = 1; i < Math.min(lines.length, 500); i++) {
+    const c = lines[i].split("\t");
+    assertEquals(c.length, 8, `row ${i} has ${c.length} cols`);
+    const d = Number(c[3]);
+    assert(Number.isInteger(d) && d >= 1 && d <= 20, `row ${i} bad difficulty: ${c[3]}`);
+  }
+});
+
+Deno.test("final: every non-orphan skill reachable from some root", () => {
+  const s = JSON.parse(Deno.readTextFileSync("build/7_stats.json"));
+  assertEquals(s.unreachable, 0, `${s.unreachable} skills unreachable from roots`);
+  assert(s.roots > 0, "no root skills");
+});
+
+Deno.test("final: final_edges preserves strict raw-difficulty ordering", () => {
+  const skillLines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const diff = new Map<string, number>();
+  for (let i = 1; i < skillLines.length; i++) {
+    const c = skillLines[i].split("\t");
+    diff.set(c[0], Number(c[3]));
+  }
+  const edgeLines = Deno.readTextFileSync("build/6_edges.tsv").split("\n").filter((l) => l.length).slice(1);
+  for (let i = 0; i < Math.min(edgeLines.length, 1000); i++) {
+    const [s, p] = edgeLines[i].split("\t");
+    const ds = diff.get(s)!, dp = diff.get(p)!;
+    assert(dp <= ds, `edge ${s}(b${ds}) → ${p}(b${dp}) has prereq above skill`);
+  }
+});
+
 Deno.test("stage 1: no embedded tabs or newlines in fields", () => {
   const text = Deno.readTextFileSync("build/1_skills.tsv");
   const lines = text.split("\n").filter((l) => l.length);

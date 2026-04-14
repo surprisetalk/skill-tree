@@ -1923,6 +1923,75 @@ function stage6PostProc() {
   });
 }
 
+// ---------- stage 7: finalize skills.tsv ----------
+
+function stage7Finalize() {
+  const taggedLines = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n").filter((l) => l.length);
+  const thdr = taggedLines[0].split("\t");
+  const iTitle = thdr.indexOf("title");
+  const iDesc = thdr.indexOf("description");
+  const iOcc = thdr.indexOf("occupations");
+  const iTop = thdr.indexOf("topics");
+  const skills = taggedLines.slice(1).map((l) => {
+    const c = l.split("\t");
+    return { id: c[0], title: c[iTitle], description: c[iDesc], occupations: c[iOcc], topics: c[iTop] };
+  });
+
+  const diffLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length);
+  const diff = new Map<string, number>();
+  for (let i = 1; i < diffLines.length; i++) {
+    const c = diffLines[i].split("\t");
+    diff.set(c[0], Number(c[1]));
+  }
+
+  const edgeLines = Deno.readTextFileSync(`${BUILD}/6_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
+  const prereqs = new Map<string, string[]>();
+  for (const l of edgeLines) {
+    const [s, p] = l.split("\t");
+    const arr = prereqs.get(s) ?? []; arr.push(p); prereqs.set(s, arr);
+  }
+
+  // Emit
+  const rows = ["id\ttitle\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tcerts"];
+  for (const s of skills) {
+    const d = diff.get(s.id);
+    if (d === undefined) throw new Error(`skill ${s.id} missing from difficulty.tsv`);
+    const ps = (prereqs.get(s.id) ?? []).join(",");
+    rows.push([s.id, s.title, s.description, d.toString(), ps, s.occupations, s.topics, ""].join("\t"));
+  }
+  Deno.writeTextFileSync("skills.tsv", rows.join("\n") + "\n");
+
+  // gzip (keep original)
+  new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] }).outputSync();
+  const src = Deno.readFileSync("skills.tsv");
+
+  // Reachability BFS from lowest-difficulty anchors
+  const adj = new Map<string, string[]>();
+  for (const l of edgeLines) {
+    const [s, p] = l.split("\t");
+    // prereq p → skill s edge (learning order: prereq before skill)
+    const arr = adj.get(p) ?? []; arr.push(s); adj.set(p, arr);
+  }
+  const roots = skills.filter((s) => !prereqs.has(s.id)).map((s) => s.id);
+  const visited = new Set<string>(roots);
+  const queue = [...roots];
+  while (queue.length) {
+    const u = queue.shift()!;
+    for (const v of adj.get(u) ?? []) if (!visited.has(v)) { visited.add(v); queue.push(v); }
+  }
+
+  writeStats(7, {
+    skills_emitted: skills.length,
+    edges: edgeLines.length,
+    skills_with_prereqs: prereqs.size,
+    orphan_skills: skills.length - prereqs.size,
+    roots: roots.length,
+    reachable_from_roots: visited.size,
+    unreachable: skills.length - visited.size,
+    file_bytes: src.byteLength,
+  });
+}
+
 // ---------- dispatch ----------
 
 const stages: Record<string, () => void | Promise<void>> = {
@@ -1934,6 +2003,7 @@ const stages: Record<string, () => void | Promise<void>> = {
   difficulty: stage4Difficulty,
   prereq: stage5Prereq,
   postproc: stage6PostProc,
+  finalize: stage7Finalize,
 };
 
 const arg = Deno.args[0];
