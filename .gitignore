@@ -11,7 +11,11 @@ data/dbpedia/article_categories_en.ttl.bz2
 data/lcsh/*.nt
 
 # pipeline stage caches + final output
-build/
+build/*
+# keep LLM-generated outputs — paid to produce, stochastic, non-reproducible
+!build/1b_infill.tsv
+!build/1c_summarize.tsv
+!build/5_prereqs.tsv
 skills.tsv
 skills.tsv.gz
 
