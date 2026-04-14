@@ -1,17 +1,23 @@
-- [x] let's redo everything from scratch
-  - skills:id,title,description,difficulty,prereqs[],occupations[],topics[],certs[]
-  - pipeline stages 1-4 shipped (list, embed, tag, difficulty)
-  - 103,736 skills from ESCO/ONET/Lightcast/OpenSALT
-  - Lightcast infilled via Claude Haiku batch (31,587 defs)
-  - ONET Tasks/DWAs/Tech added
-  - ESCO+ONET direct occupation/topic relations
-  - Within-topic kNN for difficulty
+- [x] stage 1: list (103k skills from ESCO/ONET/Lightcast/OpenSALT)
+- [x] stage 1b: Lightcast description infill via Haiku batch (31,587)
+- [x] stage 1c: Summarize 16k verbose OpenSALT/ONET standards via Haiku
+- [x] stage 2: embed via Ollama nomic-embed-text
+- [x] stage 3: tag occupations/topics via cosine+IDF + ESCO/ONET direct relations
+- [x] stage 4: difficulty via OpenSALT grade anchors + within-topic kNN
+- [x] stage 5: prereq linking via Haiku 3 batch (347k raw edges, 0 cycles)
+- [x] stage 6: postproc (hub cap + onet:tech filter → 332k final edges)
+- [x] stage 7: finalize skills.tsv (100% reachable from 3,646 roots)
 
-- [ ] stage 5: link prereqs by cluster, working backward most→least difficult (local LLM picker from k nearest-easier neighbors)
-- [ ] stage 6: clean/compress/infill final output
+## Known limits (future work)
+- [ ] orphan leaves like `javascript` whose top-K candidates are all peers; needs
+      candidate selection from parent-topic skills (ancestor inclusion)
+- [ ] difficulty bands lumpy (band 18 spike, bands 19 empty) due to raw
+      value clustering; quantile binning at quantile edges ties
+- [ ] 3.6% orphan rate; mostly tech tools with no earlier peers
 
+## Ideas
 - [ ] which skills are most valuable? use occupation salaries
-- [ ] ucsd map of science https://journals.plos.org/plosone/article/figures?id=10.1371%2Fjournal.pone.0039464 https://github.com/Science-Integrity-Alliance/science-map
-- [ ] first deliverable: compose all the skills into a big ladder thing as an html file (or digraph, which we can generate html from)
-- [ ] LearningQ / Achieve the Core / Gooru — blocked by paywalls or dead APIs
-- [ ] Wikidata P279 subclass hierarchy — deferred
+- [ ] ucsd map of science visualization (https://journals.plos.org/plosone/article/figures?id=10.1371%2Fjournal.pone.0039464)
+- [ ] render ladder HTML visualization
+- [ ] dedupe near-identical titles via embedding cosine
+- [ ] Wikidata P279 subclass hierarchy as a parent-topic source
