@@ -2188,6 +2188,36 @@ function stage6PostProc() {
   const hasEdge = new Set(final.map(([s]) => s));
   for (const id of skill.keys()) if (!hasEdge.has(id)) orphanSkills.add(id);
 
+  // Load Wikidata P279 parent labels as extra topic signal for wiki-resolved orphans
+  const idToParentSlugs = new Map<string, Set<string>>();
+  try {
+    const idToQid = new Map<string, string>();
+    for (const line of Deno.readTextFileSync(`${BUILD}/1f_wiki.jsonl`).split("\n")) {
+      if (!line) continue;
+      try { const d: { id: string; qid?: string } = JSON.parse(line); if (d.qid) idToQid.set(d.id, d.qid); } catch { /* skip */ }
+    }
+    const qidParents = new Map<string, string[]>();
+    for (const line of Deno.readTextFileSync(`${BUILD}/1g_wd_parents.jsonl`).split("\n")) {
+      if (!line) continue;
+      try { const d: { qid: string; parents: string[] } = JSON.parse(line); qidParents.set(d.qid, d.parents); } catch { /* skip */ }
+    }
+    const qidLabel = new Map<string, string>();
+    for (const line of Deno.readTextFileSync(`${BUILD}/1i_qid_labels.tsv`).split("\n")) {
+      if (!line) continue;
+      const [q, l] = line.split("\t");
+      if (q && l) qidLabel.set(q, l);
+    }
+    for (const [id, qid] of idToQid) {
+      const slugs = new Set<string>();
+      for (const pQid of qidParents.get(qid) || []) {
+        const l = qidLabel.get(pQid);
+        if (l) for (const w of slugify(l).split("-")) if (w.length >= 4) slugs.add(w);
+      }
+      if (slugs.size) idToParentSlugs.set(id, slugs);
+    }
+    console.log(`[stage 6] loaded P279 parent slugs for ${idToParentSlugs.size} skills`);
+  } catch { /* no wiki data */ }
+
   // Index skills by significant slug words
   const wordToSkills = new Map<string, string[]>();
   for (const [id] of skill) {
@@ -2206,27 +2236,30 @@ function stage6PostProc() {
   const heurUseCount = new Map<string, number>();
   const HEUR_CAP = 25;
 
-  let orphanFixed = 0;
+  let orphanFixed = 0, orphanFixedViaWiki = 0;
   for (const orphanId of orphanSkills) {
     const ssk = skill.get(orphanId)!;
     const sRaw = rawDiff.get(orphanId) ?? 0;
-    // Find candidate foundational skills whose SLUG EQUALS or STARTS WITH a significant topic word.
-    // Slug-start match ensures semantic match (e.g. word "programming" → "programming-languages" not "game-programming-academy").
+    // Collect candidate-word pool: topic slug words + Wikidata parent slug words
+    const candWords = new Set<string>();
+    for (const topic of ssk.topics) for (const w of topic.split("-")) if (w.length >= 5) candWords.add(w);
+    const parentSlugs = idToParentSlugs.get(orphanId);
+    const hasWiki = parentSlugs && parentSlugs.size > 0;
+    if (hasWiki) for (const w of parentSlugs) candWords.add(w);
+    // Find candidate foundational skills whose SLUG EQUALS or STARTS WITH a significant word.
     const cands = new Map<string, number>();
-    for (const topic of ssk.topics) {
-      for (const w of topic.split("-")) {
-        if (w.length < 5 || stopWords.has(w)) continue;
-        const list = wordToSkills.get(w);
-        if (!list) continue;
-        for (const candId of list) {
-          if (candId === orphanId) continue;
-          if (!(candId === w || candId.startsWith(w + "-"))) continue; // must start with the word
-          if (skill.get(candId)?.tags.includes("onet:tech")) continue;
-          const cRaw = rawDiff.get(candId) ?? 0;
-          if (sRaw - cRaw < 3) continue;
-          const score = candId === w ? 100 : (candId.split("-").length <= 3 ? 10 : 1);
-          cands.set(candId, Math.max(cands.get(candId) ?? 0, score));
-        }
+    for (const w of candWords) {
+      if (w.length < 5 || stopWords.has(w)) continue;
+      const list = wordToSkills.get(w);
+      if (!list) continue;
+      for (const candId of list) {
+        if (candId === orphanId) continue;
+        if (!(candId === w || candId.startsWith(w + "-"))) continue; // must start with the word
+        if (skill.get(candId)?.tags.includes("onet:tech")) continue;
+        const cRaw = rawDiff.get(candId) ?? 0;
+        if (sRaw - cRaw < 3) continue;
+        const score = candId === w ? 100 : (candId.split("-").length <= 3 ? 10 : 1);
+        cands.set(candId, Math.max(cands.get(candId) ?? 0, score));
       }
     }
     if (cands.size === 0) continue;
@@ -2243,10 +2276,11 @@ function stage6PostProc() {
       final.push([orphanId, candId]);
       heurUseCount.set(candId, n + 1);
       orphanFixed++;
+      if (idToParentSlugs.has(orphanId)) orphanFixedViaWiki++;
       break;
     }
   }
-  console.log(`[stage 6] heuristic orphan fix: added edges for ${orphanFixed} of ${orphanSkills.size} orphans (stopwords: ${stopWords.size})`);
+  console.log(`[stage 6] heuristic orphan fix: added edges for ${orphanFixed} of ${orphanSkills.size} orphans (of which ${orphanFixedViaWiki} via Wikidata parents)`);
 
   // --- Seed-edge ingestion from stage 1e (expert-labeled ground truth) ---
   let seedAdded = 0, seedSkippedDiff = 0, seedSkippedMissing = 0, seedSkippedDup = 0, seedHoldout = 0;
