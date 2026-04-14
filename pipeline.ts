@@ -13,13 +13,25 @@ type Skill = { id: string; title: string; description: string; sources: string[]
 
 // ---------- util ----------
 
-const slugify = (s: string) =>
-  s.toLowerCase()
+const decodeEntities = (s: string) => s
+  .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+  .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ");
+
+const slugify = (s: string) => {
+  const base = decodeEntities(s).toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
     .trim()
     .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, 80);
+    .replace(/-+/g, "-");
+  if (base.length <= 80) return base;
+  const hash = h32(base).toString(16).padStart(8, "0").slice(0, 6);
+  let out = "";
+  for (const tok of base.split("-")) {
+    if (out.length + 1 + tok.length + 7 > 80) break;
+    out += (out ? "-" : "") + tok;
+  }
+  return out ? `${out}-${hash}` : base.slice(0, 73) + "-" + hash;
+};
 
 const parseTsv = (text: string): string[][] =>
   text.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l.length).map((l) => l.split("\t"));
@@ -2329,7 +2341,9 @@ function stage6PostProc() {
   console.log(`[stage 6] cross-domain filter: dropped ${droppedCrossDomain} of ${beforeCrossDomain} edges (preserved ${preservedLastEdge} last-edge)`);
 
   // --- Seed-edge ingestion from stage 1e (expert-labeled ground truth) ---
-  let seedAdded = 0, seedSkippedDiff = 0, seedSkippedMissing = 0, seedSkippedDup = 0, seedHoldout = 0;
+  // Expert labels beat inferred difficulty/band. We accept even when rawDiff disagrees
+  // (logs as override); the cycle-breaker below handles any cycles this introduces.
+  let seedAdded = 0, seedSkippedMissing = 0, seedSkippedDup = 0, seedHoldout = 0, seedDiffOverride = 0;
   try {
     const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length);
     const existingEdges = new Set(final.map(([s, p]) => `${s}\t${p}`));
@@ -2344,17 +2358,15 @@ function stage6PostProc() {
     } catch { alias = new Map(); }
     for (let i = 1; i < seedLines.length; i++) {
       const c = seedLines[i].split("\t");
-      let src = alias.get(c[0]) ?? c[0];
-      let dst = alias.get(c[1]) ?? c[1];
+      const src = alias.get(c[0]) ?? c[0];
+      const dst = alias.get(c[1]) ?? c[1];
       const holdout = c[4] === "1";
       if (holdout) { seedHoldout++; continue; }
       if (!skill.has(src) || !skill.has(dst)) { seedSkippedMissing++; continue; }
       if (src === dst) { seedSkippedDup++; continue; }
-      // Enforce DAG + band ordering: prereq must be strictly easier (raw) and not exceed skill's band
       const rs = rawDiff.get(src) ?? 0, rd = rawDiff.get(dst) ?? 0;
-      if (rs >= rd) { seedSkippedDiff++; continue; }
       const bs = band.get(src) ?? 0, bd = band.get(dst) ?? 0;
-      if (bs > bd) { seedSkippedDiff++; continue; }
+      if (rs >= rd || bs > bd) seedDiffOverride++;
       const key = `${dst}\t${src}`; // edge schema: skill_id \t prereq_id (dst has src as prereq)
       if (existingEdges.has(key)) { seedSkippedDup++; continue; }
       final.push([dst, src]);
@@ -2362,12 +2374,12 @@ function stage6PostProc() {
       seedAdded++;
     }
   } catch { /* no seed edges */ }
-  console.log(`[stage 6] seed edges: added=${seedAdded} skipped_missing=${seedSkippedMissing} skipped_diff=${seedSkippedDiff} dup=${seedSkippedDup} holdout=${seedHoldout}`);
+  console.log(`[stage 6] seed edges: added=${seedAdded} skipped_missing=${seedSkippedMissing} dup=${seedSkippedDup} holdout=${seedHoldout} diff_override=${seedDiffOverride}`);
 
   // --- Cycle-breaker: small SCCs exist from near-duplicate skills the LLM couldn't order ---
   // (e.g. oral-health ↔ dental-health). Iteratively find SCCs; drop weakest edge per SCC.
   let cyclesBroken = 0;
-  for (let iter = 0; iter < 10; iter++) {
+  for (let iter = 0; iter < 50; iter++) {
     // Build adjacency: prereq p → skill s (final stores [s, p])
     const adj = new Map<string, string[]>();
     for (const [s, p] of final) {
@@ -2459,7 +2471,7 @@ function stage6PostProc() {
     dropped_hub: droppedHub,
     seed_added: seedAdded,
     seed_skipped_missing: seedSkippedMissing,
-    seed_skipped_diff: seedSkippedDiff,
+    seed_diff_override: seedDiffOverride,
     seed_held_out: seedHoldout,
     heuristic_orphan_fixed: orphanFixed,
     final_edges: final.length,
@@ -2479,9 +2491,10 @@ function stage7Finalize() {
   const iDesc = thdr.indexOf("description");
   const iOcc = thdr.indexOf("occupations");
   const iTop = thdr.indexOf("topics");
+  const iTags = thdr.indexOf("tags");
   const skills = taggedLines.slice(1).map((l) => {
     const c = l.split("\t");
-    return { id: c[0], title: c[iTitle], description: c[iDesc], occupations: c[iOcc], topics: c[iTop] };
+    return { id: c[0], title: c[iTitle], description: c[iDesc], occupations: c[iOcc], topics: c[iTop], tags: iTags >= 0 ? (c[iTags] || "") : "" };
   });
 
   const diffLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length);
@@ -2571,20 +2584,33 @@ function stage7Finalize() {
     return false;
   };
 
-  // Emit
-  const rows = ["id\ttitle\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tcerts"];
-  let wikiEnriched = 0, frameworkFiltered = 0, descEnriched = 0, dropped = 0;
+  // --- P279 filter helpers ---
+  const yearRe = /(^|-)(19|20)\d\d(-|$)|^\d+$/;
+  const STOP = new Set(["the","a","an","of","to","for","in","on","and","or","with","by","at","from","as","is","be","that","this","these","those"]);
+  const sigTokens = (id: string) => new Set(id.split("-").filter((t) => t.length >= 4 && !STOP.has(t)));
+
+  // First pass: assemble candidate topic sets (skip emission until we know topic frequencies)
+  type Row = { id: string; title: string; desc: string; d: number; ps: string; occ: string; topics: string[]; gStart: string; gEnd: string };
+  const pending: Row[] = [];
+  let wikiEnriched = 0, frameworkFiltered = 0, descEnriched = 0, dropped = 0, p279Filtered = 0;
   for (const s of skills) {
     if (isOrphanLeaf(s.id) && isCruft(s)) { dropped++; continue; }
     const d = diff.get(s.id);
     if (d === undefined) throw new Error(`skill ${s.id} missing from difficulty.tsv`);
     const ps = (prereqs.get(s.id) ?? []).join(",");
     const existing = s.topics.split(",").filter(Boolean);
+    // Skill's reference tokens: from id, title, description, occupations — used for P279-append overlap only
+    const skillTokens = sigTokens(s.id);
+    for (const tok of sigTokens(s.title.toLowerCase().replace(/\s+/g, "-"))) skillTokens.add(tok);
+    for (const tok of sigTokens((s.description || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, "-"))) skillTokens.add(tok);
+    for (const t of s.occupations.split(",").filter(Boolean)) for (const tok of sigTokens(t)) skillTokens.add(tok);
+    // Filter existing topics: only drop obvious junk (year, all-short-tokens, framework stoplist). Don't require overlap — many legit topics don't share tokens.
     const filtered = existing.filter((t) => {
       if (frameworkRe.test(t)) { frameworkFiltered++; return false; }
+      if (yearRe.test(t)) { p279Filtered++; return false; }
+      if (sigTokens(t).size === 0) { p279Filtered++; return false; } // all short/stopword tokens — junk
       return true;
     });
-    // Append P279 parent labels as topics
     const qid = idToQid.get(s.id);
     const parents = qid ? (qidParents.get(qid) || []) : [];
     const parentTopics: string[] = [];
@@ -2594,19 +2620,52 @@ function stage7Finalize() {
       if (!lbl) continue;
       const slug = slugify(lbl);
       if (!slug) continue;
+      if (yearRe.test(slug)) { p279Filtered++; continue; }
+      const parentToks = sigTokens(slug);
+      let overlap = 0;
+      for (const tok of parentToks) if (skillTokens.has(tok)) { overlap++; break; }
+      if (!overlap) { p279Filtered++; continue; }
       parentTopics.push(slug);
       if (parentTopics.length >= 4) break;
     }
     if (parentTopics.length) wikiEnriched++;
-    const topics = [...new Set([...filtered, ...parentTopics])].slice(0, TOPIC_CAP).join(",");
-    // Description enrichment: replace thin descriptions with Wikipedia summary when available
+    const topics = [...new Set([...filtered, ...parentTopics])].slice(0, TOPIC_CAP);
     let desc = s.description;
     const wikiText = wikiSummary.get(s.id);
     if (wikiText && desc.length < 80) { desc = wikiText; descEnriched++; }
-    rows.push([s.id, s.title, desc, d.toString(), ps, s.occupations, topics, ""].join("\t"));
+    // Grade extraction from `grade:XX` tags (XX may be PK, K, 0..12)
+    const gradeMap: Record<string, number> = { "PK": -1, "K": 0 };
+    const grades: number[] = [];
+    for (const tag of s.tags.split(",")) {
+      if (!tag.startsWith("grade:")) continue;
+      const v = tag.slice(6).toUpperCase();
+      const n = gradeMap[v] ?? (/^\d+$/.test(v) ? Number(v) : NaN);
+      if (!Number.isNaN(n)) grades.push(n);
+    }
+    const gStart = grades.length ? Math.min(...grades).toString() : "";
+    const gEnd = grades.length ? Math.max(...grades).toString() : "";
+    pending.push({ id: s.id, title: s.title, desc, d, ps, occ: s.occupations, topics, gStart, gEnd });
+  }
+
+  // Second pass: compute global topic frequencies, drop topics appearing only once
+  const topicFreq = new Map<string, number>();
+  for (const r of pending) for (const t of r.topics) topicFreq.set(t, (topicFreq.get(t) ?? 0) + 1);
+  let singletonDropped = 0;
+  for (const r of pending) {
+    const kept: string[] = [];
+    for (const t of r.topics) {
+      if ((topicFreq.get(t) ?? 0) < 2) { singletonDropped++; continue; }
+      kept.push(t);
+    }
+    r.topics = kept;
+  }
+
+  const rows = ["id\ttitle\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end"];
+  for (const r of pending) {
+    rows.push([r.id, r.title, r.desc, r.d.toString(), r.ps, r.occ, r.topics.join(","), r.gStart, r.gEnd].join("\t"));
   }
   Deno.writeTextFileSync("skills.tsv", rows.join("\n") + "\n");
-  console.log(`[stage 7] topic enrichment: wiki_enriched=${wikiEnriched}, framework_filtered=${frameworkFiltered}, desc_enriched=${descEnriched}, cruft_dropped=${dropped}`);
+  console.log(`[stage 7] topic enrichment: wiki_enriched=${wikiEnriched}, framework_filtered=${frameworkFiltered}, p279_filtered=${p279Filtered}, singleton_dropped=${singletonDropped}, desc_enriched=${descEnriched}, cruft_dropped=${dropped}`);
 
   // gzip (keep original)
   new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] }).outputSync();
@@ -2642,6 +2701,9 @@ function stage7Finalize() {
     wiki_desc_enriched: descEnriched,
     wiki_topic_enriched: wikiEnriched,
     framework_topics_filtered: frameworkFiltered,
+    p279_topics_filtered: p279Filtered,
+    singleton_topics_dropped: singletonDropped,
+    grade_populated: rows.slice(1).filter((r) => r.split("\t")[7] !== "").length,
     file_bytes: src.byteLength,
   });
 }
@@ -2757,6 +2819,27 @@ function stage3bDedupe() {
     console.log(`[stage 3b] QID-based merges: ${qidMerges} (across ${qidBuckets.size} QID buckets)`);
   } catch { console.log(`[stage 3b] no 1f_wiki.jsonl; skipping QID merge`); }
 
+  // --- Pass 0.5: token-sort signature merge (and/or swaps, word reorders) ---
+  const SIG_STOP = new Set(["a","an","the","of","to","for","in","on","at","by","with","is","are","be","or","and","from","as","their","its","this","that","these","those"]);
+  const tokenSigOf = (title: string): string => {
+    const t = title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const toks = t.split(/\s+/).filter((w) => w.length >= 3 && !SIG_STOP.has(w));
+    toks.sort();
+    return toks.join(" ");
+  };
+  const sigBuckets = new Map<string, number[]>();
+  for (let i = 0; i < rows.length; i++) {
+    const sig = tokenSigOf(rows[i].title);
+    if (!sig) continue;
+    const arr = sigBuckets.get(sig) ?? []; arr.push(i); sigBuckets.set(sig, arr);
+  }
+  let sigMerges = 0;
+  for (const [, idxs] of sigBuckets) {
+    if (idxs.length < 2) continue;
+    for (let k = 1; k < idxs.length; k++) { union(idxs[0], idxs[k]); sigMerges++; }
+  }
+  console.log(`[stage 3b] token-sort signature merges: ${sigMerges} (across ${sigBuckets.size} signature buckets)`);
+
   // Bucket by top-topic (pre-difficulty) — catches duplicates at any difficulty
   const buckets = new Map<string, number[]>();
   for (let i = 0; i < rows.length; i++) {
@@ -2820,22 +2903,92 @@ function stage3bDedupe() {
     const c = find(i);
     const arr = groupBy.get(c) ?? []; arr.push(i); groupBy.set(c, arr);
   }
-  const outLines = [hdrCols.join("\t")];
+  type Canon = { idx: number; occs: string[]; topics: string[]; allTags: string[] };
+  const canons: Canon[] = [];
   for (const [canonicalIdx, groupIdxs] of groupBy) {
     const canonical = rows[canonicalIdx];
-    // Union occupation/topic tags from the group
     const occs = new Set<string>();
     const topics = new Set<string>();
-    const allTags = new Set<string>(canonical.tags.split(","));
+    const allTags = new Set<string>(canonical.tags.split(",").filter(Boolean));
     for (const i of groupIdxs) {
       for (const o of rows[i].occupations.split(",").filter((x) => x)) occs.add(o);
       for (const t of rows[i].topics.split(",").filter((x) => x)) topics.add(t);
       for (const tg of rows[i].tags.split(",").filter((x) => x)) allTags.add(tg);
     }
+    canons.push({ idx: canonicalIdx, occs: [...occs].slice(0, 3), topics: [...topics].slice(0, 3), allTags: [...allTags] });
+  }
+
+  // --- Backfill tags for fully-untagged canonicals using embedding neighbors ---
+  // Inverted index on significant title tokens restricts candidate pool per query.
+  const BF_STOP = new Set(["a","an","the","of","to","for","in","on","and","or","with","at","by","from","as"]);
+  const titleToks = (s: string): string[] => {
+    const t = s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    return t.split(/\s+/).filter((w) => w.length >= 4 && !BF_STOP.has(w));
+  };
+  const tokToCanons = new Map<string, number[]>();
+  for (let k = 0; k < canons.length; k++) {
+    const t = rows[canons[k].idx].title;
+    for (const tok of titleToks(t)) {
+      const arr = tokToCanons.get(tok) ?? []; arr.push(k); tokToCanons.set(tok, arr);
+    }
+  }
+  let backfilled = 0, backfillTried = 0;
+  for (let k = 0; k < canons.length; k++) {
+    const c = canons[k];
+    if (c.occs.length > 0 || c.topics.length > 0) continue;
+    backfillTried++;
+    const queryTitle = rows[c.idx].title;
+    const qToks = titleToks(queryTitle);
+    if (!qToks.length) continue;
+    const pool = new Set<number>();
+    for (const tok of qToks) {
+      const arr = tokToCanons.get(tok);
+      if (!arr) continue;
+      if (arr.length > 2000) continue; // skip very common tokens
+      for (const i of arr) if (i !== k) pool.add(i);
+    }
+    if (!pool.size) continue;
+    const qOff = c.idx * DIM;
+    const scored: [number, number][] = [];
+    for (const i of pool) {
+      const other = canons[i];
+      if (other.occs.length === 0 && other.topics.length === 0) continue;
+      let sc = 0;
+      const oOff = other.idx * DIM;
+      for (let d = 0; d < DIM; d++) sc += vecs[qOff + d] * vecs[oOff + d];
+      if (sc >= 0.7) scored.push([i, sc]);
+    }
+    if (scored.length < 3) continue;
+    scored.sort((a, b) => b[1] - a[1]);
+    const top = scored.slice(0, 10);
+    const topicVotes = new Map<string, number>();
+    const occVotes = new Map<string, number>();
+    for (const [i, w] of top) {
+      for (const t of canons[i].topics) topicVotes.set(t, (topicVotes.get(t) ?? 0) + w);
+      for (const o of canons[i].occs) occVotes.set(o, (occVotes.get(o) ?? 0) + w);
+    }
+    const pickTop = (m: Map<string, number>, minVotes: number, cap: number): string[] => {
+      const entries = [...m.entries()].filter(([, v]) => v >= minVotes).sort((a, b) => b[1] - a[1]);
+      return entries.slice(0, cap).map(([k]) => k);
+    };
+    const minW = 3 * 0.7; // 3 neighbors × min similarity
+    const newTopics = pickTop(topicVotes, minW, 3);
+    const newOccs = pickTop(occVotes, minW, 2);
+    if (newTopics.length || newOccs.length) {
+      c.topics = newTopics;
+      c.occs = newOccs;
+      backfilled++;
+    }
+  }
+  console.log(`[stage 3b] tag backfill: ${backfilled}/${backfillTried} untagged canonicals enriched`);
+
+  const outLines = [hdrCols.join("\t")];
+  for (const c of canons) {
+    const canonical = rows[c.idx];
     outLines.push([
       canonical.id, canonical.title, canonical.description,
-      canonical.sources, [...allTags].join(","),
-      [...occs].slice(0, 3).join(","), [...topics].slice(0, 3).join(","),
+      canonical.sources, c.allTags.join(","),
+      c.occs.join(","), c.topics.join(","),
     ].join("\t"));
   }
   Deno.writeTextFileSync(`${BUILD}/3b_tagged_deduped.tsv`, outLines.join("\n") + "\n");
@@ -2854,6 +3007,9 @@ function stage3bDedupe() {
     skipped_huge_buckets: skippedHuge,
     dedupe_cosine: DEDUPE_COSINE,
     jaccard_min: JACCARD_MIN,
+    sig_merges: sigMerges,
+    backfill_tried: backfillTried,
+    backfilled,
   });
 }
 

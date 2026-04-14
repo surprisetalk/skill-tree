@@ -11,10 +11,20 @@
 - [x] stage 7: finalize skills.tsv (101,630 skills, 307,763 edges, 5,177 roots)
 - [x] HTML ladder visualization (viz.ts: top-N, seed, or --all modes)
 
+## Quality pass 2 (2026-04-14)
+- [x] slugify: decode HTML entities + word-boundary truncation + 6-hex hash for >80ch (no more `-amp-`, no more mid-word cuts, no `-2` collisions). Requires full re-run from stage 1 to take effect for existing cached IDs.
+- [x] Seed edges override inferred difficulty (378 added vs 131 before, +188%). Cycle-breaker iter bumped 10→50.
+- [x] P279 topic pollution filter: year/numeric blocklist + all-short-token junk filter. 211k pollution topics dropped; singleton topics dropped globally.
+- [x] Dedupe stage 3b: token-sort signature pre-merge (859 additional merges from and/or/word-order swaps).
+- [x] Tag backfill stage 3b: embedding-NN fills tags for untagged canonicals (1,918/4,230 enriched).
+- [x] Drop dead `certs` column; emit `grade_start`/`grade_end` from existing `grade:XX` tags (0.1% → 22% coverage).
+
 ## Known limits (future work)
-- [ ] 5.1% orphan rate — mostly peer-orphan leaves (javascript's only candidates are sibling languages, LLM rightly rejects). Fix needs true topic hierarchy (Wikidata P279 etc.)
+- [ ] 5-9% orphan rate — mostly peer-orphan leaves. Fix needs true topic hierarchy (Wikidata P279 etc.)
 - [ ] Some occupation tags still reflect embedding bias more than truth (e.g. `computer-numerically-controlled-tool-operators` on generic skills)
-- [ ] Dedupe is conservative (cosine 0.96 + Jaccard 0.7); some genuine duplicates remain
+- [ ] alcpl holdout recall 0.20 (up from 0.04); khan/moocx still 0 — LLM prereq inference misses most ground-truth edges. Try ensemble with rule-based or revised prompt.
+- [ ] Full stage-1 re-run required to realize slugify fix (eliminates 13k truncated IDs, 176 `-2` dupes, HTML entity leaks).
+- [ ] Topic "rome-officials-and-employees" and similar Wikipedia categories survive P279 filters — add co-occurrence sanity check.
 
 ## Ideas
 - [ ] which skills are most valuable? use occupation salaries
