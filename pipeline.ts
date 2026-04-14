@@ -374,6 +374,7 @@ function loadInfillCache(): Map<string, string> {
 
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const CLAUDE_MODEL = Deno.env.get("CLAUDE_MODEL") ?? "claude-haiku-4-5-20251001";
+const PREREQ_MODEL = Deno.env.get("PREREQ_MODEL") ?? "claude-3-haiku-20240307";
 const INFILL_SYSTEM = `You define workplace skills in exactly one concise sentence. Be concrete and factual. Output only the definition — no preamble, no "refers to", no quotation marks, no trailing notes. Never repeat the skill name verbatim at the start.`;
 const BATCH_STATE = `${BUILD}/1b_batch.json`;
 const ANTHROPIC_HEADERS = {
@@ -1442,6 +1443,332 @@ function stage4Difficulty() {
   }
 }
 
+// ---------- stage 5: prereq ----------
+
+const PREREQ_CANDIDATES_CACHE = `${BUILD}/5_candidates.tsv`;
+const PREREQ_BATCH_STATE = `${BUILD}/5_batch.json`;
+const PREREQ_CACHE = `${BUILD}/5_prereqs.tsv`;
+const PREREQ_SYSTEM = `You identify true prerequisites for a skill. Given a skill and a numbered list of candidate prerequisites (all from easier/earlier material), return the numbers of candidates that MUST be understood first before learning the skill. Be strict — only include genuinely foundational dependencies, not merely related or adjacent topics. Return ONLY a comma-separated list of numbers (e.g. "2,5,9") or the word "none". No explanation.`;
+
+function parseSkillsWithDifficulty(): { skills: { id: string; title: string; description: string; topics: string }[]; diff: Int32Array; raw: Float32Array } {
+  const tagged = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n").filter((l) => l.length);
+  const taggedHdr = tagged[0].split("\t");
+  const iTitle = taggedHdr.indexOf("title");
+  const iDesc = taggedHdr.indexOf("description");
+  const iTopics = taggedHdr.indexOf("topics");
+  const skills = tagged.slice(1).map((l) => {
+    const c = l.split("\t");
+    return { id: c[0], title: c[iTitle], description: c[iDesc], topics: c[iTopics] };
+  });
+
+  const diffLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length).slice(1);
+  if (diffLines.length !== skills.length) throw new Error(`diff (${diffLines.length}) vs skills (${skills.length}) mismatch`);
+  const diff = new Int32Array(skills.length);
+  const raw = new Float32Array(skills.length);
+  for (let i = 0; i < diffLines.length; i++) {
+    const c = diffLines[i].split("\t");
+    if (c[0] !== skills[i].id) throw new Error(`id order mismatch at ${i}: ${c[0]} vs ${skills[i].id}`);
+    diff[i] = Number(c[1]);
+    raw[i] = Number(c[2]);
+  }
+  return { skills, diff, raw };
+}
+
+function loadPrereqCandidates(): Map<string, number[]> {
+  try {
+    const text = Deno.readTextFileSync(PREREQ_CANDIDATES_CACHE);
+    const m = new Map<string, number[]>();
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      const tab = line.indexOf("\t");
+      if (tab < 0) continue;
+      const id = line.slice(0, tab);
+      const idxStr = line.slice(tab + 1);
+      m.set(id, idxStr ? idxStr.split(",").map(Number).filter((n) => Number.isFinite(n)) : []);
+    }
+    return m;
+  } catch { return new Map(); }
+}
+
+function computePrereqCandidates(): Map<string, number[]> {
+  const { skills, raw } = parseSkillsWithDifficulty();
+  const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
+  const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
+  const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
+  if (ids.length !== skills.length) throw new Error("embed/skill length mismatch");
+  const DIM = EMBED_DIM;
+  const vecs = new Float32Array(skills.length * DIM);
+  for (let i = 0; i < skills.length; i++) vecs.set(normalize(emb.subarray(i * DIM, (i + 1) * DIM)), i * DIM);
+
+  // topic → indexes (with difficulty)
+  const topicIdx = new Map<string, number[]>();
+  for (let i = 0; i < skills.length; i++) {
+    for (const t of skills[i].topics.split(",")) {
+      if (!t) continue;
+      let arr = topicIdx.get(t);
+      if (!arr) { arr = []; topicIdx.set(t, arr); }
+      arr.push(i);
+    }
+  }
+
+  const K = Number(Deno.env.get("PREREQ_K") ?? "15");
+  const MIN_DIFF = Number(Deno.env.get("PREREQ_MIN_DIFF_DELTA") ?? "0.3"); // require strictly lower raw difficulty
+  const out = new Map<string, number[]>();
+  const outLines: string[] = [];
+
+  const t0 = performance.now();
+  for (let i = 0; i < skills.length; i++) {
+    // Pool: within-topic skills with strictly lower raw difficulty
+    const pool = new Set<number>();
+    for (const t of skills[i].topics.split(",")) {
+      if (!t) continue;
+      const arr = topicIdx.get(t);
+      if (!arr) continue;
+      for (const j of arr) if (raw[j] + MIN_DIFF <= raw[i]) pool.add(j);
+    }
+    // Fallback: global easier skills if pool is small
+    let candidates: number[];
+    if (pool.size >= K) {
+      candidates = [...pool];
+    } else {
+      candidates = [];
+      for (let j = 0; j < skills.length; j++) if (raw[j] + MIN_DIFF <= raw[i]) candidates.push(j);
+    }
+
+    // Top-K by cosine similarity
+    const sOff = i * DIM;
+    const top: { idx: number; score: number }[] = [];
+    for (const j of candidates) {
+      let sc = 0;
+      const aOff = j * DIM;
+      for (let d = 0; d < DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];
+      if (top.length < K) {
+        top.push({ idx: j, score: sc });
+        if (top.length === K) top.sort((a, b) => a.score - b.score);
+      } else if (sc > top[0].score) {
+        top[0] = { idx: j, score: sc };
+        top.sort((a, b) => a.score - b.score);
+      }
+    }
+    top.sort((a, b) => b.score - a.score);
+    const idxs = top.map((t) => t.idx);
+    out.set(skills[i].id, idxs);
+    outLines.push(`${skills[i].id}\t${idxs.join(",")}`);
+    if ((i + 1) % 5000 === 0) {
+      const el = (performance.now() - t0) / 1000;
+      console.log(`  candidates ${i + 1}/${skills.length} (${((i + 1) / el).toFixed(0)}/s)`);
+    }
+  }
+  Deno.writeTextFileSync(PREREQ_CANDIDATES_CACHE, outLines.join("\n") + "\n");
+  return out;
+}
+
+function formatPrereqPrompt(s: { title: string; description: string }, candTitles: string[]): string {
+  const desc = s.description ? `\nDescription: ${s.description.slice(0, 200)}` : "";
+  const cands = candTitles.map((t, i) => `${i + 1}. ${t}`).join("\n");
+  return `Skill: ${s.title}${desc}\n\nCandidates:\n${cands}\n\nPrerequisite numbers (or "none"):`;
+}
+
+function parsePrereqResponse(text: string, numCandidates: number): number[] {
+  const t = text.trim().toLowerCase();
+  if (t === "none" || t === "" || t === "n/a") return [];
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const m of t.matchAll(/\d+/g)) {
+    const n = Number(m[0]);
+    if (n >= 1 && n <= numCandidates && !seen.has(n)) {
+      seen.add(n);
+      out.push(n - 1); // convert to 0-based
+    }
+  }
+  return out.slice(0, 5); // cap at 5 prereqs per skill
+}
+
+function loadPrereqCache(): Map<string, string> {
+  try {
+    const text = Deno.readTextFileSync(PREREQ_CACHE);
+    const m = new Map<string, string>();
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      const tab = line.indexOf("\t");
+      if (tab < 0) continue;
+      m.set(line.slice(0, tab), line.slice(tab + 1));
+    }
+    return m;
+  } catch { return new Map(); }
+}
+
+async function submitPrereqBatch(batch: { id: string; title: string; description: string; candTitles: string[] }[]): Promise<{ batchId: string; idMap: Record<string, string> }> {
+  const idMap: Record<string, string> = {};
+  const requests = await Promise.all(batch.map(async (b, i) => {
+    const cid = await shortId(b.id, i);
+    idMap[cid] = b.id;
+    return {
+      custom_id: cid,
+      params: {
+        model: PREREQ_MODEL,
+        max_tokens: 40,
+        system: [{ type: "text", text: PREREQ_SYSTEM, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: formatPrereqPrompt(b, b.candTitles) }],
+      },
+    };
+  }));
+  const body = JSON.stringify({ requests });
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages/batches", {
+        method: "POST",
+        headers: ANTHROPIC_HEADERS,
+        body,
+      });
+      if (res.ok) {
+        const j = await res.json();
+        return { batchId: j.id, idMap };
+      }
+      const txt = await res.text();
+      if (res.status === 429 || res.status >= 500) {
+        const delay = Math.min(60 * attempt, 300);
+        console.warn(`  [submit retry ${attempt}/8] ${res.status}: ${txt.slice(0, 150)} — sleeping ${delay}s`);
+        await new Promise((r) => setTimeout(r, delay * 1000));
+        continue;
+      }
+      throw new Error(`prereq batch submit ${res.status}: ${txt}`);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (/prereq batch submit [1-4]\d\d/.test(msg)) throw err; // non-5xx from above
+      const delay = Math.min(30 * attempt, 300);
+      console.warn(`  [submit retry ${attempt}/8] network err: ${msg} — sleeping ${delay}s`);
+      await new Promise((r) => setTimeout(r, delay * 1000));
+    }
+  }
+  throw new Error("prereq batch submit: exhausted retries");
+}
+
+async function stage5Prereq() {
+  if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+  const { skills } = parseSkillsWithDifficulty();
+
+  // Step 1: build or load candidates
+  let candidates = loadPrereqCandidates();
+  if (candidates.size !== skills.length) {
+    console.log(`[stage 5] computing candidates for ${skills.length} skills…`);
+    candidates = computePrereqCandidates();
+  } else {
+    console.log(`[stage 5] loaded ${candidates.size} cached candidate lists`);
+  }
+
+  const cache = loadPrereqCache();
+  const todo: { id: string; title: string; description: string; candTitles: string[] }[] = [];
+  for (const s of skills) {
+    if (cache.has(s.id)) continue;
+    const cands = candidates.get(s.id);
+    if (!cands || cands.length === 0) continue; // no candidates = skip (will be orphan)
+    todo.push({
+      id: s.id,
+      title: s.title,
+      description: s.description,
+      candTitles: cands.map((j) => skills[j].title),
+    });
+  }
+  console.log(`[stage 5] targets: ${skills.length}, cached: ${cache.size}, to submit: ${todo.length}`);
+
+  // Step 2: resume existing batch(es) if any
+  let state: { batches: { id: string; idMap: Record<string, string> }[] } | null = null;
+  try { state = JSON.parse(Deno.readTextFileSync(PREREQ_BATCH_STATE)); } catch { /* none */ }
+
+  if (state) {
+    console.log(`[stage 5] resuming ${state.batches.length} batch(es)`);
+    const remaining: typeof state.batches = [];
+    for (const b of state.batches) {
+      const p = await pollBatch(b.id);
+      console.log(`  batch ${b.id} status=${p.status} counts=${JSON.stringify(p.counts)}`);
+      if (p.status === "ended") {
+        if (!p.resultsUrl) throw new Error("no results_url");
+        const res = await fetch(p.resultsUrl, { headers: ANTHROPIC_HEADERS });
+        if (!res.ok) throw new Error(`results ${res.status}`);
+        const text = await res.text();
+        const fh = Deno.openSync(PREREQ_CACHE, { create: true, append: true });
+        const enc = new TextEncoder();
+        let ok = 0, err = 0;
+        for (const line of text.split("\n")) {
+          if (!line) continue;
+          const j = JSON.parse(line);
+          const skillId = b.idMap[j.custom_id];
+          if (!skillId) continue;
+          if (j.result?.type !== "succeeded") { err++; continue; }
+          const raw = (j.result.message.content?.[0]?.text ?? "").replace(/[\t\n\r]/g, " ");
+          fh.writeSync(enc.encode(`${skillId}\t${raw}\n`));
+          ok++;
+        }
+        fh.close();
+        console.log(`  wrote ${ok} successful, ${err} errored`);
+      } else {
+        remaining.push(b);
+      }
+    }
+    if (remaining.length === 0) {
+      Deno.removeSync(PREREQ_BATCH_STATE);
+      console.log(`[stage 5] all batches complete`);
+    } else {
+      Deno.writeTextFileSync(PREREQ_BATCH_STATE, JSON.stringify({ batches: remaining }));
+      console.log(`[stage 5] ${remaining.length} batch(es) still processing — will top up to parallel cap`);
+      state = { batches: remaining };
+    }
+  }
+
+  if (todo.length === 0) {
+    // Write final prereqs.tsv edge list
+    const cacheFinal = loadPrereqCache();
+    console.log(`[stage 5] writing edges from ${cacheFinal.size} responses`);
+    const byId = new Map(skills.map((s) => [s.id, s] as const));
+    const edgeFh = Deno.openSync(`${BUILD}/5_edges.tsv`, { create: true, write: true, truncate: true });
+    const enc = new TextEncoder();
+    edgeFh.writeSync(enc.encode("skill_id\tprereq_id\n"));
+    let edges = 0, orphans = 0;
+    for (const s of skills) {
+      const resp = cacheFinal.get(s.id);
+      const cands = candidates.get(s.id) ?? [];
+      if (!resp || !cands.length) { orphans++; continue; }
+      const picks = parsePrereqResponse(resp, cands.length);
+      if (picks.length === 0) orphans++;
+      for (const p of picks) {
+        const prereq = skills[cands[p]];
+        edgeFh.writeSync(enc.encode(`${s.id}\t${prereq.id}\n`));
+        edges++;
+      }
+    }
+    edgeFh.close();
+    writeStats(5, {
+      skills: skills.length,
+      responses: cacheFinal.size,
+      edges,
+      orphans,
+      orphan_rate: orphans / skills.length,
+    });
+    return;
+  }
+
+  // Step 3: submit multiple batches to fill the processing pipeline
+  const CHUNK = Number(Deno.env.get("PREREQ_CHUNK") ?? "20000");
+  const PARALLEL_BATCHES = Number(Deno.env.get("PREREQ_PARALLEL") ?? "3");
+  const inFlight = state?.batches ?? [];
+  const slots = Math.max(0, PARALLEL_BATCHES - inFlight.length);
+  const batches = [...inFlight];
+  let off = 0;
+  for (let n = 0; n < slots && off < todo.length; n++) {
+    const chunk = todo.slice(off, off + CHUNK);
+    if (Deno.env.get("PREREQ_LIMIT")) {
+      chunk.length = Math.min(chunk.length, Number(Deno.env.get("PREREQ_LIMIT")));
+    }
+    const b = await submitPrereqBatch(chunk);
+    batches.push({ id: b.batchId, idMap: b.idMap });
+    console.log(`[stage 5] batch ${b.batchId}: ${chunk.length} requests submitted`);
+    Deno.writeTextFileSync(PREREQ_BATCH_STATE, JSON.stringify({ batches })); // save after each
+    off += chunk.length;
+  }
+  console.log(`[stage 5] ${batches.length} batch(es), ${off}/${todo.length} queued. Re-run to poll + submit next.`);
+}
+
 // ---------- dispatch ----------
 
 const stages: Record<string, () => void | Promise<void>> = {
@@ -1451,6 +1778,7 @@ const stages: Record<string, () => void | Promise<void>> = {
   embed: stage2Embed,
   tag: stage3Tag,
   difficulty: stage4Difficulty,
+  prereq: stage5Prereq,
 };
 
 const arg = Deno.args[0];
