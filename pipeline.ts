@@ -2109,33 +2109,48 @@ function stage6PostProc() {
   raw = raw.filter(([s, p]) => (band.get(p) ?? 0) <= (band.get(s) ?? 20));
   console.log(`[stage 6] dropped ${beforeBandFilter - raw.length} band-inverted edges`);
 
-  // --- Filter 1: drop onet:tech prereqs that are cross-domain noise ---
-  // Keep if: skill itself is onet:tech (tech→tech), OR prereq slug appears in skill's topics.
-  // Preserve at least one prereq per skill — fall back to best remaining if filter would empty all.
+  // --- Filter 1: tighten onet:tech prereqs ---
+  // Specific software products (onet:tech) are rarely true prereqs:
+  //   - onet:tech → onet:tech: DROP. Sibling products don't depend on each other.
+  //   - non-tech → onet:tech: KEEP only if product slug appears in skill's topics.
   const bySkill = new Map<string, string[]>();
   for (const [s, p] of raw) { const arr = bySkill.get(s) ?? []; arr.push(p); bySkill.set(s, arr); }
   let droppedTech = 0;
   const filtered: [string, string][] = [];
   for (const [s, prereqs] of bySkill) {
     const ssk = skill.get(s);
+    const sIsTech = ssk?.tags.includes("onet:tech") ?? false;
+    const sRaw = rawDiff.get(s) ?? 0;
     const kept = prereqs.filter((p) => {
       const psk = skill.get(p);
       if (!psk) return true;
-      if (!psk.tags.includes("onet:tech")) return true;
-      if (ssk?.tags.includes("onet:tech")) return true; // tech→tech OK
-      if (ssk?.topics.has(p)) return true; // product is one of skill's topics
+      const pIsTech = psk.tags.includes("onet:tech");
+      if (!pIsTech) return true;
+      if (sIsTech) {
+        // Keep tech→tech only when raw-diff gap is meaningful (category→product, not sibling→sibling)
+        const pRaw = rawDiff.get(p) ?? 0;
+        return sRaw - pRaw >= 2.0;
+      }
+      if (ssk?.topics.has(p)) return true; // product is explicitly one of skill's topics
       return false;
     });
-    // If filter emptied skill's prereqs, keep the first original prereq as fallback
-    const final = kept.length ? kept : (prereqs.length ? [prereqs[0]] : []);
+    // Fallback: if filter emptied all prereqs AND skill is non-tech, keep first non-tech prereq
+    // (tech skills that lose all prereqs are allowed to orphan — sibling products don't belong in DAG)
+    let final = kept;
+    if (final.length === 0 && !sIsTech && prereqs.length > 0) {
+      const firstNonTech = prereqs.find((p) => !(skill.get(p)?.tags.includes("onet:tech") ?? false));
+      if (firstNonTech) final = [firstNonTech];
+    }
     droppedTech += prereqs.length - final.length;
     for (const p of final) filtered.push([s, p]);
   }
   raw = filtered;
-  console.log(`[stage 6] dropped ${droppedTech} cross-domain onet:tech edges`);
+  console.log(`[stage 6] dropped ${droppedTech} onet:tech edges`);
 
   // --- Filter 2: cap fan-out per prereq ---
-  const HUB_CAP = Number(Deno.env.get("HUB_CAP") ?? "50");
+  // Hub cap: non-tech foundational concepts can legitimately be prereq of many skills; only cap tech products strictly
+  const HUB_CAP = Number(Deno.env.get("HUB_CAP") ?? "80");
+  const TECH_HUB_CAP = Number(Deno.env.get("TECH_HUB_CAP") ?? "15");
   const downstreamOfPrereq = new Map<string, [string, string][]>();
   for (const e of raw) {
     const arr = downstreamOfPrereq.get(e[1]) ?? []; arr.push(e); downstreamOfPrereq.set(e[1], arr);
@@ -2143,17 +2158,17 @@ function stage6PostProc() {
   let droppedHub = 0;
   const keep = new Set<string>();
   for (const [prereqId, edges] of downstreamOfPrereq) {
-    if (edges.length <= HUB_CAP) {
+    const cap = (skill.get(prereqId)?.tags.includes("onet:tech") ? TECH_HUB_CAP : HUB_CAP);
+    if (edges.length <= cap) {
       for (const e of edges) keep.add(e[0] + "\t" + e[1]);
       continue;
     }
     const pRaw = rawDiff.get(prereqId) ?? 0;
-    // Prefer edges where skill's raw difficulty is closest to prereq's (immediate prereqs)
     edges.sort((a, b) => Math.abs((rawDiff.get(a[0]) ?? 0) - pRaw) - Math.abs((rawDiff.get(b[0]) ?? 0) - pRaw));
-    for (let i = 0; i < HUB_CAP; i++) keep.add(edges[i][0] + "\t" + edges[i][1]);
-    droppedHub += edges.length - HUB_CAP;
+    for (let i = 0; i < cap; i++) keep.add(edges[i][0] + "\t" + edges[i][1]);
+    droppedHub += edges.length - cap;
   }
-  console.log(`[stage 6] dropped ${droppedHub} hub-excess edges (cap ${HUB_CAP})`);
+  console.log(`[stage 6] dropped ${droppedHub} hub-excess edges (cap: non-tech=${HUB_CAP}, tech=${TECH_HUB_CAP})`);
 
   const final: [string, string][] = raw.filter((e) => keep.has(e[0] + "\t" + e[1]));
 
@@ -2167,6 +2182,71 @@ function stage6PostProc() {
   }
   let lostAll = 0;
   for (const id of skillsWithRawPrereqs) if (!skillsWithFinalPrereqs.has(id)) lostAll++;
+
+  // --- Heuristic orphan fix: for orphan skills, find foundational ancestors by topic-slug match ---
+  const orphanSkills = new Set<string>();
+  const hasEdge = new Set(final.map(([s]) => s));
+  for (const id of skill.keys()) if (!hasEdge.has(id)) orphanSkills.add(id);
+
+  // Index skills by significant slug words
+  const wordToSkills = new Map<string, string[]>();
+  for (const [id] of skill) {
+    for (const w of id.split("-")) {
+      if (w.length >= 5) {
+        const arr = wordToSkills.get(w) ?? []; arr.push(id); wordToSkills.set(w, arr);
+      }
+    }
+  }
+
+  // Identify words that are too common to be useful signal (like "system", "management", "software")
+  const stopWords = new Set<string>();
+  for (const [w, list] of wordToSkills) if (list.length > 300) stopWords.add(w);
+
+  // Track how many downstream each heuristic prereq gets — cap to prevent new artificial hubs
+  const heurUseCount = new Map<string, number>();
+  const HEUR_CAP = 25;
+
+  let orphanFixed = 0;
+  for (const orphanId of orphanSkills) {
+    const ssk = skill.get(orphanId)!;
+    const sRaw = rawDiff.get(orphanId) ?? 0;
+    // Find candidate foundational skills whose SLUG EQUALS or STARTS WITH a significant topic word.
+    // Slug-start match ensures semantic match (e.g. word "programming" → "programming-languages" not "game-programming-academy").
+    const cands = new Map<string, number>();
+    for (const topic of ssk.topics) {
+      for (const w of topic.split("-")) {
+        if (w.length < 5 || stopWords.has(w)) continue;
+        const list = wordToSkills.get(w);
+        if (!list) continue;
+        for (const candId of list) {
+          if (candId === orphanId) continue;
+          if (!(candId === w || candId.startsWith(w + "-"))) continue; // must start with the word
+          if (skill.get(candId)?.tags.includes("onet:tech")) continue;
+          const cRaw = rawDiff.get(candId) ?? 0;
+          if (sRaw - cRaw < 3) continue;
+          const score = candId === w ? 100 : (candId.split("-").length <= 3 ? 10 : 1);
+          cands.set(candId, Math.max(cands.get(candId) ?? 0, score));
+        }
+      }
+    }
+    if (cands.size === 0) continue;
+    // Sort by score, tiebreak by lowest cap usage, then lowest raw diff
+    const ranked = [...cands.entries()].sort((a, b) =>
+      b[1] - a[1]
+      || (heurUseCount.get(a[0]) ?? 0) - (heurUseCount.get(b[0]) ?? 0)
+      || (rawDiff.get(a[0]) ?? 0) - (rawDiff.get(b[0]) ?? 0));
+    // Pick first candidate that hasn't been over-used AND scored ≥10 (starts-with match)
+    for (const [candId, score] of ranked) {
+      if (score < 10) break;
+      const n = heurUseCount.get(candId) ?? 0;
+      if (n >= HEUR_CAP) continue;
+      final.push([orphanId, candId]);
+      heurUseCount.set(candId, n + 1);
+      orphanFixed++;
+      break;
+    }
+  }
+  console.log(`[stage 6] heuristic orphan fix: added edges for ${orphanFixed} of ${orphanSkills.size} orphans (stopwords: ${stopWords.size})`);
 
   // Write final edges
   const enc = new TextEncoder();
