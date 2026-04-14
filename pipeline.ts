@@ -65,6 +65,8 @@ function writeStats(stage: number, stats: Record<string, unknown>) {
 
 function stage1List() {
   console.log("[stage 1] reading sources…");
+  const summarizeCache = loadSummarizeCache();
+  console.log(`[stage 1] summarize cache: ${summarizeCache.size} entries`);
   const raw: Skill[] = [];
 
   // ESCO
@@ -239,7 +241,8 @@ function stage1List() {
 
   // OpenSALT CFItems — each framework file has CFItems[] with fullStatement
   {
-    let n = 0, skipped = 0;
+    const SCAFFOLDING = /^(\s*)?(grade|kindergarten|pre-?k|elementary|middle school|high school|[0-9]+(st|nd|rd|th)\s+grade|unit\s+\d|chapter\s+\d|section\s+\d|module\s+\d|standard\s+\d|topic\s+\d|strand|domain)\b/i;
+    let n = 0, skipped = 0, scaffolding = 0;
     for (const e of Deno.readDirSync("data/opensalt")) {
       if (!e.name.endsWith(".json") || e.name === "index.json") continue;
       const j = JSON.parse(Deno.readTextFileSync(`data/opensalt/${e.name}`));
@@ -248,6 +251,9 @@ function stage1List() {
       for (const it of items) {
         const title = (it.fullStatement || "").trim();
         if (!title || title.length > 400) { skipped++; continue; }
+        // Drop framework scaffolding (non-skill meta-labels)
+        if (SCAFFOLDING.test(title) && title.length < 50) { scaffolding++; continue; }
+        if (/^(CFItemType|Course|Subject)\s*:/.test(title)) { scaffolding++; continue; }
         const grade = Array.isArray(it.educationLevel) ? it.educationLevel.join(",") : "";
         raw.push({
           id: "",
@@ -259,10 +265,24 @@ function stage1List() {
         n++;
       }
     }
-    console.log(`  opensalt: ${n} (skipped ${skipped} oversized/empty)`);
+    console.log(`  opensalt: ${n} (skipped ${skipped} oversized, ${scaffolding} scaffolding)`);
   }
 
-  // Dedupe by fuzzy key (alphanumeric lower-case, stopwords removed, stable word order) — merges "Machine Learning" / "machine learning" / "ML"… (kept distinct), "machine learning (ML)" / "Machine-Learning" / "machine_learning" (merged)
+  // Apply summarize cache: replace long titles with concise summaries, keep original as description
+  let summarized = 0;
+  for (const s of raw) {
+    const candidate = slugify(s.title);
+    const summary = summarizeCache.get(candidate);
+    if (summary && summary.length > 0 && summary.length < s.title.length) {
+      const original = s.title;
+      s.title = summary;
+      if (!s.description) s.description = original;
+      summarized++;
+    }
+  }
+  console.log(`[stage 1] applied ${summarized} summaries`);
+
+  // Dedupe by fuzzy key
   console.log(`[stage 1] raw rows: ${raw.length}; deduping…`);
   const fuzzyKey = (s: string): string => {
     return s.toLowerCase()
@@ -496,6 +516,110 @@ async function stage1bInfill() {
   const { batchId, idMap } = await submitBatch(chunk);
   Deno.writeTextFileSync(BATCH_STATE, JSON.stringify({ id: batchId, idMap }));
   console.log(`[stage 1b] batch submitted. Re-run \`pipeline.ts infill\` to poll for results.`);
+}
+
+// ---------- stage 1c: summarize long titles ----------
+
+const SUMMARIZE_CACHE = `${BUILD}/1c_summarize.tsv`;
+const SUMMARIZE_BATCH_STATE = `${BUILD}/1c_batch.json`;
+const SUMMARIZE_SYSTEM = `You extract the core skill from a long workplace/curriculum standard. Output exactly one concise noun phrase (3-7 words) naming the core skill. No preamble, no quotes, no trailing period. Examples:
+"Use place value understanding to round multi-digit whole numbers to any place." → Rounding multi-digit whole numbers
+"Prepare or present reports concerning activities, expenses, budgets, government statutes or rulings, or other items affecting businesses or program services." → Preparing business reports
+"Draw triangles (freehand, with ruler and protractor, and using technology) with given conditions from three measures of angles or sides." → Drawing triangles with given conditions`;
+
+function loadSummarizeCache(): Map<string, string> {
+  try {
+    const text = Deno.readTextFileSync(SUMMARIZE_CACHE);
+    const m = new Map<string, string>();
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      const [k, v] = line.split("\t");
+      m.set(k, v ?? "");
+    }
+    return m;
+  } catch { return new Map(); }
+}
+
+function appendSummarize(map: Record<string, string>) {
+  const enc = new TextEncoder();
+  const fh = Deno.openSync(SUMMARIZE_CACHE, { create: true, append: true });
+  for (const [id, v] of Object.entries(map)) {
+    fh.writeSync(enc.encode(`${id}\t${v.replace(/[\t\n\r]/g, " ")}\n`));
+  }
+  fh.close();
+}
+
+async function submitSummarizeBatch(todo: { id: string; title: string }[]): Promise<{ batchId: string; idMap: Record<string, string> }> {
+  const idMap: Record<string, string> = {};
+  const requests = await Promise.all(todo.map(async (t, i) => {
+    const cid = await shortId(t.id, i);
+    idMap[cid] = t.id;
+    return {
+      custom_id: cid,
+      params: {
+        model: CLAUDE_MODEL,
+        max_tokens: 60,
+        system: [{ type: "text", text: SUMMARIZE_SYSTEM, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: t.title }],
+      },
+    };
+  }));
+  const res = await fetch("https://api.anthropic.com/v1/messages/batches", {
+    method: "POST",
+    headers: ANTHROPIC_HEADERS,
+    body: JSON.stringify({ requests }),
+  });
+  if (!res.ok) throw new Error(`summarize batch submit ${res.status}: ${await res.text()}`);
+  const j = await res.json();
+  console.log(`[stage 1c] batch submitted: ${j.id} (${requests.length} requests)`);
+  return { batchId: j.id, idMap };
+}
+
+async function stage1cSummarize() {
+  if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+  const MAX_LEN = Number(Deno.env.get("SUMMARIZE_MAX_LEN") ?? "120");
+
+  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
+  const targets: { id: string; title: string }[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    if (c[1].length > MAX_LEN) targets.push({ id: c[0], title: c[1] });
+  }
+
+  const cache = loadSummarizeCache();
+  const todo = targets.filter((t) => !cache.has(t.id));
+  console.log(`[stage 1c] long-title skills: ${targets.length}, cached: ${targets.length - todo.length}, to submit: ${todo.length}`);
+
+  let state: { id: string; idMap: Record<string, string> } | null = null;
+  try { state = JSON.parse(Deno.readTextFileSync(SUMMARIZE_BATCH_STATE)); } catch { /* none */ }
+
+  if (state) {
+    console.log(`[stage 1c] resuming batch ${state.id}`);
+    while (true) {
+      const p = await pollBatch(state.id);
+      console.log(`  status=${p.status} counts=${JSON.stringify(p.counts)}`);
+      if (p.status === "ended") {
+        if (!p.resultsUrl) throw new Error("no results_url");
+        const results = await downloadBatchResults(p.resultsUrl, state.idMap);
+        appendSummarize(results);
+        Deno.removeSync(SUMMARIZE_BATCH_STATE);
+        writeStats(12, { targets: targets.length, results: Object.keys(results).length });
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 30000));
+    }
+  }
+
+  if (todo.length === 0) { console.log("[stage 1c] all cached"); return; }
+
+  const CHUNK = 90000;
+  const chunk = todo.slice(0, CHUNK);
+  if (Deno.env.get("INFILL_LIMIT")) {
+    chunk.length = Math.min(chunk.length, Number(Deno.env.get("INFILL_LIMIT")));
+  }
+  const { batchId, idMap } = await submitSummarizeBatch(chunk);
+  Deno.writeTextFileSync(SUMMARIZE_BATCH_STATE, JSON.stringify({ id: batchId, idMap }));
+  console.log(`[stage 1c] batch submitted; re-run \`pipeline.ts summarize\` to poll`);
 }
 
 // ---------- stage 2: embed ----------
@@ -949,10 +1073,10 @@ async function stage3Tag() {
 
   const OCC_K = Number(Deno.env.get("OCC_TOP_K") ?? "2");
   const TOPIC_K = Number(Deno.env.get("TOPIC_TOP_K") ?? "3");
-  const OCC_THRESHOLD = Number(Deno.env.get("OCC_THRESHOLD") ?? "0.58");
-  const TOPIC_THRESHOLD = Number(Deno.env.get("TOPIC_THRESHOLD") ?? "0.58");
+  const OCC_THRESHOLD = Number(Deno.env.get("OCC_THRESHOLD") ?? "0.60");
+  const TOPIC_THRESHOLD = Number(Deno.env.get("TOPIC_THRESHOLD") ?? "0.62");
   // Drop refs that match more than this fraction of skills — they're non-discriminative
-  const IDF_MAX_FRAC = Number(Deno.env.get("IDF_MAX_FRAC") ?? "0.03");
+  const IDF_MAX_FRAC = Number(Deno.env.get("IDF_MAX_FRAC") ?? "0.015");
 
   // One oversampled pass per ref set → prune degenerate refs by IDF → take top-K from survivors.
   const oversamplePass = (refMat: Float32Array, refCount: number, keep: number, thresh: number) => {
@@ -1323,6 +1447,7 @@ function stage4Difficulty() {
 const stages: Record<string, () => void | Promise<void>> = {
   list: stage1List,
   infill: stage1bInfill,
+  summarize: stage1cSummarize,
   embed: stage2Embed,
   tag: stage3Tag,
   difficulty: stage4Difficulty,
