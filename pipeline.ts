@@ -2248,6 +2248,117 @@ function stage6PostProc() {
   }
   console.log(`[stage 6] heuristic orphan fix: added edges for ${orphanFixed} of ${orphanSkills.size} orphans (stopwords: ${stopWords.size})`);
 
+  // --- Seed-edge ingestion from stage 1e (expert-labeled ground truth) ---
+  let seedAdded = 0, seedSkippedDiff = 0, seedSkippedMissing = 0, seedSkippedDup = 0, seedHoldout = 0;
+  try {
+    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length);
+    const existingEdges = new Set(final.map(([s, p]) => `${s}\t${p}`));
+    // Apply dedupe alias if present so seed endpoints match the canonical id
+    let alias = new Map<string, string>();
+    try {
+      const aliasLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
+      for (let i = 1; i < aliasLines.length; i++) {
+        const [d, c] = aliasLines[i].split("\t");
+        alias.set(d, c);
+      }
+    } catch { alias = new Map(); }
+    for (let i = 1; i < seedLines.length; i++) {
+      const c = seedLines[i].split("\t");
+      let src = alias.get(c[0]) ?? c[0];
+      let dst = alias.get(c[1]) ?? c[1];
+      const holdout = c[4] === "1";
+      if (holdout) { seedHoldout++; continue; }
+      if (!skill.has(src) || !skill.has(dst)) { seedSkippedMissing++; continue; }
+      if (src === dst) { seedSkippedDup++; continue; }
+      // Enforce DAG: prereq must be strictly easier by raw difficulty
+      const rs = rawDiff.get(src) ?? 0, rd = rawDiff.get(dst) ?? 0;
+      if (rs >= rd) { seedSkippedDiff++; continue; }
+      const key = `${dst}\t${src}`; // edge schema: skill_id \t prereq_id (dst has src as prereq)
+      if (existingEdges.has(key)) { seedSkippedDup++; continue; }
+      final.push([dst, src]);
+      existingEdges.add(key);
+      seedAdded++;
+    }
+  } catch { /* no seed edges */ }
+  console.log(`[stage 6] seed edges: added=${seedAdded} skipped_missing=${seedSkippedMissing} skipped_diff=${seedSkippedDiff} dup=${seedSkippedDup} holdout=${seedHoldout}`);
+
+  // --- Cycle-breaker: small SCCs exist from near-duplicate skills the LLM couldn't order ---
+  // (e.g. oral-health ↔ dental-health). Iteratively find SCCs; drop weakest edge per SCC.
+  let cyclesBroken = 0;
+  for (let iter = 0; iter < 10; iter++) {
+    // Build adjacency: prereq p → skill s (final stores [s, p])
+    const adj = new Map<string, string[]>();
+    for (const [s, p] of final) {
+      const arr = adj.get(p) ?? []; arr.push(s); adj.set(p, arr);
+    }
+    // Tarjan SCC (iterative)
+    const index = new Map<string, number>();
+    const lowlink = new Map<string, number>();
+    const onStack = new Set<string>();
+    const stack: string[] = [];
+    let idx = 0;
+    const sccs: string[][] = [];
+    const nodes = new Set<string>();
+    for (const [s, p] of final) { nodes.add(s); nodes.add(p); }
+    function strongconnect(v0: string) {
+      // Iterative DFS
+      const callStack: { node: string; iter: Iterator<string>; minLink: number }[] = [];
+      index.set(v0, idx); lowlink.set(v0, idx); idx++;
+      stack.push(v0); onStack.add(v0);
+      callStack.push({ node: v0, iter: (adj.get(v0) || [])[Symbol.iterator](), minLink: lowlink.get(v0)! });
+      while (callStack.length) {
+        const top = callStack[callStack.length - 1];
+        const next = top.iter.next();
+        if (next.done) {
+          lowlink.set(top.node, top.minLink);
+          if (lowlink.get(top.node) === index.get(top.node)) {
+            const comp: string[] = [];
+            while (true) {
+              const w = stack.pop()!; onStack.delete(w); comp.push(w);
+              if (w === top.node) break;
+            }
+            if (comp.length > 1) sccs.push(comp);
+          }
+          callStack.pop();
+          if (callStack.length) {
+            const parent = callStack[callStack.length - 1];
+            parent.minLink = Math.min(parent.minLink, top.minLink);
+          }
+          continue;
+        }
+        const w = next.value;
+        if (!index.has(w)) {
+          index.set(w, idx); lowlink.set(w, idx); idx++;
+          stack.push(w); onStack.add(w);
+          callStack.push({ node: w, iter: (adj.get(w) || [])[Symbol.iterator](), minLink: lowlink.get(w)! });
+        } else if (onStack.has(w)) {
+          top.minLink = Math.min(top.minLink, index.get(w)!);
+        }
+      }
+    }
+    for (const n of nodes) if (!index.has(n)) strongconnect(n);
+    if (sccs.length === 0) break;
+    // Drop the edge with smallest raw-diff gap (least-confident ordering) in each SCC
+    const toDrop = new Set<string>();
+    for (const scc of sccs) {
+      const sccSet = new Set(scc);
+      let worst: [string, string] | null = null, worstGap = Infinity;
+      for (const [s, p] of final) {
+        if (sccSet.has(s) && sccSet.has(p)) {
+          const gap = (rawDiff.get(s) ?? 0) - (rawDiff.get(p) ?? 0);
+          if (gap < worstGap) { worstGap = gap; worst = [s, p]; }
+        }
+      }
+      if (worst) toDrop.add(`${worst[0]}\t${worst[1]}`);
+    }
+    const before = final.length;
+    for (let i = final.length - 1; i >= 0; i--) {
+      if (toDrop.has(`${final[i][0]}\t${final[i][1]}`)) final.splice(i, 1);
+    }
+    cyclesBroken += before - final.length;
+  }
+  console.log(`[stage 6] cycle-breaker dropped ${cyclesBroken} edges`);
+
   // Write final edges
   const enc = new TextEncoder();
   const fh = Deno.openSync(`${BUILD}/6_edges.tsv`, { create: true, write: true, truncate: true });
@@ -2264,6 +2375,11 @@ function stage6PostProc() {
     before_edges: beforeTotal,
     dropped_tech: droppedTech,
     dropped_hub: droppedHub,
+    seed_added: seedAdded,
+    seed_skipped_missing: seedSkippedMissing,
+    seed_skipped_diff: seedSkippedDiff,
+    seed_held_out: seedHoldout,
+    heuristic_orphan_fixed: orphanFixed,
     final_edges: final.length,
     skills_with_prereqs: skillsWithFinalPrereqs.size,
     skills_lost_all_prereqs: lostAll,
@@ -2300,15 +2416,81 @@ function stage7Finalize() {
     const arr = prereqs.get(s) ?? []; arr.push(p); prereqs.set(s, arr);
   }
 
+  // --- Topic enrichment via Wikidata P279 parent labels, + framework stoplist ---
+  const idToQid = new Map<string, string>();
+  try {
+    for (const line of Deno.readTextFileSync(`${BUILD}/1f_wiki.jsonl`).split("\n")) {
+      if (!line) continue;
+      try { const d: { id: string; qid?: string } = JSON.parse(line); if (d.qid) idToQid.set(d.id, d.qid); } catch { /* skip */ }
+    }
+  } catch { /* no wiki */ }
+  const qidParents = new Map<string, string[]>();
+  try {
+    for (const line of Deno.readTextFileSync(`${BUILD}/1g_wd_parents.jsonl`).split("\n")) {
+      if (!line) continue;
+      try { const d: { qid: string; parents: string[] } = JSON.parse(line); qidParents.set(d.qid, d.parents); } catch { /* skip */ }
+    }
+  } catch { /* skip */ }
+  const qidLabel = new Map<string, string>();
+  try {
+    for (const line of Deno.readTextFileSync(`${BUILD}/1i_qid_labels.tsv`).split("\n")) {
+      if (!line) continue;
+      const [qid, label] = line.split("\t");
+      if (qid && label) qidLabel.set(qid, label);
+    }
+  } catch { /* skip */ }
+
+  // Framework/standards stoplist — regex on topic slug
+  const frameworkRe = /-standards|-20\d\d|^sced-|^content-khan|^ccss$|^ngss$|next-generation-science|k-5-mathematics|adult-basic-education|cte-standards|curriculum|course-codes/;
+
+  // Cap topics per skill after enrichment
+  const TOPIC_CAP = 5;
+
+  // Compute parent-QID frequency to drop universal abstractions (entity, object, …)
+  const parentFreq = new Map<string, number>();
+  for (const s of skills) {
+    const qid = idToQid.get(s.id);
+    if (!qid) continue;
+    const parents = qidParents.get(qid) || [];
+    for (const p of parents) parentFreq.set(p, (parentFreq.get(p) ?? 0) + 1);
+  }
+  const wikiSkillCount = skills.filter((s) => idToQid.has(s.id)).length;
+  const abstractThreshold = Math.max(50, Math.floor(wikiSkillCount * 0.15));
+  const blockedQids = new Set<string>();
+  for (const [q, n] of parentFreq) if (n >= abstractThreshold) blockedQids.add(q);
+  console.log(`[stage 7] blocking ${blockedQids.size} abstract parent QIDs (≥${abstractThreshold} skills, of ${wikiSkillCount} wiki-resolved)`);
+
   // Emit
   const rows = ["id\ttitle\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tcerts"];
+  let wikiEnriched = 0, frameworkFiltered = 0;
   for (const s of skills) {
     const d = diff.get(s.id);
     if (d === undefined) throw new Error(`skill ${s.id} missing from difficulty.tsv`);
     const ps = (prereqs.get(s.id) ?? []).join(",");
-    rows.push([s.id, s.title, s.description, d.toString(), ps, s.occupations, s.topics, ""].join("\t"));
+    const existing = s.topics.split(",").filter(Boolean);
+    const filtered = existing.filter((t) => {
+      if (frameworkRe.test(t)) { frameworkFiltered++; return false; }
+      return true;
+    });
+    // Append P279 parent labels as topics
+    const qid = idToQid.get(s.id);
+    const parents = qid ? (qidParents.get(qid) || []) : [];
+    const parentTopics: string[] = [];
+    for (const pQid of parents) {
+      if (blockedQids.has(pQid)) continue;
+      const lbl = qidLabel.get(pQid);
+      if (!lbl) continue;
+      const slug = slugify(lbl);
+      if (!slug) continue;
+      parentTopics.push(slug);
+      if (parentTopics.length >= 4) break;
+    }
+    if (parentTopics.length) wikiEnriched++;
+    const topics = [...new Set([...filtered, ...parentTopics])].slice(0, TOPIC_CAP).join(",");
+    rows.push([s.id, s.title, s.description, d.toString(), ps, s.occupations, topics, ""].join("\t"));
   }
   Deno.writeTextFileSync("skills.tsv", rows.join("\n") + "\n");
+  console.log(`[stage 7] topic enrichment: wiki_enriched=${wikiEnriched}, framework_filtered=${frameworkFiltered}`);
 
   // gzip (keep original)
   new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] }).outputSync();
@@ -2411,14 +2593,6 @@ function stage3bDedupe() {
 
   const DEDUPE_COSINE = Number(Deno.env.get("DEDUPE_COSINE") ?? "0.96");
 
-  // Bucket by top-topic (pre-difficulty) — catches duplicates at any difficulty
-  const buckets = new Map<string, number[]>();
-  for (let i = 0; i < rows.length; i++) {
-    const topic = rows[i].topics.split(",")[0] || "_notopic";
-    const arr = buckets.get(topic) ?? []; arr.push(i); buckets.set(topic, arr);
-  }
-  console.log(`[stage 3b] ${buckets.size} buckets, largest=${Math.max(...[...buckets.values()].map((a) => a.length))}`);
-
   // Merge map: idx → canonical idx
   const parent = new Int32Array(rows.length);
   for (let i = 0; i < rows.length; i++) parent[i] = i;
@@ -2431,6 +2605,42 @@ function stage3bDedupe() {
     const drop = keep === ra ? rb : ra;
     parent[drop] = keep;
   }
+
+  // --- Pass 0: merge by shared Wikipedia article (authoritative) ---
+  let qidMerges = 0;
+  try {
+    const wikiText = Deno.readTextFileSync(`${BUILD}/1f_wiki.jsonl`);
+    const idToQid = new Map<string, string>();
+    for (const line of wikiText.split("\n")) {
+      if (!line) continue;
+      try {
+        const d: { id: string; qid?: string } = JSON.parse(line);
+        if (d.qid) idToQid.set(d.id, d.qid);
+      } catch { /* skip */ }
+    }
+    const qidBuckets = new Map<string, number[]>();
+    for (let i = 0; i < rows.length; i++) {
+      const qid = idToQid.get(rows[i].id);
+      if (!qid) continue;
+      const arr = qidBuckets.get(qid) ?? []; arr.push(i); qidBuckets.set(qid, arr);
+    }
+    for (const [, idxs] of qidBuckets) {
+      if (idxs.length < 2) continue;
+      for (let k = 1; k < idxs.length; k++) {
+        union(idxs[0], idxs[k]);
+        qidMerges++;
+      }
+    }
+    console.log(`[stage 3b] QID-based merges: ${qidMerges} (across ${qidBuckets.size} QID buckets)`);
+  } catch { console.log(`[stage 3b] no 1f_wiki.jsonl; skipping QID merge`); }
+
+  // Bucket by top-topic (pre-difficulty) — catches duplicates at any difficulty
+  const buckets = new Map<string, number[]>();
+  for (let i = 0; i < rows.length; i++) {
+    const topic = rows[i].topics.split(",")[0] || "_notopic";
+    const arr = buckets.get(topic) ?? []; arr.push(i); buckets.set(topic, arr);
+  }
+  console.log(`[stage 3b] ${buckets.size} buckets, largest=${Math.max(...[...buckets.values()].map((a) => a.length))}`);
 
   // Jaccard similarity of title word sets — prevents merging semantically-close but lexically-unrelated items
   const wordSet = (s: string): Set<string> => {
@@ -2469,7 +2679,7 @@ function stage3bDedupe() {
   }
   console.log(`[stage 3b] skipped ${skippedHuge} oversize buckets`);
   void rejectedByJaccard;
-  console.log(`[stage 3b] ${merged} union-merges`);
+  console.log(`[stage 3b] ${merged} cosine+jaccard merges (on top of ${qidMerges} QID merges)`);
 
   // Build id → canonical_id alias map (preserves stable survivors)
   const alias = new Map<string, string>();
@@ -2851,10 +3061,12 @@ async function stage1eSeedEdges() {
 
 // ---------- stage 1f: resolve each skill to a Wikipedia article + Wikidata QID ----------
 
-// Hits MediaWiki search API. Cached. Resumable. Overnight-tolerant.
-// Cache format: JSONL one line per skill. Order independent. Re-runs resume from missing ids only.
+// Strict exact-title resolution only. MediaWiki fuzzy search returns unrelated popular articles
+// (e.g. "manage musical staff" → "Matilda the Musical"), which poisons downstream. Skip those —
+// better to have no Wiki match than a wrong one. Only ~40% of skills expected to resolve; that's fine.
+// Cache: JSONL one line per skill. Resumable.
 async function stage1fWikiResolve() {
-  console.log("[stage 1f] resolving skills to Wikipedia articles…");
+  console.log("[stage 1f] resolving skills to Wikipedia articles (strict)…");
   const idx = loadSkillIndex();
   const allIds = [...idx.idSet];
   const titleByIdLocal = new Map<string, string>();
@@ -2875,11 +3087,9 @@ async function stage1fWikiResolve() {
       try { done.add(JSON.parse(line).id); } catch { /* skip malformed */ }
     }
   } catch { /* fresh */ }
-  console.log(`[stage 1f] cache: ${done.size} resolved; ${allIds.length - done.size} remaining`);
-
   const todo = allIds.filter((id) => !done.has(id));
+  console.log(`[stage 1f] cache: ${done.size} resolved; ${todo.length} remaining`);
   if (todo.length === 0) {
-    console.log("[stage 1f] nothing to do");
     writeStats(111, { total_skills: allIds.length, resolved: done.size, remaining: 0 });
     return;
   }
@@ -2887,47 +3097,93 @@ async function stage1fWikiResolve() {
   const fh = Deno.openSync(cachePath, { append: true, create: true, write: true });
   const enc = new TextEncoder();
 
-  // MediaWiki search: ~200 req/s safe with parallelism. Use srlimit=1 for top hit.
-  // wbsearchentities for Wikidata QID resolution alongside.
-  const CONCURRENCY = 8;
-  let progress = 0;
-  let matched = 0, missed = 0, errors = 0;
+  // Strategy: batch up to 50 titles per MW API call using action=query&titles=A|B|C
+  // MediaWiki redirects resolved automatically. Only keep articles that exist (no page missing).
+  // Also fetch pageprops.wikibase_item in same call.
+  const BATCH = 50;
+  const CONCURRENCY = 3; // polite
+  const UA = "skill-tree/1.0 (research; https://github.com/)";
   const t0 = performance.now();
+  let progress = 0, matched = 0, missed = 0, errors = 0;
 
-  async function fetchOne(id: string): Promise<{ id: string; query: string; wiki_title?: string; pageid?: number; qid?: string; score?: number; ts: number }> {
-    const title = titleByIdLocal.get(id) || id.replace(/-/g, " ");
-    const query = title.slice(0, 200);
-    const url = `https://en.wikipedia.org/w/api.php?action=query&format=json&list=search&srsearch=${encodeURIComponent(query)}&srlimit=1&srprop=size&origin=*`;
-    try {
-      const r = await fetch(url, { headers: { "user-agent": "skill-tree/1.0 (research)" } });
-      if (!r.ok) throw new Error(`http ${r.status}`);
-      const j = await r.json();
-      const hit = j?.query?.search?.[0];
-      if (!hit) return { id, query, ts: Date.now() };
-      // Resolve to QID
-      const qidUrl = `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageprops&pageids=${hit.pageid}&origin=*`;
-      const r2 = await fetch(qidUrl, { headers: { "user-agent": "skill-tree/1.0 (research)" } });
-      const j2 = r2.ok ? await r2.json() : null;
-      const qid = j2?.query?.pages?.[hit.pageid]?.pageprops?.wikibase_item;
-      return { id, query, wiki_title: hit.title, pageid: hit.pageid, qid, score: hit.size || 0, ts: Date.now() };
-    } catch (_e) {
-      errors++;
-      return { id, query, ts: Date.now() };
+  // Canonicalize a skill title into a plausible Wikipedia article title.
+  // Capitalize first letter, replace dashes/underscores, trim.
+  const toArticleTitle = (raw: string): string => {
+    const s = raw.replace(/[_-]/g, " ").replace(/\s+/g, " ").trim();
+    if (!s) return "";
+    return s[0].toUpperCase() + s.slice(1);
+  };
+
+  async function fetchBatch(batch: string[]): Promise<Map<string, { wiki_title: string; pageid: number; qid?: string }>> {
+    const titleToIds = new Map<string, string[]>();
+    for (const id of batch) {
+      const at = toArticleTitle(titleByIdLocal.get(id) || id.replace(/-/g, " "));
+      if (!at) continue;
+      const arr = titleToIds.get(at) ?? []; arr.push(id); titleToIds.set(at, arr);
     }
+    const titles = [...titleToIds.keys()];
+    if (titles.length === 0) return new Map();
+    const url = `https://en.wikipedia.org/w/api.php?action=query&format=json&redirects=1&prop=pageprops&ppprop=wikibase_item&titles=${encodeURIComponent(titles.join("|"))}&origin=*`;
+    const r = await fetch(url, { headers: { "user-agent": UA, "accept-encoding": "gzip" } });
+    if (!r.ok) {
+      if (r.status === 429) await new Promise((res) => setTimeout(res, 2000));
+      throw new Error(`http ${r.status}`);
+    }
+    const j = await r.json();
+    const out = new Map<string, { wiki_title: string; pageid: number; qid?: string }>();
+
+    // Build map from requested title (before redirect) → final pageid/title
+    const normalizedMap = new Map<string, string>(); // requested → normalized
+    for (const n of j.query?.normalized || []) normalizedMap.set(n.from, n.to);
+    const redirectMap = new Map<string, string>(); // normalized → redirect target
+    for (const r of j.query?.redirects || []) redirectMap.set(r.from, r.to);
+    const pages = j.query?.pages || {};
+    const titleToPage = new Map<string, { pageid: number; title: string; qid?: string; missing: boolean }>();
+    for (const pid in pages) {
+      const p = pages[pid];
+      titleToPage.set(p.title, {
+        pageid: p.pageid,
+        title: p.title,
+        qid: p.pageprops?.wikibase_item,
+        missing: "missing" in p,
+      });
+    }
+
+    for (const [requested, ids] of titleToIds) {
+      const norm = normalizedMap.get(requested) || requested;
+      const target = redirectMap.get(norm) || norm;
+      const page = titleToPage.get(target);
+      if (!page || page.missing || !page.pageid) continue;
+      for (const id of ids) {
+        out.set(id, { wiki_title: page.title, pageid: page.pageid, qid: page.qid });
+      }
+    }
+    return out;
   }
 
-  for (let start = 0; start < todo.length; start += CONCURRENCY) {
-    const batch = todo.slice(start, start + CONCURRENCY);
-    const results = await Promise.all(batch.map(fetchOne));
-    for (const r of results) {
-      fh.writeSync(enc.encode(JSON.stringify(r) + "\n"));
-      if (r.wiki_title) matched++; else missed++;
+  for (let start = 0; start < todo.length; start += BATCH * CONCURRENCY) {
+    const group = todo.slice(start, start + BATCH * CONCURRENCY);
+    const batches: string[][] = [];
+    for (let i = 0; i < group.length; i += BATCH) batches.push(group.slice(i, i + BATCH));
+    const results = await Promise.all(batches.map(async (b) => {
+      try { return { batch: b, hits: await fetchBatch(b) }; }
+      catch (_e) { errors++; return { batch: b, hits: new Map<string, { wiki_title: string; pageid: number; qid?: string }>() }; }
+    }));
+    for (const { batch, hits } of results) {
+      for (const id of batch) {
+        const h = hits.get(id);
+        const rec = h
+          ? { id, wiki_title: h.wiki_title, pageid: h.pageid, qid: h.qid, ts: Date.now() }
+          : { id, ts: Date.now() };
+        fh.writeSync(enc.encode(JSON.stringify(rec) + "\n"));
+        if (h) matched++; else missed++;
+      }
     }
-    progress += batch.length;
-    if (progress % 200 === 0 || progress === todo.length) {
+    progress += group.length;
+    if (progress % 500 < BATCH * CONCURRENCY || progress === todo.length) {
       const rate = progress / ((performance.now() - t0) / 1000);
       const eta = (todo.length - progress) / rate;
-      console.log(`[stage 1f] ${progress}/${todo.length} (${rate.toFixed(1)}/s, eta ${(eta / 60).toFixed(1)} min, matched=${matched} missed=${missed} errors=${errors})`);
+      console.log(`[stage 1f] ${progress}/${todo.length} (${rate.toFixed(0)}/s, eta ${(eta / 60).toFixed(1)} min, matched=${matched} missed=${missed} errors=${errors})`);
     }
   }
   fh.close();
@@ -2939,6 +3195,7 @@ async function stage1fWikiResolve() {
     matched_this_run: matched,
     missed_this_run: missed,
     errors_this_run: errors,
+    resolve_rate: todo.length ? +(matched / todo.length).toFixed(3) : 0,
     seconds: (performance.now() - t0) / 1000,
   });
 }
@@ -3114,6 +3371,392 @@ async function stage1hWikiDescs() {
   });
 }
 
+// ---------- stage 1i: resolve Wikidata QID → English label ----------
+
+async function stage1iQidLabels() {
+  console.log("[stage 1i] fetching Wikidata labels for parent QIDs…");
+  const qids = new Set<string>();
+  try {
+    const text = Deno.readTextFileSync(`${BUILD}/1g_wd_parents.jsonl`);
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      try {
+        const d: { qid: string; parents: string[] } = JSON.parse(line);
+        qids.add(d.qid);
+        for (const p of d.parents) qids.add(p);
+      } catch { /* skip */ }
+    }
+  } catch { throw new Error("stage 1g must run first"); }
+  console.log(`[stage 1i] unique QIDs needing labels: ${qids.size}`);
+
+  const cachePath = `${BUILD}/1i_qid_labels.tsv`;
+  const done = new Set<string>();
+  try {
+    const text = Deno.readTextFileSync(cachePath);
+    for (const line of text.split("\n")) {
+      const [qid] = line.split("\t");
+      if (qid) done.add(qid);
+    }
+  } catch { /* fresh */ }
+  const todo = [...qids].filter((q) => !done.has(q));
+  console.log(`[stage 1i] remaining: ${todo.length}`);
+  if (todo.length === 0) {
+    writeStats(114, { total_qids: qids.size, resolved: done.size, remaining: 0 });
+    return;
+  }
+
+  const fh = Deno.openSync(cachePath, { append: true, create: true, write: true });
+  const enc = new TextEncoder();
+  const BATCH = 50;
+  const CONCURRENCY = 3;
+  const UA = "skill-tree/1.0 (research; https://github.com/)";
+  const t0 = performance.now();
+  let progress = 0, got = 0;
+
+  async function fetchBatch(batch: string[]): Promise<Map<string, string>> {
+    const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${batch.join("|")}&props=labels&languages=en&origin=*`;
+    const r = await fetch(url, { headers: { "user-agent": UA, "accept-encoding": "gzip" } });
+    if (!r.ok) throw new Error(`http ${r.status}`);
+    const j = await r.json();
+    const out = new Map<string, string>();
+    for (const qid in j.entities || {}) {
+      const label = j.entities[qid]?.labels?.en?.value;
+      if (label) out.set(qid, label);
+    }
+    return out;
+  }
+
+  for (let start = 0; start < todo.length; start += BATCH * CONCURRENCY) {
+    const group = todo.slice(start, start + BATCH * CONCURRENCY);
+    const batches: string[][] = [];
+    for (let i = 0; i < group.length; i += BATCH) batches.push(group.slice(i, i + BATCH));
+    const results = await Promise.all(batches.map(async (b) => {
+      try { return { b, hits: await fetchBatch(b) }; }
+      catch { return { b, hits: new Map<string, string>() }; }
+    }));
+    for (const { b, hits } of results) {
+      for (const qid of b) {
+        const label = hits.get(qid) || "";
+        fh.writeSync(enc.encode(`${qid}\t${label}\n`));
+        if (label) got++;
+      }
+    }
+    progress += group.length;
+    if (progress % 600 < BATCH * CONCURRENCY || progress === todo.length) {
+      const rate = progress / ((performance.now() - t0) / 1000);
+      const eta = (todo.length - progress) / rate;
+      console.log(`[stage 1i] ${progress}/${todo.length} (${rate.toFixed(0)}/s, eta ${(eta / 60).toFixed(1)} min, got=${got})`);
+    }
+  }
+  fh.close();
+
+  writeStats(114, {
+    total_qids: qids.size,
+    previously_resolved: done.size,
+    processed_this_run: todo.length,
+    got_label: got,
+    seconds: (performance.now() - t0) / 1000,
+  });
+}
+
+// ---------- stage 8: eval suite — quality measures against ground truth + graph shape ----------
+
+function stage8Eval() {
+  console.log("[stage 8] computing quality measures…");
+
+  // Load final skills.tsv
+  const sLines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  type FRow = { id: string; title: string; difficulty: number; prereqs: string[]; topics: string[]; occupations: string[] };
+  const rows: FRow[] = sLines.slice(1).map((l) => {
+    const c = l.split("\t");
+    return {
+      id: c[0], title: c[1], difficulty: Number(c[3]),
+      prereqs: c[4] ? c[4].split(",").filter(Boolean) : [],
+      topics: c[6] ? c[6].split(",").filter(Boolean) : [],
+      occupations: c[5] ? c[5].split(",").filter(Boolean) : [],
+    };
+  });
+  const byId = new Map(rows.map((r) => [r.id, r] as const));
+  console.log(`[stage 8] loaded ${rows.length} skills`);
+
+  // Edge set (normalized: prereq → skill direction; "src has prereq dst"? no: skill prereqs[] contains prereq ids)
+  // An edge prereq → skill means prereq comes BEFORE skill.
+  const edgePair = new Set<string>();
+  const outDeg = new Map<string, number>();
+  const inDeg = new Map<string, number>();
+  for (const r of rows) {
+    for (const p of r.prereqs) {
+      edgePair.add(`${p}→${r.id}`);
+      outDeg.set(p, (outDeg.get(p) ?? 0) + 1);
+      inDeg.set(r.id, (inDeg.get(r.id) ?? 0) + 1);
+    }
+  }
+  const edges = [...edgePair];
+  console.log(`[stage 8] ${edges.length} edges`);
+
+  // Apply alias if present so seed-edge endpoint ids resolve
+  const alias = new Map<string, string>();
+  try {
+    const aliasLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
+    for (let i = 1; i < aliasLines.length; i++) {
+      const [d, c] = aliasLines[i].split("\t");
+      alias.set(d, c);
+    }
+  } catch { /* none */ }
+  const canon = (id: string) => alias.get(id) ?? id;
+
+  const results: Record<string, unknown> = {};
+
+  // ---- 1-3. Ground-truth precision/recall from held-out seed edges ----
+  {
+    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
+    const bySrc: Record<string, { total: number; matched: number }> = {};
+    for (const line of seedLines) {
+      const c = line.split("\t");
+      const src = canon(c[0]), dst = canon(c[1]), src_tag = c[2], holdout = c[4] === "1";
+      if (!holdout) continue;
+      const group = src_tag.startsWith("alcpl_") ? "alcpl" : src_tag.startsWith("moocx_") ? "moocx" : src_tag;
+      bySrc[group] ??= { total: 0, matched: 0 };
+      bySrc[group].total++;
+      if (edgePair.has(`${src}→${dst}`)) bySrc[group].matched++;
+    }
+    // Precision not computable without negative samples; just report recall on held-out.
+    results.holdout_recall = Object.fromEntries(
+      Object.entries(bySrc).map(([k, v]) => [k, { recall: v.total ? +(v.matched / v.total).toFixed(3) : 0, matched: v.matched, total: v.total }]),
+    );
+  }
+
+  // ---- 4. Khan ordering Kendall-τ ----
+  {
+    const khan = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split("\n").filter((l) => l.length);
+    const h = khan[0].split("\t");
+    const iName = h.indexOf("Data Name"), iHPos = h.indexOf("H-Position"), iDisp = h.indexOf("Display Name");
+    type Kr = { name: string; hpos: number; display: string };
+    const khanRows: Kr[] = [];
+    for (let i = 1; i < khan.length; i++) {
+      const c = khan[i].split("\t");
+      const hp = Number(c[iHPos]);
+      if (!c[iName] || !Number.isFinite(hp)) continue;
+      khanRows.push({ name: c[iName].trim(), hpos: hp, display: (c[iDisp] || "").trim() });
+    }
+    // Try to resolve to our ids: exact slug, then display slug
+    const resolved: { diff: number; hpos: number }[] = [];
+    for (const k of khanRows) {
+      const cand1 = k.name;
+      const cand2 = slugify(k.display);
+      const id = byId.has(cand1) ? cand1 : byId.has(cand2) ? cand2 : null;
+      if (!id) continue;
+      const r = byId.get(id)!;
+      resolved.push({ diff: r.difficulty, hpos: k.hpos });
+    }
+    results.khan_tau = {
+      resolved_count: resolved.length,
+      kendall_tau: resolved.length > 5 ? kendallTau(resolved.map((r) => r.hpos), resolved.map((r) => r.diff)) : null,
+    };
+  }
+
+  // ---- 7. Depth distribution via topological sort (longest path from roots) ----
+  {
+    const depth = new Map<string, number>();
+    // Topo sort: for each skill, depth = max(prereq.depth) + 1
+    const order: string[] = [...byId.keys()].sort((a, b) => (byId.get(a)!.difficulty) - (byId.get(b)!.difficulty));
+    let maxD = 0;
+    for (const id of order) {
+      const r = byId.get(id)!;
+      let d = 0;
+      for (const p of r.prereqs) {
+        const pd = depth.get(p) ?? 0;
+        if (pd + 1 > d) d = pd + 1;
+      }
+      depth.set(id, d);
+      if (d > maxD) maxD = d;
+    }
+    const depths = [...depth.values()];
+    results.depth_distribution = {
+      p50: pct(depths, 0.50),
+      p95: pct(depths, 0.95),
+      max: Math.max(...depths, 0),
+    };
+  }
+
+  // ---- 8. Branching factor histogram ----
+  {
+    const inVals = [...inDeg.values()], outVals = [...outDeg.values()];
+    results.branching = {
+      in_degree: { p50: pct(inVals, 0.50), p95: pct(inVals, 0.95), max: Math.max(...inVals, 0) },
+      out_degree: { p50: pct(outVals, 0.50), p95: pct(outVals, 0.95), max: Math.max(...outVals, 0) },
+      top_out_degree: [...outDeg.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+        .map(([id, n]) => [id, n, byId.get(id)?.title?.slice(0, 60)]),
+    };
+  }
+
+  // ---- 9. Reachability from roots ----
+  {
+    const roots = rows.filter((r) => r.prereqs.length === 0).map((r) => r.id);
+    const children = new Map<string, string[]>();
+    for (const r of rows) for (const p of r.prereqs) {
+      const arr = children.get(p) ?? []; arr.push(r.id); children.set(p, arr);
+    }
+    const visited = new Set<string>(roots);
+    const queue = [...roots];
+    while (queue.length) {
+      const u = queue.shift()!;
+      for (const v of children.get(u) ?? []) if (!visited.has(v)) { visited.add(v); queue.push(v); }
+    }
+    results.reachability = { roots: roots.length, reachable: visited.size, total: rows.length, pct: +(visited.size / rows.length).toFixed(3) };
+  }
+
+  // ---- 10. Cycle assertion ----
+  {
+    // Kahn's-like: repeatedly remove zero-in-degree nodes; any remaining → cycle.
+    const inD = new Map<string, number>();
+    for (const r of rows) inD.set(r.id, r.prereqs.length);
+    const queue: string[] = [];
+    for (const [id, n] of inD) if (n === 0) queue.push(id);
+    const children = new Map<string, string[]>();
+    for (const r of rows) for (const p of r.prereqs) {
+      const arr = children.get(p) ?? []; arr.push(r.id); children.set(p, arr);
+    }
+    let removed = 0;
+    while (queue.length) {
+      const u = queue.shift()!; removed++;
+      for (const v of children.get(u) ?? []) {
+        inD.set(v, (inD.get(v) ?? 0) - 1);
+        if (inD.get(v) === 0) queue.push(v);
+      }
+    }
+    results.cycles = { dag: removed === rows.length, leftover_after_kahn: rows.length - removed };
+  }
+
+  // ---- 11. Topic frequency — flag framework-origin labels ----
+  {
+    const topicFreq = new Map<string, number>();
+    for (const r of rows) for (const t of r.topics) topicFreq.set(t, (topicFreq.get(t) ?? 0) + 1);
+    const top = [...topicFreq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
+    const frameworkish = top.filter(([t]) => /-standards|-20\d\d|sced|content-khan|ccss|ngss|next-generation/.test(t));
+    results.topics = {
+      unique: topicFreq.size,
+      top_20: top,
+      framework_in_top_20: frameworkish.length,
+      framework_ids: frameworkish.map(([t]) => t),
+    };
+  }
+
+  // ---- 13. Tag entropy per skill (average) ----
+  {
+    const occFreq = new Map<string, number>();
+    const topicFreq2 = new Map<string, number>();
+    for (const r of rows) {
+      for (const o of r.occupations) occFreq.set(o, (occFreq.get(o) ?? 0) + 1);
+      for (const t of r.topics) topicFreq2.set(t, (topicFreq2.get(t) ?? 0) + 1);
+    }
+    // IDF-like: rarer tag = higher information
+    const total = rows.length;
+    const idf = (f: number) => Math.log(total / Math.max(f, 1));
+    let occH = 0, topH = 0, nOcc = 0, nTop = 0;
+    for (const r of rows) {
+      for (const o of r.occupations) { occH += idf(occFreq.get(o) ?? 1); nOcc++; }
+      for (const t of r.topics) { topH += idf(topicFreq2.get(t) ?? 1); nTop++; }
+    }
+    results.tag_information = {
+      occ_avg_idf: nOcc ? +(occH / nOcc).toFixed(3) : 0,
+      topic_avg_idf: nTop ? +(topH / nTop).toFixed(3) : 0,
+    };
+  }
+
+  // ---- 14. Wikipedia coverage ----
+  {
+    let matched = 0;
+    try {
+      const text = Deno.readTextFileSync(`${BUILD}/1f_wiki.jsonl`);
+      for (const line of text.split("\n")) {
+        if (!line) continue;
+        try { if (JSON.parse(line).wiki_title) matched++; } catch { /* skip */ }
+      }
+    } catch { /* no 1f */ }
+    results.wiki_coverage = { total_skills: rows.length, wiki_matched: matched, pct: rows.length ? +(matched / rows.length).toFixed(3) : 0 };
+  }
+
+  // ---- 15. Orphan breakdown ----
+  {
+    const orphans = rows.filter((r) => r.prereqs.length === 0);
+    const wiki = new Set<string>();
+    try {
+      const text = Deno.readTextFileSync(`${BUILD}/1f_wiki.jsonl`);
+      for (const line of text.split("\n")) {
+        if (!line) continue;
+        try { const d = JSON.parse(line); if (d.wiki_title) wiki.add(d.id); } catch { /* skip */ }
+      }
+    } catch { /* skip */ }
+    let withWiki = 0, withoutWiki = 0;
+    for (const o of orphans) (wiki.has(o.id) ? withWiki++ : withoutWiki++);
+    results.orphan_breakdown = {
+      total_orphans: orphans.length,
+      with_wiki: withWiki,
+      without_wiki: withoutWiki,
+      orphan_rate: +(orphans.length / rows.length).toFixed(4),
+    };
+  }
+
+  // ---- 16. Source attribution — per-source edge counts ----
+  {
+    // Stage 6 writes 6_edges.tsv without source; infer by cross-referencing seed edges.
+    const seedEdges = new Set<string>();
+    try {
+      const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
+      for (const line of seedLines) {
+        const c = line.split("\t");
+        if (c[4] === "1") continue;
+        seedEdges.add(`${canon(c[0])}→${canon(c[1])}`);
+      }
+    } catch { /* skip */ }
+    let seed = 0, nonSeed = 0;
+    for (const e of edges) (seedEdges.has(e) ? seed++ : nonSeed++);
+    results.source_attribution = { seed_edges_in_final: seed, non_seed: nonSeed, total: edges.length };
+  }
+
+  // ---- 18. Cross-domain leakage (topic Jaccard on edges) ----
+  {
+    const samples = Math.min(edges.length, 5000);
+    // Deterministic sample
+    const stepSize = Math.max(1, Math.floor(edges.length / samples));
+    const jacs: number[] = [];
+    for (let i = 0; i < edges.length; i += stepSize) {
+      const [src, dst] = edges[i].split("→");
+      const s = byId.get(src), d = byId.get(dst);
+      if (!s || !d) continue;
+      const a = new Set(s.topics), b = new Set(d.topics);
+      if (a.size === 0 || b.size === 0) continue;
+      let inter = 0;
+      for (const x of a) if (b.has(x)) inter++;
+      jacs.push(inter / (a.size + b.size - inter));
+    }
+    results.domain_leakage = {
+      sampled: jacs.length,
+      p10: pct(jacs, 0.10), p50: pct(jacs, 0.50), p90: pct(jacs, 0.90),
+      mean: jacs.length ? +(jacs.reduce((a, b) => a + b, 0) / jacs.length).toFixed(3) : 0,
+    };
+  }
+
+  writeStats(8, results);
+}
+
+function kendallTau(x: number[], y: number[]): number {
+  const n = x.length;
+  if (n < 2) return 0;
+  let concordant = 0, discordant = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const a = Math.sign(x[i] - x[j]);
+      const b = Math.sign(y[i] - y[j]);
+      if (a === 0 || b === 0) continue;
+      if (a === b) concordant++; else discordant++;
+    }
+  }
+  const total = concordant + discordant;
+  return total ? +((concordant - discordant) / total).toFixed(3) : 0;
+}
+
 // ---------- dispatch ----------
 
 const stages: Record<string, () => void | Promise<void>> = {
@@ -3125,6 +3768,7 @@ const stages: Record<string, () => void | Promise<void>> = {
   "wiki-resolve": stage1fWikiResolve,
   "wd-parents": stage1gWdParents,
   "wiki-descs": stage1hWikiDescs,
+  "qid-labels": stage1iQidLabels,
   embed: stage2Embed,
   tag: stage3Tag,
   dedupe: stage3bDedupe,
@@ -3132,6 +3776,7 @@ const stages: Record<string, () => void | Promise<void>> = {
   prereq: stage5Prereq,
   postproc: stage6PostProc,
   finalize: stage7Finalize,
+  eval: stage8Eval,
 };
 
 const arg = Deno.args[0];
