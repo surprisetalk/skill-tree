@@ -1657,20 +1657,34 @@ async function stage5Prereq() {
     console.log(`[stage 5] loaded ${candidates.size} cached candidate lists`);
   }
 
-  const cache = loadPrereqCache();
-  const todo: { id: string; title: string; description: string; candTitles: string[] }[] = [];
-  for (const s of skills) {
-    if (cache.has(s.id)) continue;
-    const cands = candidates.get(s.id);
-    if (!cands || cands.length === 0) continue; // no candidates = skip (will be orphan)
-    todo.push({
-      id: s.id,
-      title: s.title,
-      description: s.description,
-      candTitles: cands.map((j) => skills[j].title),
-    });
+  // also track candidate ids already in any in-flight batch (prevents double-submission after download)
+  const inFlightIds = new Set<string>();
+  {
+    try {
+      const s: { batches: { id: string; idMap: Record<string, string> }[] } = JSON.parse(Deno.readTextFileSync(PREREQ_BATCH_STATE));
+      for (const b of s.batches) for (const v of Object.values(b.idMap)) inFlightIds.add(v);
+    } catch { /* none */ }
   }
-  console.log(`[stage 5] targets: ${skills.length}, cached: ${cache.size}, to submit: ${todo.length}`);
+
+  const buildTodo = () => {
+    const cache = loadPrereqCache();
+    const out: { id: string; title: string; description: string; candTitles: string[] }[] = [];
+    for (const s of skills) {
+      if (cache.has(s.id)) continue;
+      if (inFlightIds.has(s.id)) continue;
+      const cands = candidates.get(s.id);
+      if (!cands || cands.length === 0) continue;
+      out.push({
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        candTitles: cands.map((j) => skills[j].title),
+      });
+    }
+    return out;
+  };
+  let todo = buildTodo();
+  console.log(`[stage 5] targets: ${skills.length}, in-flight: ${inFlightIds.size}, to submit: ${todo.length}`);
 
   // Step 2: resume existing batch(es) if any
   let state: { batches: { id: string; idMap: Record<string, string> }[] } | null = null;
@@ -1706,9 +1720,12 @@ async function stage5Prereq() {
         remaining.push(b);
       }
     }
+    // Any batch that ended has had its responses downloaded — rebuild todo so we don't resubmit them.
+    todo = buildTodo();
     if (remaining.length === 0) {
-      Deno.removeSync(PREREQ_BATCH_STATE);
+      try { Deno.removeSync(PREREQ_BATCH_STATE); } catch { /* ignore */ }
       console.log(`[stage 5] all batches complete`);
+      state = { batches: [] };
     } else {
       Deno.writeTextFileSync(PREREQ_BATCH_STATE, JSON.stringify({ batches: remaining }));
       console.log(`[stage 5] ${remaining.length} batch(es) still processing — will top up to parallel cap`);
@@ -1769,6 +1786,143 @@ async function stage5Prereq() {
   console.log(`[stage 5] ${batches.length} batch(es), ${off}/${todo.length} queued. Re-run to poll + submit next.`);
 }
 
+// ---------- stage 6: post-process prereqs ----------
+
+function stage6PostProc() {
+  const tagLines = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n").filter((l) => l.length);
+  const hdr = tagLines[0].split("\t");
+  const iTitle = hdr.indexOf("title");
+  const iTags = hdr.indexOf("tags");
+  const iTopics = hdr.indexOf("topics");
+  const order: string[] = tagLines.slice(1).map((l) => l.split("\t")[0]);
+  const skill = new Map<string, { title: string; tags: string; topics: Set<string> }>();
+  for (let i = 1; i < tagLines.length; i++) {
+    const c = tagLines[i].split("\t");
+    skill.set(c[0], {
+      title: c[iTitle],
+      tags: c[iTags],
+      topics: new Set(c[iTopics].split(",").filter((t) => t)),
+    });
+  }
+  const diffLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length);
+  const rawDiff = new Map<string, number>();
+  for (let i = 1; i < diffLines.length; i++) {
+    const c = diffLines[i].split("\t");
+    rawDiff.set(c[0], Number(c[2]));
+  }
+  const candLines = Deno.readTextFileSync(`${BUILD}/5_candidates.tsv`).split("\n").filter((l) => l.length);
+  const candidates = new Map<string, number[]>();
+  for (const line of candLines) {
+    const tab = line.indexOf("\t");
+    const id = line.slice(0, tab);
+    const rest = line.slice(tab + 1);
+    candidates.set(id, rest ? rest.split(",").map(Number) : []);
+  }
+
+  // Dedupe prereqs cache (file may have retry duplicates — keep last value per id)
+  const prereqLines = Deno.readTextFileSync(`${BUILD}/5_prereqs.tsv`).split("\n").filter((l) => l.length);
+  const pick = new Map<string, string>();
+  for (const line of prereqLines) {
+    const tab = line.indexOf("\t");
+    pick.set(line.slice(0, tab), line.slice(tab + 1));
+  }
+
+  // Build raw edge list
+  let raw: [string, string][] = [];
+  for (const [id, resp] of pick) {
+    const cands = candidates.get(id) ?? [];
+    const picks = parsePrereqResponse(resp, cands.length);
+    for (const p of picks) {
+      const prereqId = order[cands[p]];
+      if (prereqId) raw.push([id, prereqId]);
+    }
+  }
+  const beforeTotal = raw.length;
+  console.log(`[stage 6] raw edges: ${beforeTotal}`);
+
+  // --- Filter 1: drop onet:tech prereqs that are cross-domain noise ---
+  // Keep if: skill itself is onet:tech (tech→tech), OR prereq slug appears in skill's topics.
+  // Preserve at least one prereq per skill — fall back to best remaining if filter would empty all.
+  const bySkill = new Map<string, string[]>();
+  for (const [s, p] of raw) { const arr = bySkill.get(s) ?? []; arr.push(p); bySkill.set(s, arr); }
+  let droppedTech = 0;
+  const filtered: [string, string][] = [];
+  for (const [s, prereqs] of bySkill) {
+    const ssk = skill.get(s);
+    const kept = prereqs.filter((p) => {
+      const psk = skill.get(p);
+      if (!psk) return true;
+      if (!psk.tags.includes("onet:tech")) return true;
+      if (ssk?.tags.includes("onet:tech")) return true; // tech→tech OK
+      if (ssk?.topics.has(p)) return true; // product is one of skill's topics
+      return false;
+    });
+    // If filter emptied skill's prereqs, keep the first original prereq as fallback
+    const final = kept.length ? kept : (prereqs.length ? [prereqs[0]] : []);
+    droppedTech += prereqs.length - final.length;
+    for (const p of final) filtered.push([s, p]);
+  }
+  raw = filtered;
+  console.log(`[stage 6] dropped ${droppedTech} cross-domain onet:tech edges`);
+
+  // --- Filter 2: cap fan-out per prereq ---
+  const HUB_CAP = Number(Deno.env.get("HUB_CAP") ?? "50");
+  const downstreamOfPrereq = new Map<string, [string, string][]>();
+  for (const e of raw) {
+    const arr = downstreamOfPrereq.get(e[1]) ?? []; arr.push(e); downstreamOfPrereq.set(e[1], arr);
+  }
+  let droppedHub = 0;
+  const keep = new Set<string>();
+  for (const [prereqId, edges] of downstreamOfPrereq) {
+    if (edges.length <= HUB_CAP) {
+      for (const e of edges) keep.add(e[0] + "\t" + e[1]);
+      continue;
+    }
+    const pRaw = rawDiff.get(prereqId) ?? 0;
+    // Prefer edges where skill's raw difficulty is closest to prereq's (immediate prereqs)
+    edges.sort((a, b) => Math.abs((rawDiff.get(a[0]) ?? 0) - pRaw) - Math.abs((rawDiff.get(b[0]) ?? 0) - pRaw));
+    for (let i = 0; i < HUB_CAP; i++) keep.add(edges[i][0] + "\t" + edges[i][1]);
+    droppedHub += edges.length - HUB_CAP;
+  }
+  console.log(`[stage 6] dropped ${droppedHub} hub-excess edges (cap ${HUB_CAP})`);
+
+  const final: [string, string][] = raw.filter((e) => keep.has(e[0] + "\t" + e[1]));
+
+  // --- Final: ensure every non-orphan skill keeps at least one prereq ---
+  // (already preserved since we filter by edge, not by skill — but log skills that got all their edges removed)
+  const skillsWithFinalPrereqs = new Set(final.map((e) => e[0]));
+  const skillsWithRawPrereqs = new Set<string>();
+  for (const [id, resp] of pick) {
+    const cands = candidates.get(id) ?? [];
+    if (parsePrereqResponse(resp, cands.length).length > 0) skillsWithRawPrereqs.add(id);
+  }
+  let lostAll = 0;
+  for (const id of skillsWithRawPrereqs) if (!skillsWithFinalPrereqs.has(id)) lostAll++;
+
+  // Write final edges
+  const enc = new TextEncoder();
+  const fh = Deno.openSync(`${BUILD}/6_edges.tsv`, { create: true, write: true, truncate: true });
+  fh.writeSync(enc.encode("skill_id\tprereq_id\n"));
+  for (const [s, p] of final) fh.writeSync(enc.encode(`${s}\t${p}\n`));
+  fh.close();
+
+  // Rebuild hub report
+  const finalHubs = new Map<string, number>();
+  for (const [, p] of final) finalHubs.set(p, (finalHubs.get(p) ?? 0) + 1);
+  const topHubs = [...finalHubs.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+
+  writeStats(6, {
+    before_edges: beforeTotal,
+    dropped_tech: droppedTech,
+    dropped_hub: droppedHub,
+    final_edges: final.length,
+    skills_with_prereqs: skillsWithFinalPrereqs.size,
+    skills_lost_all_prereqs: lostAll,
+    orphan_rate: 1 - skillsWithFinalPrereqs.size / skill.size,
+    top_hubs_after: topHubs.map(([id, n]) => [id, n, skill.get(id)?.title.slice(0, 60)]),
+  });
+}
+
 // ---------- dispatch ----------
 
 const stages: Record<string, () => void | Promise<void>> = {
@@ -1779,6 +1933,7 @@ const stages: Record<string, () => void | Promise<void>> = {
   tag: stage3Tag,
   difficulty: stage4Difficulty,
   prereq: stage5Prereq,
+  postproc: stage6PostProc,
 };
 
 const arg = Deno.args[0];
