@@ -1439,11 +1439,16 @@ function stage4Difficulty() {
   const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
   const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
   const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
-  if (ids.length !== skills.length) throw new Error(`ids (${ids.length}) vs skills (${skills.length}) mismatch`);
+  const idToEmbIdx = new Map<string, number>();
+  for (let i = 0; i < ids.length; i++) idToEmbIdx.set(ids[i], i);
 
   const DIM = EMBED_DIM;
   const vecs = new Float32Array(skills.length * DIM);
-  for (let i = 0; i < skills.length; i++) vecs.set(normalize(emb.subarray(i * DIM, (i + 1) * DIM)), i * DIM);
+  for (let i = 0; i < skills.length; i++) {
+    const ei = idToEmbIdx.get(skills[i].id);
+    if (ei === undefined) throw new Error(`no embedding for ${skills[i].id}`);
+    vecs.set(normalize(emb.subarray(ei * DIM, (ei + 1) * DIM)), i * DIM);
+  }
 
   // Anchor difficulty per skill: OpenSALT grade > ONET default > unset (NaN)
   const anchor = new Float32Array(skills.length);
@@ -1650,14 +1655,15 @@ function parseSkillsWithDifficulty(): { skills: { id: string; title: string; des
   });
 
   const diffLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length).slice(1);
-  if (diffLines.length !== skills.length) throw new Error(`diff (${diffLines.length}) vs skills (${skills.length}) mismatch`);
+  const diffMap = new Map<string, { band: number; raw: number }>();
+  for (const l of diffLines) { const c = l.split("\t"); diffMap.set(c[0], { band: Number(c[1]), raw: Number(c[2]) }); }
   const diff = new Int32Array(skills.length);
   const raw = new Float32Array(skills.length);
-  for (let i = 0; i < diffLines.length; i++) {
-    const c = diffLines[i].split("\t");
-    if (c[0] !== skills[i].id) throw new Error(`id order mismatch at ${i}: ${c[0]} vs ${skills[i].id}`);
-    diff[i] = Number(c[1]);
-    raw[i] = Number(c[2]);
+  for (let i = 0; i < skills.length; i++) {
+    const e = diffMap.get(skills[i].id);
+    if (!e) throw new Error(`no difficulty for ${skills[i].id}`);
+    diff[i] = e.band;
+    raw[i] = e.raw;
   }
   return { skills, diff, raw };
 }
@@ -1683,10 +1689,15 @@ function computePrereqCandidates(): Map<string, number[]> {
   const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
   const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
   const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
-  if (ids.length !== skills.length) throw new Error("embed/skill length mismatch");
+  const idToEmbIdx = new Map<string, number>();
+  for (let i = 0; i < ids.length; i++) idToEmbIdx.set(ids[i], i);
   const DIM = EMBED_DIM;
   const vecs = new Float32Array(skills.length * DIM);
-  for (let i = 0; i < skills.length; i++) vecs.set(normalize(emb.subarray(i * DIM, (i + 1) * DIM)), i * DIM);
+  for (let i = 0; i < skills.length; i++) {
+    const ei = idToEmbIdx.get(skills[i].id);
+    if (ei === undefined) throw new Error(`no embedding for ${skills[i].id}`);
+    vecs.set(normalize(emb.subarray(ei * DIM, (ei + 1) * DIM)), i * DIM);
+  }
 
   // topic → indexes (with difficulty)
   const topicIdx = new Map<string, number[]>();
@@ -1952,21 +1963,33 @@ async function stage5Prereq() {
     // Write final prereqs.tsv edge list
     const cacheFinal = loadPrereqCache();
     console.log(`[stage 5] writing edges from ${cacheFinal.size} responses`);
-    const byId = new Map(skills.map((s) => [s.id, s] as const));
+    const skillIds = new Set(skills.map((s) => s.id));
     const edgeFh = Deno.openSync(`${BUILD}/5_edges.tsv`, { create: true, write: true, truncate: true });
     const enc = new TextEncoder();
     edgeFh.writeSync(enc.encode("skill_id\tprereq_id\n"));
     let edges = 0, orphans = 0;
     for (const s of skills) {
       const resp = cacheFinal.get(s.id);
-      const cands = candidates.get(s.id) ?? [];
-      if (!resp || !cands.length) { orphans++; continue; }
-      const picks = parsePrereqResponse(resp, cands.length);
-      if (picks.length === 0) orphans++;
-      for (const p of picks) {
-        const prereq = skills[cands[p]];
-        edgeFh.writeSync(enc.encode(`${s.id}\t${prereq.id}\n`));
-        edges++;
+      if (!resp || resp === "none") { orphans++; continue; }
+      // Detect format: resolved-ids (contain hyphens/letters) vs legacy positional
+      const isResolved = /[a-z]|-/.test(resp);
+      if (isResolved) {
+        let n = 0;
+        for (const pid of resp.split(",")) {
+          if (!pid || !skillIds.has(pid)) continue;
+          edgeFh.writeSync(enc.encode(`${s.id}\t${pid}\n`));
+          edges++; n++;
+        }
+        if (n === 0) orphans++;
+      } else {
+        const cands = candidates.get(s.id) ?? [];
+        if (!cands.length) { orphans++; continue; }
+        const picks = parsePrereqResponse(resp, cands.length);
+        if (picks.length === 0) { orphans++; continue; }
+        for (const p of picks) {
+          const prereq = skills[cands[p]];
+          if (prereq) { edgeFh.writeSync(enc.encode(`${s.id}\t${prereq.id}\n`)); edges++; }
+        }
       }
     }
     edgeFh.close();
