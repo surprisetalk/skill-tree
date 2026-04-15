@@ -2038,6 +2038,158 @@ async function stage5Prereq() {
 
 // ---------- stage 6: post-process prereqs ----------
 
+// Apfel (Apple Foundation Model) via OpenAI-compat HTTP. Start with: apfel --serve --port 11435
+async function stage5ApfelPrereq() {
+  const { skills } = parseSkillsWithDifficulty();
+  let candidates = loadPrereqCandidates();
+  if (candidates.size !== skills.length) candidates = computePrereqCandidates();
+  const cache = loadPrereqCache();
+  const skillOrder = skills.map((s) => s.id);
+  const todo: { s: typeof skills[0]; candTitles: string[]; candIdxs: number[] }[] = [];
+  for (let i = 0; i < skills.length; i++) {
+    const s = skills[i];
+    if (cache.has(s.id)) continue;
+    const cands = candidates.get(s.id);
+    if (!cands || cands.length === 0) continue;
+    todo.push({ s, candTitles: cands.map((j) => skills[j].title), candIdxs: cands });
+  }
+  console.log(`[stage 5-apfel] targets: ${skills.length}, cached: ${cache.size}, to run: ${todo.length}`);
+  if (!todo.length) return;
+
+  const ENDPOINT = Deno.env.get("APFEL_ENDPOINT") ?? "http://127.0.0.1:11435/v1/chat/completions";
+  const CONCURRENCY = Number(Deno.env.get("APFEL_CONCURRENCY") ?? "8");
+  const LIMIT = Deno.env.get("APFEL_LIMIT") ? Number(Deno.env.get("APFEL_LIMIT")) : todo.length;
+  const queue = todo.slice(0, LIMIT);
+  console.log(`[stage 5-apfel] endpoint=${ENDPOINT} concurrency=${CONCURRENCY} queued=${queue.length}`);
+
+  const fh = Deno.openSync(PREREQ_CACHE, { create: true, append: true });
+  const enc = new TextEncoder();
+  const t0 = performance.now();
+  let done = 0, errs = 0;
+
+  async function callApfel(prompt: string): Promise<string> {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "apple-foundationmodel",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.0,
+        max_tokens: 40,
+      }),
+    });
+    if (!res.ok) throw new Error(`apfel ${res.status}: ${(await res.text()).slice(0, 150)}`);
+    const j = await res.json();
+    return (j.choices?.[0]?.message?.content ?? "").replace(/[\t\n\r]/g, " ");
+  }
+
+  async function worker() {
+    while (queue.length) {
+      const item = queue.shift();
+      if (!item) break;
+      const desc = item.s.description ? `\nDescription: ${item.s.description.slice(0, 150)}` : "";
+      const cands = item.candTitles.map((t, i) => `${i + 1}. ${t}`).join("\n");
+      const prompt = `I list candidate prerequisites. Pick only the TRUE prerequisites that MUST be learned first for the skill. Most of the time NONE of the candidates are prerequisites — be strict. Output format: comma-separated numbers like "1,3" or exactly the word none. NO other text.\n\nSkill: ${item.s.title}${desc}\n\nCandidates:\n${cands}\n\nOutput:`;
+      try {
+        const raw = await callApfel(prompt);
+        const picks = parsePrereqResponse(raw, item.candTitles.length);
+        const resolved = picks.map((p) => skillOrder[item.candIdxs[p]]).filter((x) => x).join(",");
+        fh.writeSync(enc.encode(`${item.s.id}\t${resolved}\n`));
+      } catch (e) {
+        errs++;
+        if (errs < 5) console.warn(`[stage 5-apfel] err ${item.s.id}: ${(e as Error).message.slice(0, 100)}`);
+      }
+      done++;
+      if (done % 200 === 0) {
+        const dt = (performance.now() - t0) / 1000;
+        const rate = done / dt;
+        console.log(`  ${done}/${LIMIT} (${rate.toFixed(1)}/s, ETA ${((queue.length) / rate / 60).toFixed(1)}min, errs=${errs})`);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+  fh.close();
+  const dt = (performance.now() - t0) / 1000;
+  console.log(`[stage 5-apfel] done: ${done} in ${dt.toFixed(0)}s, errs=${errs}`);
+  writeStats(52, { processed: done, errors: errs, endpoint: ENDPOINT, total_seconds: dt });
+}
+
+async function stage5OllamaPrereq() {
+  const { skills } = parseSkillsWithDifficulty();
+  let candidates = loadPrereqCandidates();
+  if (candidates.size !== skills.length) {
+    console.log(`[stage 5-ollama] computing candidates for ${skills.length} skills…`);
+    candidates = computePrereqCandidates();
+  } else {
+    console.log(`[stage 5-ollama] loaded ${candidates.size} cached candidate lists`);
+  }
+  const cache = loadPrereqCache();
+  const skillOrder = skills.map((s) => s.id);
+  const todo: { idx: number; s: typeof skills[0]; candTitles: string[]; candIdxs: number[] }[] = [];
+  for (let i = 0; i < skills.length; i++) {
+    const s = skills[i];
+    if (cache.has(s.id)) continue;
+    const cands = candidates.get(s.id);
+    if (!cands || cands.length === 0) continue;
+    todo.push({ idx: i, s, candTitles: cands.map((j) => skills[j].title), candIdxs: cands });
+  }
+  console.log(`[stage 5-ollama] targets: ${skills.length}, cached: ${cache.size}, to run: ${todo.length}`);
+  if (!todo.length) { console.log("[stage 5-ollama] nothing to do"); return; }
+
+  const MODEL = Deno.env.get("OLLAMA_PREREQ_MODEL") ?? "gpt-oss:20b";
+  const CONCURRENCY = Number(Deno.env.get("OLLAMA_CONCURRENCY") ?? "4");
+  const LIMIT = Deno.env.get("OLLAMA_LIMIT") ? Number(Deno.env.get("OLLAMA_LIMIT")) : todo.length;
+  const queue = todo.slice(0, LIMIT);
+  console.log(`[stage 5-ollama] model=${MODEL} concurrency=${CONCURRENCY} queued=${queue.length}`);
+
+  const fh = Deno.openSync(PREREQ_CACHE, { create: true, append: true });
+  const enc = new TextEncoder();
+  const t0 = performance.now();
+  let done = 0, errs = 0;
+  const callOllama = async (prompt: string): Promise<string> => {
+    const res = await fetch(`${OLLAMA}/api/generate`, {
+      method: "POST",
+      body: JSON.stringify({
+        model: MODEL,
+        prompt,
+        stream: false,
+        options: { temperature: 0.1, num_predict: 600 },
+      }),
+    });
+    if (!res.ok) throw new Error(`ollama ${res.status}: ${await res.text()}`);
+    const j = await res.json();
+    return (j.response || "").replace(/[\t\n\r]/g, " ");
+  };
+  async function worker() {
+    while (queue.length) {
+      const item = queue.shift();
+      if (!item) break;
+      const prompt = PREREQ_SYSTEM + "\n\n" + formatPrereqPrompt(item.s, item.candTitles);
+      try {
+        const raw = await callOllama(prompt);
+        const picks = parsePrereqResponse(raw, item.candTitles.length);
+        const resolved = picks.map((p) => skillOrder[item.candIdxs[p]]).filter((x) => x).join(",");
+        fh.writeSync(enc.encode(`${item.s.id}\t${resolved}\n`));
+      } catch (e) {
+        errs++;
+        if (errs < 5) console.warn(`[stage 5-ollama] err ${item.s.id}: ${(e as Error).message.slice(0, 100)}`);
+      }
+      done++;
+      if (done % 100 === 0) {
+        const dt = (performance.now() - t0) / 1000;
+        const rate = done / dt;
+        const eta = (queue.length) / rate;
+        console.log(`  ${done}/${LIMIT} (${rate.toFixed(1)}/s, ETA ${(eta / 60).toFixed(1)}min, errs=${errs})`);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+  fh.close();
+  const dt = (performance.now() - t0) / 1000;
+  console.log(`[stage 5-ollama] done: ${done} processed in ${dt.toFixed(0)}s, errs=${errs}`);
+  writeStats(51, { processed: done, errors: errs, model: MODEL, total_seconds: dt });
+}
+
 function stage6PostProc() {
   const tagLines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
   const hdr = tagLines[0].split("\t");
@@ -4053,6 +4205,8 @@ const stages: Record<string, () => void | Promise<void>> = {
   dedupe: stage3bDedupe,
   difficulty: stage4Difficulty,
   prereq: stage5Prereq,
+  "prereq-ollama": stage5OllamaPrereq,
+  "prereq-apfel": stage5ApfelPrereq,
   postproc: stage6PostProc,
   finalize: stage7Finalize,
   eval: stage8Eval,
