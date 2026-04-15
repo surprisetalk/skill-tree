@@ -12,11 +12,11 @@ const mode = arg0 === "--all" ? "all" : arg0 ? "seed" : "top";
 const seed = mode === "seed" ? arg0 : "";
 const TOP_N = 2000;
 
-type Row = { id: string; title: string; description: string; difficulty: number; prereqs: string[]; occupations: string; topics: string };
+type Row = { id: string; title: string; display: string; description: string; difficulty: number; prereqs: string[]; occupations: string; topics: string };
 const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
 const rows: Row[] = lines.slice(1).map((l) => {
   const c = l.split("\t");
-  return { id: c[0], title: c[1], description: c[2], difficulty: Number(c[3]), prereqs: c[4] ? c[4].split(",") : [], occupations: c[5], topics: c[6] };
+  return { id: c[0], title: c[1], display: c[2], description: c[3], difficulty: Number(c[4]), prereqs: c[5] ? c[5].split(",") : [], occupations: c[6], topics: c[7] };
 });
 const byId = new Map(rows.map((r) => [r.id, r] as const));
 
@@ -106,14 +106,14 @@ ${Array.from(byBand.entries()).sort(([a], [b]) => a - b).map(([band, skills]) =>
 <section class="band" data-band="${band}">
   <h2>band ${band} · ${skills.length} skills</h2>
   <div class="skills">
-    ${skills.map((s) => `<div class="skill" data-id="${s.id}">${escape(s.title)}</div>`).join("")}
+    ${skills.map((s) => `<div class="skill" data-id="${s.id}">${escape(s.display || s.title)}</div>`).join("")}
   </div>
 </section>
 `).join("")}
 </main>
 <aside id="detail"></aside>
 <script>
-const DATA = ${JSON.stringify(Object.fromEntries(visible.map((r) => [r.id, { title: r.title, description: r.description, difficulty: r.difficulty, prereqs: r.prereqs.filter((p) => keepIds.has(p)), occupations: r.occupations, topics: r.topics }])))};
+const DATA = ${JSON.stringify(Object.fromEntries(visible.map((r) => [r.id, { title: r.title, display: r.display || r.title, description: r.description, difficulty: r.difficulty, prereqs: r.prereqs.filter((p) => keepIds.has(p)), occupations: r.occupations, topics: r.topics }])))};
 const CHILDREN = {};
 for (const [id, row] of Object.entries(DATA)) for (const p of row.prereqs) { (CHILDREN[p] ||= []).push(id); }
 
@@ -129,8 +129,8 @@ function clearHighlights() {
 function showDetail(id) {
   const row = DATA[id];
   if (!row) return;
-  const prereqLinks = row.prereqs.map((p) => DATA[p] ? '<a href="#" data-id="' + p + '">b' + DATA[p].difficulty + ' ' + esc(DATA[p].title) + '</a>' : '').join("");
-  const childLinks = (CHILDREN[id] || []).map((c) => '<a href="#" data-id="' + c + '">b' + DATA[c].difficulty + ' ' + esc(DATA[c].title) + '</a>').join("");
+  const prereqLinks = row.prereqs.map((p) => DATA[p] ? '<a href="#" data-id="' + p + '">b' + DATA[p].difficulty + ' ' + esc(DATA[p].display) + '</a>' : '').join("");
+  const childLinks = (CHILDREN[id] || []).map((c) => '<a href="#" data-id="' + c + '">b' + DATA[c].difficulty + ' ' + esc(DATA[c].display) + '</a>').join("");
   detail.innerHTML = '<h3>' + esc(row.title) + '</h3>' +
     '<div class="meta">b' + row.difficulty + ' · ' + esc(id) + '</div>' +
     (row.description ? '<div>' + esc(row.description) + '</div>' : '') +

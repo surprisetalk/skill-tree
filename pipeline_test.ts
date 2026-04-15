@@ -120,13 +120,14 @@ Deno.test("stage 4 stats: kendall-τ vs anchors above 0.5", () => {
 
 Deno.test("final skills.tsv schema", () => {
   const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
-  assertEquals(lines[0], "id\ttitle\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end");
+  assertEquals(lines[0], "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end");
   for (let i = 1; i < Math.min(lines.length, 500); i++) {
     const c = lines[i].split("\t");
-    assertEquals(c.length, 9, `row ${i} has ${c.length} cols`);
-    const d = Number(c[3]);
-    assert(Number.isInteger(d) && d >= 1 && d <= 20, `row ${i} bad difficulty: ${c[3]}`);
+    assertEquals(c.length, 10, `row ${i} has ${c.length} cols`);
+    const d = Number(c[4]);
+    assert(Number.isInteger(d) && d >= 1 && d <= 20, `row ${i} bad difficulty: ${c[4]}`);
     assert(c[0].length <= 80, `row ${i} id too long: ${c[0].length}`);
+    assert(c[2].length <= 80, `row ${i} display_title too long: ${c[2].length}`);
   }
 });
 
@@ -142,7 +143,7 @@ Deno.test("final: every prereq id exists as a skill id", () => {
   for (let i = 1; i < lines.length; i++) ids.add(lines[i].split("\t")[0]);
   let missing = 0;
   for (let i = 1; i < lines.length; i++) {
-    const p = lines[i].split("\t")[4];
+    const p = lines[i].split("\t")[5];
     if (!p) continue;
     for (const pid of p.split(",")) if (pid && !ids.has(pid)) missing++;
   }
@@ -154,8 +155,8 @@ Deno.test("final: no self-loops in prereq column", () => {
   let loops = 0;
   for (let i = 1; i < lines.length; i++) {
     const c = lines[i].split("\t");
-    if (!c[4]) continue;
-    if (c[4].split(",").includes(c[0])) loops++;
+    if (!c[5]) continue;
+    if (c[5].split(",").includes(c[0])) loops++;
   }
   assertEquals(loops, 0, `${loops} self-loops`);
 });
@@ -168,8 +169,8 @@ Deno.test("final: difficulty mostly monotonic across prereq chains", () => {
   const prereqs = new Map<string, string[]>();
   for (let i = 1; i < lines.length; i++) {
     const c = lines[i].split("\t");
-    diff.set(c[0], Number(c[3]));
-    if (c[4]) prereqs.set(c[0], c[4].split(","));
+    diff.set(c[0], Number(c[4]));
+    if (c[5]) prereqs.set(c[0], c[5].split(","));
   }
   const ids = [...prereqs.keys()];
   let clean = 0, violated = 0;
@@ -217,7 +218,7 @@ Deno.test("final: final_edges preserves strict raw-difficulty ordering", () => {
   const diff = new Map<string, number>();
   for (let i = 1; i < skillLines.length; i++) {
     const c = skillLines[i].split("\t");
-    diff.set(c[0], Number(c[3]));
+    diff.set(c[0], Number(c[4]));
   }
   const edgeLines = Deno.readTextFileSync("build/6_edges.tsv").split("\n").filter((l) => l.length).slice(1);
   for (let i = 0; i < Math.min(edgeLines.length, 1000); i++) {

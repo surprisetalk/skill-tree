@@ -233,52 +233,103 @@ function stage1List() {
   {
     const infill = loadInfillCache();
     const j = JSON.parse(Deno.readTextFileSync("data/lightcast/skills.json"));
-    let n = 0, infilled = 0;
+    let n = 0, infilled = 0, placeholdered = 0;
+    const missingIds: string[] = [];
     for (const s of j.data) {
       if (!s.name) continue;
       const title = s.name.trim();
       const id = slugify(title);
-      const desc = infill.get(id) ?? "";
-      if (desc) infilled++;
-      raw.push({
-        id: "",
-        title,
-        description: desc,
-        sources: ["lightcast"],
-        tags: s.type?.name ? [`lightcast:${s.type.name}`] : ["lightcast"],
-      });
+      let desc = infill.get(id) ?? "";
+      const tags = s.type?.name ? [`lightcast:${s.type.name}`] : ["lightcast"];
+      if (desc) {
+        infilled++;
+      } else {
+        // Placeholder: type name beats blank as embedding signal.
+        // Tagged so downstream stages can identify and target a refill batch.
+        if (s.type?.name) { desc = s.type.name; placeholdered++; }
+        tags.push("desc:placeholder");
+        missingIds.push(id);
+      }
+      raw.push({ id: "", title, description: desc, sources: ["lightcast"], tags });
       n++;
     }
-    console.log(`  lightcast: ${n} (infilled: ${infilled})`);
+    Deno.writeTextFileSync(`${BUILD}/1_lightcast_missing.tsv`, missingIds.join("\n") + "\n");
+    console.log(`  lightcast: ${n} (infilled: ${infilled}, placeholder: ${placeholdered}, missing→${BUILD}/1_lightcast_missing.tsv)`);
   }
 
   // OpenSALT CFItems — each framework file has CFItems[] with fullStatement
   {
-    const SCAFFOLDING = /^(\s*)?(grade|kindergarten|pre-?k|elementary|middle school|high school|[0-9]+(st|nd|rd|th)\s+grade|unit\s+\d|chapter\s+\d|section\s+\d|module\s+\d|standard\s+\d|topic\s+\d|strand|domain)\b/i;
-    let n = 0, skipped = 0, scaffolding = 0;
+    const SCAFFOLDING_TYPES = new Set([
+      "Grade Level", "Domain", "Strand", "Course", "Topic", "Cluster",
+      "Component", "Section", "Module", "Chapter", "Unit",
+    ]);
+    const SCAFFOLDING_RE = /^(\s*)?(grade|kindergarten|pre-?k|elementary|middle school|high school|[0-9]+(st|nd|rd|th)\s+grade|unit\s+\d|chapter\s+\d|section\s+\d|module\s+\d|standard\s+\d|topic\s+\d|strand|domain)\b/i;
+    // Truncate to last sentence boundary ≤cap; fall back to last word boundary.
+    const truncTitle = (t: string, cap: number): string => {
+      if (t.length <= cap) return t;
+      const head = t.slice(0, cap);
+      const lastDot = Math.max(head.lastIndexOf(". "), head.lastIndexOf("? "), head.lastIndexOf("! "));
+      if (lastDot > cap * 0.5) return head.slice(0, lastDot + 1).trim();
+      const lastSpace = head.lastIndexOf(" ");
+      return (lastSpace > cap * 0.5 ? head.slice(0, lastSpace) : head).trim() + "…";
+    };
+    let n = 0, scaffoldingType = 0, scaffoldingPattern = 0, truncated = 0, perFrameDup = 0;
     for (const e of Deno.readDirSync("data/opensalt")) {
       if (!e.name.endsWith(".json") || e.name === "index.json") continue;
       const j = JSON.parse(Deno.readTextFileSync(`data/opensalt/${e.name}`));
       const items = j.CFItems || [];
       const doc = j.CFDocument?.title || "opensalt";
+      const docSlug = slugify(doc);
+      const seenInFrame = new Set<string>();
       for (const it of items) {
-        const title = (it.fullStatement || "").trim();
-        if (!title || title.length > 400) { skipped++; continue; }
-        // Drop framework scaffolding (non-skill meta-labels)
-        if (SCAFFOLDING.test(title) && title.length < 50) { scaffolding++; continue; }
-        if (/^(CFItemType|Course|Subject)\s*:/.test(title)) { scaffolding++; continue; }
-        const grade = Array.isArray(it.educationLevel) ? it.educationLevel.join(",") : "";
-        raw.push({
-          id: "",
-          title,
-          description: it.humanCodingScheme || "",
-          sources: ["opensalt"],
-          tags: ["opensalt", `framework:${slugify(doc)}`, ...(grade ? [`grade:${grade}`] : [])],
-        });
+        if (it.CFItemType && SCAFFOLDING_TYPES.has(it.CFItemType)) { scaffoldingType++; continue; }
+        const fullStmt = (it.fullStatement || "").trim();
+        const abbrev = (it.abbreviatedStatement || "").trim();
+        const notes = (it.notes || "").trim();
+        if (!fullStmt && !abbrev) { scaffoldingPattern++; continue; }
+        // Pick the shorter non-empty statement as title; keep the longer as description.
+        let title: string;
+        let description: string;
+        if (abbrev && (!fullStmt || abbrev.length < fullStmt.length)) {
+          title = abbrev;
+          description = fullStmt && fullStmt !== abbrev ? fullStmt : notes;
+        } else {
+          title = fullStmt;
+          description = notes && notes !== fullStmt ? notes : "";
+        }
+        if (title.length > 300) { title = truncTitle(title, 300); truncated++; }
+        // Drop scaffolding by pattern only when it looks like a header (short + matches)
+        if (SCAFFOLDING_RE.test(title) && title.length < 50 && !it.CFItemType) { scaffoldingPattern++; continue; }
+        if (/^(CFItemType|Course|Subject)\s*:/.test(title)) { scaffoldingPattern++; continue; }
+        // Per-framework dedupe: same title repeated within one file is filler
+        const localKey = title.toLowerCase();
+        if (seenInFrame.has(localKey)) { perFrameDup++; continue; }
+        seenInFrame.add(localKey);
+
+        const tags: string[] = ["opensalt", `framework:${docSlug}`];
+        // Split educationLevel array into per-grade tags so stage 7 grade extraction works.
+        if (Array.isArray(it.educationLevel)) {
+          for (const g of it.educationLevel) {
+            const gv = String(g).trim();
+            if (gv) tags.push(`grade:${gv}`);
+          }
+        }
+        // conceptKeywords feed topic-matching downstream
+        if (Array.isArray(it.conceptKeywords)) {
+          for (const kw of it.conceptKeywords) {
+            const kwSlug = slugify(String(kw));
+            if (kwSlug) tags.push(`topic:${kwSlug}`);
+          }
+        }
+        // Preserve standard codes as queryable tags
+        if (it.humanCodingScheme) tags.push(`code:${it.humanCodingScheme}`);
+        if (it.CFItemType) tags.push(`opensalt:${slugify(it.CFItemType)}`);
+
+        raw.push({ id: "", title, description, sources: ["opensalt"], tags });
         n++;
       }
     }
-    console.log(`  opensalt: ${n} (skipped ${skipped} oversized, ${scaffolding} scaffolding)`);
+    console.log(`  opensalt: ${n} (scaffolding_type=${scaffoldingType}, scaffolding_pattern=${scaffoldingPattern}, truncated=${truncated}, per_frame_dup=${perFrameDup})`);
   }
 
   // Apply summarize cache: replace long titles with concise summaries, keep original as description
@@ -302,30 +353,44 @@ function stage1List() {
 
   // Dedupe by fuzzy key
   console.log(`[stage 1] raw rows: ${raw.length}; deduping…`);
+  // NFKD strips combining diacritics so "café" ≡ "cafe"; no stopword removal
+  // (caused "the algebra" ≡ "algebra" collisions — token-sort signature merge in
+  // stage 3b handles legit word-order swaps with proper stopword filtering).
   const fuzzyKey = (s: string): string => {
-    return s.toLowerCase()
-      .replace(/\([^)]*\)/g, " ") // drop parentheticals
-      .replace(/[^a-z0-9]+/g, " ") // collapse punctuation (merges "Machine-Learning" ↔ "machine learning")
-      .replace(/\b(the|a|an|of|for|and|to|in|on|at|by|with)\b/g, " ") // drop stopwords
+    return s.normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
       .trim()
       .replace(/\s+/g, " ");
   };
+  const TAG_CAP = 20;
   const byKey = new Map<string, Skill>();
-  let collisions = 0;
+  let collisions = 0, emptyKeyDrops = 0, emptySlugDrops = 0;
   for (const s of raw) {
     const key = fuzzyKey(s.title);
-    if (!key) continue;
+    if (!key) { emptyKeyDrops++; continue; }
     const existing = byKey.get(key);
     if (existing) {
       collisions++;
       for (const src of s.sources) if (!existing.sources.includes(src)) existing.sources.push(src);
-      for (const t of s.tags) if (!existing.tags.includes(t)) existing.tags.push(t);
-      if (!existing.description && s.description) existing.description = s.description;
+      for (const t of s.tags) {
+        if (existing.tags.length >= TAG_CAP) break;
+        if (!existing.tags.includes(t)) existing.tags.push(t);
+      }
+      // Prefer longer description when both present (stronger signal for embeddings)
+      if (s.description && s.description.length > existing.description.length) {
+        existing.description = s.description;
+      }
     } else {
       const slug = slugify(s.title);
-      if (!slug) continue; // skip titles that slugify to nothing
+      if (!slug) { emptySlugDrops++; continue; }
       byKey.set(key, { ...s, id: slug });
     }
+  }
+  if (emptyKeyDrops + emptySlugDrops > raw.length * 0.01) {
+    throw new Error(`stage 1: too many silent drops (empty_key=${emptyKeyDrops}, empty_slug=${emptySlugDrops}, raw=${raw.length})`);
   }
 
   // Resolve slug collisions (different titles → same slug) with numeric suffix
@@ -344,7 +409,11 @@ function stage1List() {
 
   // Write
   const out = [...byKey.values()];
-  const clean = (c: string) => c.replace(/[\t\n\r]/g, " ").replace(/\s+/g, " ").trim();
+  const clean = (c: string) => c
+    .replace(/[\u0000-\u001f\u200b-\u200f\ufeff]/g, "")
+    .replace(/[\t\n\r]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   const tsv = ["id\ttitle\tdescription\tsources\ttags"];
   for (const s of out) {
     if (!s.id) throw new Error(`skill with empty id: ${s.title}`);
@@ -357,6 +426,8 @@ function stage1List() {
     total_rows: out.length,
     raw_rows: raw.length,
     dedupe_collisions: collisions,
+    empty_key_drops: emptyKeyDrops,
+    empty_slug_drops: emptySlugDrops,
     slug_collisions: slugCollisions,
     per_source: {
       esco: out.filter((s) => s.sources.includes("esco")).length,
@@ -3084,12 +3155,33 @@ function stage7Finalize() {
     diff.set(c[0], Number(c[1]));
   }
 
+  // Load alias map (dropped_id → canonical_id) for final-pass remap of any stale edges.
+  const aliasMap = new Map<string, string>();
+  try {
+    const aliasLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
+    for (let i = 1; i < aliasLines.length; i++) {
+      const [drop, keep] = aliasLines[i].split("\t");
+      if (drop && keep) aliasMap.set(drop, keep);
+    }
+  } catch { /* none */ }
+  const remap = (id: string) => aliasMap.get(id) ?? id;
+
+  const skillIdSet = new Set<string>(skills.map((s) => s.id));
   const edgeLines = Deno.readTextFileSync(`${BUILD}/6_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
   const prereqs = new Map<string, string[]>();
+  let edgeRemapped = 0, edgeOrphanDropped = 0;
   for (const l of edgeLines) {
-    const [s, p] = l.split("\t");
-    const arr = prereqs.get(s) ?? []; arr.push(p); prereqs.set(s, arr);
+    let [s, p] = l.split("\t");
+    const s2 = remap(s), p2 = remap(p);
+    if (s2 !== s || p2 !== p) edgeRemapped++;
+    if (!skillIdSet.has(s2) || !skillIdSet.has(p2)) { edgeOrphanDropped++; continue; }
+    if (s2 === p2) { edgeOrphanDropped++; continue; }
+    s = s2; p = p2;
+    const arr = prereqs.get(s) ?? [];
+    if (!arr.includes(p)) arr.push(p);
+    prereqs.set(s, arr);
   }
+  console.log(`[stage 7] edge remap: ${edgeRemapped} rewritten, ${edgeOrphanDropped} orphan/self dropped`);
 
   // --- Description enrichment via Wikipedia REST summaries (for skills with thin descriptions) ---
   const wikiSummary = new Map<string, string>();
@@ -3173,8 +3265,27 @@ function stage7Finalize() {
   const STOP = new Set(["the","a","an","of","to","for","in","on","and","or","with","by","at","from","as","is","be","that","this","these","those"]);
   const sigTokens = (id: string) => new Set(id.split("-").filter((t) => t.length >= 4 && !STOP.has(t)));
 
+  // Compact display title for verbose OpenSALT/ONET-task entries.
+  const deriveDisplay = (title: string, tags: string): string => {
+    if (title.length <= 80) return title;
+    // Prefer a code:XXX tag if present (OpenSALT humanCodingScheme)
+    for (const t of tags.split(",")) {
+      if (t.startsWith("code:")) {
+        const code = t.slice(5).trim();
+        if (code && code.length <= 80) return code;
+      }
+    }
+    // Cut at first sentence boundary ≤80; reserve room for ellipsis on word-break
+    const head = title.slice(0, 80);
+    const lastDot = Math.max(head.lastIndexOf(". "), head.lastIndexOf("? "), head.lastIndexOf("! "));
+    if (lastDot > 30) return head.slice(0, lastDot + 1).trim();
+    const trim = title.slice(0, 79);
+    const lastSpace = trim.lastIndexOf(" ");
+    return (lastSpace > 30 ? trim.slice(0, lastSpace) : trim).trim() + "…";
+  };
+
   // First pass: assemble candidate topic sets (skip emission until we know topic frequencies)
-  type Row = { id: string; title: string; desc: string; d: number; ps: string; occ: string; topics: string[]; gStart: string; gEnd: string };
+  type Row = { id: string; title: string; display: string; desc: string; d: number; ps: string; occ: string; topics: string[]; gStart: string; gEnd: string };
   const pending: Row[] = [];
   let wikiEnriched = 0, frameworkFiltered = 0, descEnriched = 0, dropped = 0, p279Filtered = 0, lcshEnriched = 0;
   // B2/B3: LCSH + DBpedia ancestor chain caches (stages 1j, 1k). Merged into one lookup map.
@@ -3272,7 +3383,7 @@ function stage7Finalize() {
     }
     const gStart = grades.length ? Math.min(...grades).toString() : "";
     const gEnd = grades.length ? Math.max(...grades).toString() : "";
-    pending.push({ id: s.id, title: s.title, desc, d, ps, occ: s.occupations, topics, gStart, gEnd });
+    pending.push({ id: s.id, title: s.title, display: deriveDisplay(s.title, s.tags), desc, d, ps, occ: s.occupations, topics, gStart, gEnd });
   }
 
   // Second pass: compute global topic frequencies, drop singletons AND super-generic
@@ -3313,27 +3424,42 @@ function stage7Finalize() {
   }
   console.log(`[stage 7] topic freq cap: max=${MAX_TOPIC_FREQ} (1% of ${pending.length}), generic_dropped=${genericDropped}`);
 
-  const rows = ["id\ttitle\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end"];
+  const rows = ["id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end"];
   for (const r of pending) {
-    rows.push([r.id, r.title, r.desc, r.d.toString(), r.ps, r.occ, r.topics.join(","), r.gStart, r.gEnd].join("\t"));
+    rows.push([r.id, r.title, r.display, r.desc, r.d.toString(), r.ps, r.occ, r.topics.join(","), r.gStart, r.gEnd].join("\t"));
   }
   Deno.writeTextFileSync("skills.tsv", rows.join("\n") + "\n");
+
+  // Integrity assert: every emitted prereq id must exist in the emitted skill set.
+  const emittedIdSet = new Set<string>();
+  for (let i = 1; i < rows.length; i++) emittedIdSet.add(rows[i].split("\t")[0]);
+  let violations = 0;
+  for (const r of pending) {
+    if (!r.ps) continue;
+    for (const p of r.ps.split(",")) {
+      if (!emittedIdSet.has(p)) {
+        if (violations < 5) console.error(`[stage 7] orphan edge: ${r.id} → ${p}`);
+        violations++;
+      }
+    }
+  }
+  if (violations > 0) throw new Error(`stage 7: ${violations} orphan prereq references`);
   console.log(`[stage 7] topic enrichment: wiki_enriched=${wikiEnriched}, framework_filtered=${frameworkFiltered}, p279_filtered=${p279Filtered}, singleton_dropped=${singletonDropped}, desc_enriched=${descEnriched}, cruft_dropped=${dropped}`);
 
   // gzip (keep original)
   new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] }).outputSync();
   const src = Deno.readFileSync("skills.tsv");
 
-  // Reachability BFS from roots, restricted to emitted skills
-  const emittedIds = new Set<string>();
-  for (let i = 1; i < rows.length; i++) emittedIds.add(rows[i].split("\t")[0]);
+  // Reachability BFS from roots — use the post-remap prereqs map (filtered to emitted ids).
   const adj = new Map<string, string[]>();
-  for (const l of edgeLines) {
-    const [s, p] = l.split("\t");
-    if (!emittedIds.has(s) || !emittedIds.has(p)) continue;
-    const arr = adj.get(p) ?? []; arr.push(s); adj.set(p, arr);
+  for (const [s, ps] of prereqs) {
+    if (!emittedIdSet.has(s)) continue;
+    for (const p of ps) {
+      if (!emittedIdSet.has(p)) continue;
+      const arr = adj.get(p) ?? []; arr.push(s); adj.set(p, arr);
+    }
   }
-  const roots = skills.filter((s) => emittedIds.has(s.id) && !prereqs.has(s.id)).map((s) => s.id);
+  const roots = skills.filter((s) => emittedIdSet.has(s.id) && !prereqs.has(s.id)).map((s) => s.id);
   const visited = new Set<string>(roots);
   const queue = [...roots];
   while (queue.length) {
@@ -3357,7 +3483,9 @@ function stage7Finalize() {
     framework_topics_filtered: frameworkFiltered,
     p279_topics_filtered: p279Filtered,
     singleton_topics_dropped: singletonDropped,
-    grade_populated: rows.slice(1).filter((r) => r.split("\t")[7] !== "").length,
+    grade_populated: rows.slice(1).filter((r) => r.split("\t")[8] !== "").length,
+    edge_remapped: edgeRemapped,
+    edge_orphan_dropped: edgeOrphanDropped,
     file_bytes: src.byteLength,
   });
 }
