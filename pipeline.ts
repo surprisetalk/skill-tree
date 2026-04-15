@@ -1462,13 +1462,12 @@ function stage4Difficulty() {
     vecs.set(normalize(emb.subarray(ei * DIM, (ei + 1) * DIM)), i * DIM);
   }
 
-  // Anchor difficulty per skill: OpenSALT grade > ONET default > unset (NaN)
+  // Anchor difficulty per skill: OpenSALT grade > Khan V-position > unset (NaN)
   const anchor = new Float32Array(skills.length);
   anchor.fill(Number.NaN);
-  let gradeAnchored = 0;
+  let gradeAnchored = 0, khanAnchored = 0;
   for (let i = 0; i < skills.length; i++) {
     const s = skills[i];
-    // Parse `grade:XX` tokens; if multiple grades, use the max (most-advanced encountered)
     const matches = [...s.tags.matchAll(/grade:([^,]+)/g)];
     const grades: number[] = [];
     for (const m of matches) {
@@ -1482,8 +1481,46 @@ function stage4Difficulty() {
       gradeAnchored++;
     }
   }
-  const unanchored = skills.length - gradeAnchored;
-  console.log(`[stage 4] anchors: grade=${gradeAnchored}, unanchored=${unanchored}`);
+  // D2: Khan Academy V-Position as pseudo-grade anchor for unanchored skills that resolve
+  // to Khan concepts. V-position ranges ~1-80 across the curriculum; map linearly to K-12.
+  try {
+    const lines = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split("\n").filter((l) => l.length);
+    const hdr = lines[0].split("\t");
+    const iName = hdr.indexOf("Data Name");
+    const iDisp = hdr.indexOf("Display Name");
+    const iV = hdr.indexOf("V-Position");
+    const labelToV = new Map<string, number>();
+    let vMin = Infinity, vMax = -Infinity;
+    for (let i = 1; i < lines.length; i++) {
+      const c = lines[i].split("\t");
+      const v = Number(c[iV]);
+      if (!Number.isFinite(v)) continue;
+      vMin = Math.min(vMin, v); vMax = Math.max(vMax, v);
+      for (const lbl of [c[iName], c[iDisp]]) {
+        if (lbl) {
+          const slug = slugify(lbl);
+          if (!labelToV.has(slug)) labelToV.set(slug, v);
+        }
+      }
+    }
+    const slugToIdx = new Map<string, number>();
+    for (let i = 0; i < skills.length; i++) {
+      slugToIdx.set(skills[i].id, i);
+      const altSlug = slugify(skills[i].title);
+      if (!slugToIdx.has(altSlug)) slugToIdx.set(altSlug, i);
+    }
+    for (const [lbl, v] of labelToV) {
+      const i = slugToIdx.get(lbl);
+      if (i === undefined) continue;
+      if (!Number.isNaN(anchor[i])) continue; // keep explicit grade tag if present
+      const vGrade = (v - vMin) / (vMax - vMin) * 12; // linear to 0-12
+      anchor[i] = vGrade;
+      khanAnchored++;
+    }
+  } catch { /* no khan data */ }
+  const totalAnchored = gradeAnchored + khanAnchored;
+  const unanchored = skills.length - totalAnchored;
+  console.log(`[stage 4] anchors: grade=${gradeAnchored}, khan=${khanAnchored}, unanchored=${unanchored}`);
 
   // Collect anchor indices
   const anchorIdxs: number[] = [];
@@ -1576,39 +1613,97 @@ function stage4Difficulty() {
   }
   } // end kNN guard
 
-  // Tie-break equal raw values using embedding-based diversity + source priority so quantile bins split cleanly
-  // Add small random jitter seeded by id hash so ties resolve deterministically but distribute
-  const sorted = [...out].sort((a, b) => a - b);
-  const rawMin = sorted[0], rawMax = sorted[sorted.length - 1];
+  // D3: kNN within-topic smoothing (pull each raw toward topic-mean to reduce outliers)
+  const SMOOTH_W = Number(Deno.env.get("SMOOTH_W") ?? "0.3");
+  const smoothed = new Float32Array(out);
+  if (SMOOTH_W > 0) {
+    // Group by primary topic, compute topic mean, pull raw toward it
+    const topicSum = new Map<string, { sum: number; n: number }>();
+    for (let i = 0; i < skills.length; i++) {
+      for (const t of skills[i].topics.split(",")) {
+        if (!t) continue;
+        const e = topicSum.get(t) ?? { sum: 0, n: 0 };
+        e.sum += out[i]; e.n++; topicSum.set(t, e);
+      }
+    }
+    for (let i = 0; i < skills.length; i++) {
+      let sum = 0, n = 0;
+      for (const t of skills[i].topics.split(",")) {
+        if (!t) continue;
+        const e = topicSum.get(t);
+        if (!e || e.n < 3) continue;
+        sum += (e.sum - out[i]) / (e.n - 1);
+        n++;
+      }
+      if (n > 0) smoothed[i] = (1 - SMOOTH_W) * out[i] + SMOOTH_W * (sum / n);
+    }
+  }
+
+  // Jitter for tie-breaks
   const jittered = new Float32Array(skills.length);
   for (let i = 0; i < skills.length; i++) {
-    // Deterministic jitter based on id (simple hash), scaled by 1% of range
     let h = 0;
     for (let k = 0; k < skills[i].id.length; k++) h = ((h * 31) + skills[i].id.charCodeAt(k)) | 0;
-    const jit = ((h >>> 0) % 1000) / 1000; // [0,1)
-    jittered[i] = out[i] + (jit - 0.5) * 0.001; // tiny tie-break
+    const jit = ((h >>> 0) % 1000) / 1000;
+    jittered[i] = smoothed[i] + (jit - 0.5) * 0.001;
   }
 
-  // Non-OpenSALT skills get a bonus so workplace content lands higher than K-12 curriculum.
-  // Apply bonus to JITTERED raw, then quantile-bin directly (no separate stretch — avoids pile-up).
-  const biased = new Float32Array(skills.length);
+  // D1: isotonic PAV fit on anchored skills (raw → grade). Then apply to all skills.
+  // Anchors are K-12 grades (0..12). Workplace skills extrapolate via linear endpoint slope.
+  type PavNode = { x: number; y: number; w: number };
+  const pairs: [number, number][] = [];
+  for (const ai of anchorIdxs) pairs.push([jittered[ai], anchor[ai]]);
+  pairs.sort((a, b) => a[0] - b[0]);
+  const pav: PavNode[] = [];
+  for (const [x, y] of pairs) {
+    let cur: PavNode = { x, y, w: 1 };
+    while (pav.length && pav[pav.length - 1].y > cur.y) {
+      const prev = pav.pop()!;
+      cur = { x: prev.x, y: (prev.y * prev.w + cur.y * cur.w) / (prev.w + cur.w), w: prev.w + cur.w };
+    }
+    pav.push(cur);
+  }
+  const pavX = pav.map((p) => p.x);
+  const pavY = pav.map((p) => p.y);
+  // Endpoint slope for extrapolation (use last 10% of steps to estimate)
+  const tailStart = Math.max(0, pavX.length - Math.max(2, Math.floor(pavX.length * 0.1)));
+  const tailDX = pavX[pavX.length - 1] - pavX[tailStart];
+  const tailDY = pavY[pavY.length - 1] - pavY[tailStart];
+  const tailSlope = tailDX > 0 ? tailDY / tailDX : 0.5;
+  const calibrate = (raw: number): number => {
+    if (pavX.length === 0) return raw;
+    if (raw <= pavX[0]) return pavY[0];
+    if (raw >= pavX[pavX.length - 1]) {
+      return pavY[pavY.length - 1] + tailSlope * (raw - pavX[pavX.length - 1]);
+    }
+    let lo = 0, hi = pavX.length - 1;
+    while (lo < hi - 1) {
+      const mid = (lo + hi) >> 1;
+      if (pavX[mid] <= raw) lo = mid; else hi = mid;
+    }
+    const span = pavX[hi] - pavX[lo];
+    const t = span > 0 ? (raw - pavX[lo]) / span : 0;
+    return pavY[lo] + t * (pavY[hi] - pavY[lo]);
+  };
+  const calibrated = new Float32Array(skills.length);
   for (let i = 0; i < skills.length; i++) {
-    biased[i] = jittered[i] + (skills[i].sources.includes("opensalt") ? 0 : 3);
+    const base = calibrate(jittered[i]);
+    // Workplace bonus in CALIBRATED (grade) space: non-OpenSALT skills get +3 grades
+    calibrated[i] = base + (skills[i].sources.includes("opensalt") ? 0 : 3);
   }
+  console.log(`[stage 4] isotonic: ${pavX.length} PAV steps from ${anchorIdxs.length} anchors, tail_slope=${tailSlope.toFixed(3)}`);
 
-  // 20 equal-sized quantile bins over biased scores → guaranteed even distribution
-  const idxOrder = [...Array(skills.length).keys()].sort((a, b) => biased[a] - biased[b]);
+  // Bucket calibrated values (≈grade) into 20 bands. Grade 0-12 → bands 1-13; workplace → 14-20.
+  const sorted = [...calibrated].sort((a, b) => a - b);
+  const rawMin = sorted[0], rawMax = sorted[sorted.length - 1];
   const band = new Int32Array(skills.length);
   const bandCounts = new Array(20).fill(0);
-  const bandSize = skills.length / 20;
-  for (let rank = 0; rank < skills.length; rank++) {
-    const i = idxOrder[rank];
-    const b = Math.min(20, Math.floor(rank / bandSize) + 1);
+  for (let i = 0; i < skills.length; i++) {
+    const b = Math.max(1, Math.min(20, Math.round(calibrated[i]) + 1));
     band[i] = b;
     bandCounts[b - 1]++;
   }
-  const bands = Array.from({ length: 19 }, (_, i) => biased[idxOrder[Math.floor(skills.length * (i + 1) / 20)]]);
-  void rawMin; void rawMax; void bands; // retained for stats compat
+  void rawMin; void rawMax;
 
   // Write
   const rows = ["id\tdifficulty\tdifficulty_raw"];
@@ -2596,6 +2691,7 @@ function stage6PostProc() {
   // (e.g. oral-health ↔ dental-health). Iteratively find SCCs; drop weakest edge per SCC.
   // Seed edges preferred-kept — only dropped if an SCC is entirely seed edges (A1).
   let cyclesBroken = 0, cyclesSeedDropped = 0;
+  const cycleCutLog: string[] = []; // E4: log which edges were cut for debugging
   for (let iter = 0; iter < 50; iter++) {
     // Build adjacency: prereq p → skill s (final stores [s, p])
     const adj = new Map<string, string[]>();
@@ -2662,7 +2758,9 @@ function stage6PostProc() {
       }
       if (worst) {
         toDrop.add(`${worst[0]}\t${worst[1]}`);
-        if (isSeed(worst[0], worst[1])) cyclesSeedDropped++;
+        const isS = isSeed(worst[0], worst[1]);
+        if (isS) cyclesSeedDropped++;
+        cycleCutLog.push(`${worst[0]}\t${worst[1]}\t${isS ? "seed" : "inferred"}\t${worstGap.toFixed(3)}`);
       }
     }
     const before = final.length;
@@ -2671,7 +2769,10 @@ function stage6PostProc() {
     }
     cyclesBroken += before - final.length;
   }
-  console.log(`[stage 6] cycle-breaker dropped ${cyclesBroken} edges`);
+  console.log(`[stage 6] cycle-breaker dropped ${cyclesBroken} edges (${cyclesSeedDropped} seed)`);
+  if (cycleCutLog.length) {
+    Deno.writeTextFileSync(`${BUILD}/6_cycle_cuts.tsv`, "skill_id\tprereq_id\tkind\tgap\n" + cycleCutLog.join("\n") + "\n");
+  }
 
   // Write final edges
   const enc = new TextEncoder();
@@ -3573,7 +3674,8 @@ async function stage1eSeedEdges() {
     const srcExact = resolveConcept(p.rawSrc, idx) === src;
     const dstExact = resolveConcept(p.rawDst, idx) === dst;
     const fallback = !(srcExact && dstExact);
-    const holdout = (h32(p.source + "|" + p.raw) % 10) === 0;
+    // E1: holdout 20% (was 10%). Doubles eval denominators for more stable recall metrics.
+    const holdout = (h32(p.source + "|" + p.raw) % 5) === 0;
     const confidence = fallback ? 0.85 : 1.0;
     edgesArr.push({ src, dst, source: p.source, confidence, holdout, fallback });
     const s = perSource[p.source];
@@ -4249,9 +4351,8 @@ function stage8Eval() {
     };
   }
 
-  // ---- 16. Source attribution — per-source edge counts ----
+  // ---- 16. Source attribution — per-source edge counts + per-edge dump (E3) ----
   {
-    // Stage 6 writes 6_edges.tsv without source; infer by cross-referencing seed edges.
     const seedEdges = new Set<string>();
     try {
       const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
@@ -4261,9 +4362,38 @@ function stage8Eval() {
         seedEdges.add(`${canon(c[0])}→${canon(c[1])}`);
       }
     } catch { /* skip */ }
-    let seed = 0, nonSeed = 0;
-    for (const e of edges) (seedEdges.has(e) ? seed++ : nonSeed++);
-    results.source_attribution = { seed_edges_in_final: seed, non_seed: nonSeed, total: edges.length };
+    // Load raw LLM inferences from stage 5 to attribute "inferred" vs "heuristic" edges
+    const inferred = new Set<string>();
+    try {
+      const prereqLines = Deno.readTextFileSync(`${BUILD}/5_prereqs.tsv`).split("\n").filter((l) => l.length);
+      const pick = new Map<string, string>();
+      for (const line of prereqLines) {
+        const tab = line.indexOf("\t");
+        pick.set(line.slice(0, tab), line.slice(tab + 1));
+      }
+      for (const [id, resp] of pick) {
+        if (!resp || resp === "none") continue;
+        for (const pid of resp.split(",")) if (pid) inferred.add(`${canon(pid)}→${canon(id)}`);
+      }
+    } catch { /* skip */ }
+    let seed = 0, inf = 0, heuristic = 0;
+    const sourceMap = new Map<string, string>();
+    for (const e of edges) {
+      const src = seedEdges.has(e) ? "seed" : inferred.has(e) ? "inferred" : "heuristic";
+      sourceMap.set(e, src);
+      if (src === "seed") seed++; else if (src === "inferred") inf++; else heuristic++;
+    }
+    // Dump: build/8_edge_sources.tsv
+    const dumpLines = ["skill_id\tprereq_id\tsource"];
+    for (const r of rows) for (const p of r.prereqs) {
+      const src = sourceMap.get(`${p}→${r.id}`) ?? "unknown";
+      dumpLines.push(`${r.id}\t${p}\t${src}`);
+    }
+    Deno.writeTextFileSync(`${BUILD}/8_edge_sources.tsv`, dumpLines.join("\n") + "\n");
+    results.source_attribution = {
+      seed_edges_in_final: seed, inferred_edges: inf, heuristic_edges: heuristic,
+      total: edges.length,
+    };
   }
 
   // ---- 18. Cross-domain leakage (topic Jaccard on edges) ----
