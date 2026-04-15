@@ -67,6 +67,23 @@ Pass 5 key wins: union-merged Ollama llama3.2:3b prereqs with Haiku cache (~14k 
 - [x] E2: Apfel-based precision eval (cache-resumable). 500-sample run hit rate 0.603 on 126 completed judgments (Apfel dropped ~375 under 8-way concurrency; retry + lower concurrency added).
 - [x] Apfel stage-5 re-run setup: `APFEL_OUT` env var writes to separate cache (`5_prereqs_apfel.tsv`); retries with backoff; tested on 2k sample.
 
+## Quality pass 6 (2026-04-15, DAG + hypernym + synonym)
+- [x] P1: strict DAG enforcement in stage 6 cycle-breaker. Old: drop one smallest-gap edge per SCC, cap 50 iters → 80,284 nodes left in cycles. New: Kahn topo-sort each SCC preferring seed edges as forward constraints, then drop ALL inferred back-edges; post-condition forced-drop any surviving cyclic nodes. Result: `cycles.dag=true`, `leftover_after_kahn=0` (was 80,284). 0 bidirectional pairs (was 750).
+- [x] P2: hypernym/strict-subset prereq filter in stage 6 (before tech filter). Drops edges where prereq's significant slug tokens are a strict subset of child's (e.g. `manage-staff` ⊂ `manage-musical-staff`). Seeds exempt; single-token prereqs (math, algebra) exempt. 1,336 edges dropped (747 seed exempt).
+- [x] P3: synonym-pair both-direction drop inside A4. When LLM picked both A→B and B→A AND slug-token Jaccard ≥ 0.5 (or subset), drop both (they're near-duplicates not prereqs). 38 pairs dropped. Remaining bidirectional pairs handled by P1.
+
+| metric              | pass 5     | pass 6       |
+| ------------------- | ---------- | ------------ |
+| cycles.dag          | false      | **true**     |
+| leftover_after_kahn | 80,284     | **0**        |
+| bidirectional pairs | 750        | **0**        |
+| total edges         | 307,268    | 302,811      |
+| seed_edges_in_final | 22,602     | 21,005       |
+| orphan_rate         | 0.0791     | 0.0806       |
+| domain_leakage mean | 0.310      | 0.297        |
+
+Pass 6 key wins: **graph is now an actual DAG** — the prerequisite graph was not acyclic before (82% of skills sat inside cycles). Seed survival drops ~7% due to seed back-edges in SCCs, offset by elimination of the 80k-node cyclic blob.
+
 ## Known limits (future work)
 - [ ] khan/moocx recall ~0 — seed labels don't resolve to skill ids. Fix: add Khan/Junyi as skill sources OR expand label-resolution fallback.
 - [ ] Wiki resolution 14.6% — could reach 25-30% with smarter fuzzy match (wbsearchentities API + token validation) + MW opensearch guard.

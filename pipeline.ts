@@ -2467,6 +2467,32 @@ function stage6PostProc() {
   });
   console.log(`[stage 6] dropped ${beforeBandFilter - raw.length} band-inverted edges (${bandSeedExempt} seed exempt)`);
 
+  // --- Filter 0b: hypernym/subset filter (P2) ---
+  // If the prereq's significant slug tokens are a strict subset of the child's, the "prereq"
+  // is almost always a hypernym or sibling-label, not a genuine foundation:
+  //   manage-staff  ⊂  manage-musical-staff  → hypernym, not a prereq.
+  //   supervise-work  ⊂  supervise-correctional-procedures → hypernym.
+  // Seeds are exempt. Single-token prereqs (e.g. "algebra") are exempt — they're often real foundations.
+  const HYPERNYM_STOP = new Set(["a","an","the","of","to","for","in","on","at","by","with","and","or","from","as","is","are","be","that","this","these","those","their","its"]);
+  const sigSlugToks = (id: string): Set<string> => {
+    const out = new Set<string>();
+    for (const w of id.split("-")) if (w.length >= 3 && !HYPERNYM_STOP.has(w)) out.add(w);
+    return out;
+  };
+  const beforeHypernym = raw.length;
+  let hypernymSeedExempt = 0;
+  raw = raw.filter(([s, p]) => {
+    if (isSeed(s, p)) { hypernymSeedExempt++; return true; }
+    const pToks = sigSlugToks(p);
+    if (pToks.size < 2) return true; // single-token prereqs (math, algebra, physics) are real foundations
+    const sToks = sigSlugToks(s);
+    if (sToks.size === 0) return true;
+    // strict subset: all prereq tokens appear in child tokens, and child has ≥1 extra
+    for (const t of pToks) if (!sToks.has(t)) return true;
+    return sToks.size <= pToks.size; // not strict subset
+  });
+  console.log(`[stage 6] hypernym filter: dropped ${beforeHypernym - raw.length} edges (${hypernymSeedExempt} seed exempt)`);
+
   // --- Filter 1: tighten onet:tech prereqs ---
   // Specific software products (onet:tech) are rarely true prereqs:
   //   - onet:tech → onet:tech: DROP. Sibling products don't depend on each other.
@@ -2773,10 +2799,36 @@ function stage6PostProc() {
         }
       }
     }
-    let dropped = 0;
+    let dropped = 0, synonymDropped = 0;
+    // Mark (unordered) bidirectional pairs whose slugs look synonymous → drop BOTH directions (P3).
+    // Signal: slug-token Jaccard ≥ 0.5 OR one tokens ⊂ other — these are near-duplicate labels
+    // that survived stage 3b dedupe (e.g. forestry ↔ forest-management).
+    const synonymUnordered = new Set<string>();
+    {
+      const seenPairs = new Set<string>();
+      for (const [s, p] of final) {
+        if (isSeed(s, p)) continue;
+        if (!rawLlmPairs.has(`${p}\t${s}`)) continue;
+        const key = s < p ? `${s}\t${p}` : `${p}\t${s}`;
+        if (seenPairs.has(key)) continue;
+        seenPairs.add(key);
+        const a = sigSlugToks(s), b = sigSlugToks(p);
+        if (a.size === 0 || b.size === 0) continue;
+        let inter = 0;
+        for (const t of a) if (b.has(t)) inter++;
+        const jacc = inter / (a.size + b.size - inter);
+        const aSubB = [...a].every((t) => b.has(t));
+        const bSubA = [...b].every((t) => a.has(t));
+        if (jacc >= 0.5 || aSubB || bSubA) synonymUnordered.add(key);
+      }
+    }
     for (let i = final.length - 1; i >= 0; i--) {
       const [s, p] = final[i];
       if (isSeed(s, p)) continue;
+      const unordered = s < p ? `${s}\t${p}` : `${p}\t${s}`;
+      if (synonymUnordered.has(unordered)) {
+        final.splice(i, 1); synonymDropped++; continue;
+      }
       // Check reverse direction: skill p picked s as prereq
       if (!rawLlmPairs.has(`${p}\t${s}`)) continue;
       // Both directions were picked. Keep direction consistent with rawDiff: prereq should have lower raw.
@@ -2787,15 +2839,18 @@ function stage6PostProc() {
         dropped++;
       }
     }
-    if (dropped) console.log(`[stage 6] A4 bidirectional filter: dropped ${dropped} ambiguous edges`);
+    if (dropped || synonymDropped) console.log(`[stage 6] A4 bidirectional filter: dropped ${dropped} ambiguous + ${synonymDropped} synonym-pair (both directions)`);
   }
 
-  // --- Cycle-breaker: small SCCs exist from near-duplicate skills the LLM couldn't order ---
-  // (e.g. oral-health ↔ dental-health). Iteratively find SCCs; drop weakest edge per SCC.
-  // Seed edges preferred-kept — only dropped if an SCC is entirely seed edges (A1).
+  // --- Cycle-breaker: enforce strict DAG (P1) ---
+  // Previous version dropped one edge per SCC per iteration and capped iterations at 50 —
+  // dense near-duplicate SCCs left thousands of back-edges intact (~80k nodes in cycles).
+  // New approach: for each SCC, order nodes by rawDiff ascending and drop ALL back-edges
+  // (edges where prereq-rawDiff ≥ child-rawDiff in the SCC's internal linearization).
+  // Iterate until no SCC of size ≥2 remains. Seed edges preferred-kept — dropped last.
   let cyclesBroken = 0, cyclesSeedDropped = 0;
   const cycleCutLog: string[] = []; // E4: log which edges were cut for debugging
-  for (let iter = 0; iter < 50; iter++) {
+  for (let iter = 0; iter < 100; iter++) {
     // Build adjacency: prereq p → skill s (final stores [s, p])
     const adj = new Map<string, string[]>();
     for (const [s, p] of final) {
@@ -2848,22 +2903,72 @@ function stage6PostProc() {
     }
     for (const n of nodes) if (!index.has(n)) strongconnect(n);
     if (sccs.length === 0) break;
-    // Drop the edge with smallest raw-diff gap (least-confident ordering) in each SCC
+    // For each SCC: prefer linearization that keeps all seed edges forward. If seed edges
+    // form internal cycles among themselves (rare but possible), fall back to rawDiff ordering.
+    // Strategy per SCC:
+    //   1. Build subgraph of seed edges only.
+    //   2. If seed subgraph is a DAG, topo-sort the SCC with seed edges as "must-be-forward"
+    //      constraints (using Kahn on seed-only edges; ties broken by rawDiff ascending).
+    //   3. Drop all inferred back-edges in that linearization.
+    //   4. If still cyclic (seed edges themselves form a cycle), drop the weakest seed edge in it.
     const toDrop = new Set<string>();
     for (const scc of sccs) {
       const sccSet = new Set(scc);
-      let worst: [string, string] | null = null, worstGap = Infinity;
+      const internal: { s: string; p: string; gap: number; seed: boolean }[] = [];
       for (const [s, p] of final) {
-        if (sccSet.has(s) && sccSet.has(p)) {
-          const gap = (rawDiff.get(s) ?? 0) - (rawDiff.get(p) ?? 0);
-          if (gap < worstGap) { worstGap = gap; worst = [s, p]; }
+        if (!sccSet.has(s) || !sccSet.has(p)) continue;
+        const gap = (rawDiff.get(s) ?? 0) - (rawDiff.get(p) ?? 0);
+        internal.push({ s, p, gap, seed: isSeed(s, p) });
+      }
+      // Kahn topo on seed edges only (p→s means s depends on p). Ties broken by rawDiff.
+      const seedInDeg = new Map<string, number>();
+      const seedAdj = new Map<string, string[]>();
+      for (const n of scc) seedInDeg.set(n, 0);
+      for (const e of internal) if (e.seed) {
+        const arr = seedAdj.get(e.p) ?? []; arr.push(e.s); seedAdj.set(e.p, arr);
+        seedInDeg.set(e.s, (seedInDeg.get(e.s) ?? 0) + 1);
+      }
+      const rankFor = new Map<string, number>();
+      const ready: string[] = [...scc].filter((n) => (seedInDeg.get(n) ?? 0) === 0);
+      ready.sort((a, b) => (rawDiff.get(a) ?? 0) - (rawDiff.get(b) ?? 0));
+      let rank = 0;
+      const seedCycleNodes = new Set(scc);
+      while (ready.length) {
+        const u = ready.shift()!;
+        rankFor.set(u, rank++);
+        seedCycleNodes.delete(u);
+        for (const v of seedAdj.get(u) ?? []) {
+          seedInDeg.set(v, (seedInDeg.get(v) ?? 0) - 1);
+          if (seedInDeg.get(v) === 0) {
+            // insert in rawDiff order
+            let ins = 0;
+            while (ins < ready.length && (rawDiff.get(ready[ins]) ?? 0) <= (rawDiff.get(v) ?? 0)) ins++;
+            ready.splice(ins, 0, v);
+          }
         }
       }
-      if (worst) {
-        toDrop.add(`${worst[0]}\t${worst[1]}`);
-        const isS = isSeed(worst[0], worst[1]);
-        if (isS) cyclesSeedDropped++;
-        cycleCutLog.push(`${worst[0]}\t${worst[1]}\t${isS ? "seed" : "inferred"}\t${worstGap.toFixed(3)}`);
+      // Nodes left in seedCycleNodes participate in a seed-only cycle; fall back to rawDiff order for them.
+      const leftover = [...seedCycleNodes].sort((a, b) => (rawDiff.get(a) ?? 0) - (rawDiff.get(b) ?? 0));
+      for (const n of leftover) rankFor.set(n, rank++);
+      // Drop back-edges: inferred first.
+      let droppedThisScc = 0;
+      for (const e of internal) {
+        const rs = rankFor.get(e.s)!, rp = rankFor.get(e.p)!;
+        if (rp >= rs) {
+          toDrop.add(`${e.s}\t${e.p}`);
+          if (e.seed) cyclesSeedDropped++;
+          cycleCutLog.push(`${e.s}\t${e.p}\t${e.seed ? "seed" : "inferred"}\t${e.gap.toFixed(3)}`);
+          droppedThisScc++;
+        }
+      }
+      if (droppedThisScc === 0 && internal.length) {
+        // Shouldn't happen — if SCC exists, at least one edge must be a back-edge under any linear order.
+        // But safety: drop weakest inferred edge.
+        internal.sort((a, b) => (a.seed === b.seed ? a.gap - b.gap : a.seed ? 1 : -1));
+        const e = internal[0];
+        toDrop.add(`${e.s}\t${e.p}`);
+        if (e.seed) cyclesSeedDropped++;
+        cycleCutLog.push(`${e.s}\t${e.p}\t${e.seed ? "seed" : "inferred"}\t${e.gap.toFixed(3)}`);
       }
     }
     const before = final.length;
@@ -2871,8 +2976,44 @@ function stage6PostProc() {
       if (toDrop.has(`${final[i][0]}\t${final[i][1]}`)) final.splice(i, 1);
     }
     cyclesBroken += before - final.length;
+    if (before === final.length) break; // safety: no progress
   }
   console.log(`[stage 6] cycle-breaker dropped ${cyclesBroken} edges (${cyclesSeedDropped} seed)`);
+
+  // --- Post-condition: assert DAG. If not, log and force-drop remaining SCC edges. ---
+  {
+    const adj = new Map<string, string[]>();
+    for (const [s, p] of final) { const arr = adj.get(p) ?? []; arr.push(s); adj.set(p, arr); }
+    const inDeg = new Map<string, number>();
+    const allNodes = new Set<string>();
+    for (const [s, p] of final) { allNodes.add(s); allNodes.add(p); }
+    for (const n of allNodes) inDeg.set(n, 0);
+    for (const [s] of final) inDeg.set(s, (inDeg.get(s) ?? 0) + 1);
+    const q = [...allNodes].filter((n) => (inDeg.get(n) ?? 0) === 0);
+    let removed = 0;
+    const removedSet = new Set<string>(q);
+    while (q.length) {
+      const u = q.shift()!; removed++;
+      for (const v of adj.get(u) ?? []) {
+        inDeg.set(v, (inDeg.get(v) ?? 0) - 1);
+        if (inDeg.get(v) === 0 && !removedSet.has(v)) { removedSet.add(v); q.push(v); }
+      }
+    }
+    const stillInCycle = allNodes.size - removed;
+    if (stillInCycle > 0) {
+      // Drop ALL edges with both endpoints in remaining cycle set.
+      const stuck = new Set<string>();
+      for (const n of allNodes) if (!removedSet.has(n)) stuck.add(n);
+      const before = final.length;
+      for (let i = final.length - 1; i >= 0; i--) {
+        const [s, p] = final[i];
+        if (stuck.has(s) && stuck.has(p)) final.splice(i, 1);
+      }
+      console.log(`[stage 6] DAG post-condition: forced-dropped ${before - final.length} edges from ${stillInCycle} still-cyclic nodes`);
+    } else {
+      console.log(`[stage 6] DAG post-condition: OK (${allNodes.size} nodes, ${final.length} edges)`);
+    }
+  }
   if (cycleCutLog.length) {
     Deno.writeTextFileSync(`${BUILD}/6_cycle_cuts.tsv`, "skill_id\tprereq_id\tkind\tgap\n" + cycleCutLog.join("\n") + "\n");
   }
