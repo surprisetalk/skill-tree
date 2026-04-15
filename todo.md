@@ -33,27 +33,42 @@
 - [x] E3: per-edge source attribution dump to `build/8_edge_sources.tsv` (seed/inferred/heuristic classification for all 222k edges).
 - [x] E4: cycle-cut log to `build/6_cycle_cuts.tsv` (shows which edges cycle-breaker dropped and whether they were seed or inferred).
 
-## Metrics (pre/post quality pass 3)
-| metric              | before  | after   |
-| ------------------- | ------- | ------- |
-| orphan rate         | 0.092   | 0.0883  |
-| metacademy recall*  | 0.143   | 0.087   |
-| alcpl recall*       | 0.250   | 0.156   |
-| opensalt_precedes*  | 0.000   | 0.111   |
-| kendall_tau anchor  | 0.777   | 0.776   |
-| seed_in_final       | 291     | 306     |
-| top_topic_count     | 1394    | 1167    |
+## Metrics (across all quality passes)
+| metric              | baseline | pass 3  | pass 4   |
+| ------------------- | -------- | ------- | -------- |
+| orphan rate         | 0.092    | 0.0883  | **0.0844** |
+| metacademy recall*  | 0.143    | 0.087   | 0.087    |
+| alcpl recall*       | 0.250    | 0.156   | 0.156    |
+| opensalt_precedes*  | 0.000    | 0.111   | 0.111    |
+| opensalt_grade*     | —        | —       | 0.030    |
+| kendall_tau anchor  | 0.777    | 0.776   | 0.776    |
+| seed_in_final       | 291      | 306     | **22,386** |
+| total edges         | 218,459  | 215,790 | 243,783  |
+| unique topics       | 5,188    | 5,050   | **7,001** |
+| wiki coverage       | 0.138    | 0.138   | 0.145    |
+| LCSH enriched       | —        | —       | 40,443 skills |
 
-\* recall drops reflect **larger, more stable denominators** (E1 doubled holdout) — the earlier high values were small-sample noise.
+\* recall drops vs baseline reflect larger, more stable denominators (E1 doubled holdout) — the earlier high values were small-sample noise.
+
+Pass 4 key wins: **77× more seed edges in final graph** (22,386 vs 291), **+39% unique topic vocabulary** from LCSH/DBpedia ancestor chains, reduced orphan rate.
+
+## Quality pass 4 (2026-04-14, local LLM)
+- [x] B1: stage 1f2 fuzzy-retry using ESCO altLabels + paren-strip + verb-strip variants. Token-overlap guard. +785 matches (13.8% → 14.6% wiki resolution).
+- [x] B2: stage 1j LCSH broader-chain cache (streams 95MB gz, builds label→ancestor_chain). **130,378 slugs with ancestor chains** from 273k LCSH labels.
+- [x] B3: stage 1k DBpedia SKOS broader-chain cache (streams 44MB bz2). 1.47M labels, 1.26M with parents; walks depth-3; cached `build/1k_dbpedia_tree.tsv`. Pattern blocklist filter during walk (kills wiki-category junk at source).
+- [x] B2+B3 integration: stage 7 topic enrichment loads both trees, matches against skill id / title slug / existing topics, adds ancestors (token-overlap guarded) alongside P279 parents.
+- [x] A2 partial: OpenSALT within-framework grade ordering — within each CASE framework, emit earlier-grade → later-grade pairs for standards with ≥2 shared significant tokens. New source `opensalt_grade` (50k+ pairs emitted, capped). Tracked separately in holdout_recall.
+- [x] A3: prereq retrieval expanded — added `GLOBAL_K=5` cross-topic candidate slot (scoped to skills in topics sharing tokens with current, sub-quadratic).
+- [x] A4: bidirectional low-confidence filter in stage 6 — if LLM picked both A→B and B→A, keep only direction consistent with rawDiff.
+- [x] E2: Apfel-based precision eval (cache-resumable). 500-sample run hit rate 0.603 on 126 completed judgments (Apfel dropped ~375 under 8-way concurrency; retry + lower concurrency added).
+- [x] Apfel stage-5 re-run setup: `APFEL_OUT` env var writes to separate cache (`5_prereqs_apfel.tsv`); retries with backoff; tested on 2k sample.
 
 ## Known limits (future work)
-- [ ] khan/moocx recall ~0 — seed labels don't resolve to skill ids (Khan concepts aren't ingested as skills; MOOCCubeX Chinese labels have <10% resolution). Fix: add Khan/Junyi as skill sources OR improve label-resolution fallback.
-- [ ] Wiki resolution 13.8% — fuzzy match + altLabel retry (B1) not implemented. Would cascade into better P279 topics + descriptions.
-- [ ] LCSH broader-chain trees (B2) and DBpedia broader hierarchy (B3) unused as parent-topic source. Best implemented after B1.
-- [ ] A2 full expansion (Junyi hierarchy, ASSISTments temporal, OpenSALT grade ordering) — needs streaming parsers + skill-universe expansion.
-- [ ] A3/A4 prereq retrieval rework + bidirectional — requires stage 5 LLM re-run ($$).
-- [ ] E2 precision eval via Haiku sample-200 — skipped for cost.
-- [ ] Domain leakage mean 0.337 — structural issue with sparse topics; needs wiki coverage uplift first.
+- [ ] khan/moocx recall ~0 — seed labels don't resolve to skill ids. Fix: add Khan/Junyi as skill sources OR expand label-resolution fallback.
+- [ ] Wiki resolution 14.6% — could reach 25-30% with smarter fuzzy match (wbsearchentities API + token validation) + MW opensearch guard.
+- [ ] Full Apfel stage-5 re-run (~100k × 2-5s each ≈ 6-12 hours) — infrastructure ready, not executed.
+- [ ] Merge strategy for Apfel vs Haiku caches (consensus union vs confidence-weighted).
+- [ ] Domain leakage mean 0.337 — should improve with B2+B3 ancestor chains; needs verification run.
 
 ## Ideas
 - [ ] Add Khan/Junyi as skill sources (expensive: full stage 1 + embeddings re-run)

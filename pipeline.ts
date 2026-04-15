@@ -1818,8 +1818,11 @@ function computePrereqCandidates(): Map<string, number[]> {
   }
 
   const K = Number(Deno.env.get("PREREQ_K") ?? "15");
-  const MIN_DIFF = Number(Deno.env.get("PREREQ_MIN_DIFF_DELTA") ?? "0.3"); // require strictly lower raw difficulty
-  const ANCESTOR_K = Number(Deno.env.get("PREREQ_ANCESTOR_K") ?? "5"); // of the K slots, reserve for low-diff ancestors
+  const MIN_DIFF = Number(Deno.env.get("PREREQ_MIN_DIFF_DELTA") ?? "0.3");
+  const ANCESTOR_K = Number(Deno.env.get("PREREQ_ANCESTOR_K") ?? "5");
+  // A3: reserve slots for globally-closest lower-diff candidates (catches cross-topic prereqs
+  // that topic-scoped retrieval misses, e.g. "linear-algebra" as prereq of "pca").
+  const GLOBAL_K = Number(Deno.env.get("PREREQ_GLOBAL_K") ?? "5");
   const out = new Map<string, number[]>();
   const outLines: string[] = [];
 
@@ -1861,25 +1864,58 @@ function computePrereqCandidates(): Map<string, number[]> {
       }
     }
 
-    // Top (K - ancestorSet.size) by cosine similarity among candidates (exclude ancestors we'll add directly)
+    // Top (K - ancestorSet.size - GLOBAL_K) by cosine similarity among in-topic candidates
     const sOff = i * DIM;
     const top: { idx: number; score: number }[] = [];
-    const remainingK = Math.max(1, K - ancestorSet.size);
+    const globalTop: { idx: number; score: number }[] = [];
+    const inTopicSlots = Math.max(1, K - ancestorSet.size - GLOBAL_K);
     for (const j of candidates) {
       if (ancestorSet.has(j)) continue;
       let sc = 0;
       const aOff = j * DIM;
       for (let d = 0; d < DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];
-      if (top.length < remainingK) {
+      if (top.length < inTopicSlots) {
         top.push({ idx: j, score: sc });
-        if (top.length === remainingK) top.sort((a, b) => a.score - b.score);
+        if (top.length === inTopicSlots) top.sort((a, b) => a.score - b.score);
       } else if (sc > top[0].score) {
         top[0] = { idx: j, score: sc };
         top.sort((a, b) => a.score - b.score);
       }
     }
     top.sort((a, b) => b.score - a.score);
-    const idxs = [...ancestorSet, ...top.map((t) => t.idx)].slice(0, K);
+
+    // A3: add GLOBAL_K globally-closest lower-diff skills. Scoped to cross-topic-token pool
+    // to stay sub-quadratic — skills whose topic slugs share tokens with our skill's topic slugs.
+    const picked = new Set<number>([...ancestorSet, ...top.map((t) => t.idx), i]);
+    if (GLOBAL_K > 0 && topics.length > 0) {
+      // Build cross-topic pool: skills in topics sharing a significant token with our topics
+      const myTopicToks = new Set<string>();
+      for (const t of topics) for (const tok of t.split("-")) if (tok.length >= 5) myTopicToks.add(tok);
+      const crossPool = new Set<number>();
+      for (const [otherTopic, otherIdxs] of topicIdx) {
+        let shared = false;
+        for (const tok of otherTopic.split("-")) if (tok.length >= 5 && myTopicToks.has(tok)) { shared = true; break; }
+        if (!shared) continue;
+        for (const j of otherIdxs) crossPool.add(j);
+      }
+      for (const j of crossPool) {
+        if (picked.has(j)) continue;
+        if (raw[j] + MIN_DIFF > raw[i]) continue;
+        let sc = 0;
+        const aOff = j * DIM;
+        for (let d = 0; d < DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];
+        if (globalTop.length < GLOBAL_K) {
+          globalTop.push({ idx: j, score: sc });
+          if (globalTop.length === GLOBAL_K) globalTop.sort((a, b) => a.score - b.score);
+        } else if (sc > globalTop[0].score) {
+          globalTop[0] = { idx: j, score: sc };
+          globalTop.sort((a, b) => a.score - b.score);
+        }
+      }
+      globalTop.sort((a, b) => b.score - a.score);
+    }
+
+    const idxs = [...ancestorSet, ...top.map((t) => t.idx), ...globalTop.map((t) => t.idx)].slice(0, K);
     out.set(skills[i].id, idxs);
     outLines.push(`${skills[i].id}\t${idxs.join(",")}`);
     if ((i + 1) % 5000 === 0) {
@@ -2138,44 +2174,65 @@ async function stage5ApfelPrereq() {
   const { skills } = parseSkillsWithDifficulty();
   let candidates = loadPrereqCandidates();
   if (candidates.size !== skills.length) candidates = computePrereqCandidates();
-  const cache = loadPrereqCache();
+  // Separate cache file for Apfel so Haiku cache stays intact (env: APFEL_OUT)
+  const APFEL_OUT = Deno.env.get("APFEL_OUT") ?? PREREQ_CACHE;
+  const localCache = new Map<string, string>();
+  try {
+    for (const line of Deno.readTextFileSync(APFEL_OUT).split("\n")) {
+      if (!line) continue;
+      const tab = line.indexOf("\t");
+      localCache.set(line.slice(0, tab), line.slice(tab + 1));
+    }
+  } catch { /* fresh */ }
   const skillOrder = skills.map((s) => s.id);
   const todo: { s: typeof skills[0]; candTitles: string[]; candIdxs: number[] }[] = [];
   for (let i = 0; i < skills.length; i++) {
     const s = skills[i];
-    if (cache.has(s.id)) continue;
+    if (localCache.has(s.id)) continue;
     const cands = candidates.get(s.id);
     if (!cands || cands.length === 0) continue;
     todo.push({ s, candTitles: cands.map((j) => skills[j].title), candIdxs: cands });
   }
-  console.log(`[stage 5-apfel] targets: ${skills.length}, cached: ${cache.size}, to run: ${todo.length}`);
+  console.log(`[stage 5-apfel] out=${APFEL_OUT}, targets: ${skills.length}, cached: ${localCache.size}, to run: ${todo.length}`);
   if (!todo.length) return;
 
   const ENDPOINT = Deno.env.get("APFEL_ENDPOINT") ?? "http://127.0.0.1:11435/v1/chat/completions";
-  const CONCURRENCY = Number(Deno.env.get("APFEL_CONCURRENCY") ?? "8");
+  const CONCURRENCY = Number(Deno.env.get("APFEL_CONCURRENCY") ?? "4"); // lower default — Apfel drops under heavy load
   const LIMIT = Deno.env.get("APFEL_LIMIT") ? Number(Deno.env.get("APFEL_LIMIT")) : todo.length;
   const queue = todo.slice(0, LIMIT);
   console.log(`[stage 5-apfel] endpoint=${ENDPOINT} concurrency=${CONCURRENCY} queued=${queue.length}`);
 
-  const fh = Deno.openSync(PREREQ_CACHE, { create: true, append: true });
+  const fh = Deno.openSync(APFEL_OUT, { create: true, append: true });
   const enc = new TextEncoder();
   const t0 = performance.now();
-  let done = 0, errs = 0;
+  let done = 0, errs = 0, retries = 0;
 
-  async function callApfel(prompt: string): Promise<string> {
-    const res = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "apple-foundationmodel",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.0,
-        max_tokens: 40,
-      }),
-    });
-    if (!res.ok) throw new Error(`apfel ${res.status}: ${(await res.text()).slice(0, 150)}`);
-    const j = await res.json();
-    return (j.choices?.[0]?.message?.content ?? "").replace(/[\t\n\r]/g, " ");
+  async function callApfel(prompt: string, maxRetries = 3): Promise<string> {
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "apple-foundationmodel",
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.0,
+            max_tokens: 40,
+          }),
+        });
+        if (!res.ok) throw new Error(`apfel ${res.status}`);
+        const j = await res.json();
+        return (j.choices?.[0]?.message?.content ?? "").replace(/[\t\n\r]/g, " ");
+      } catch (e) {
+        lastErr = e as Error;
+        if (attempt < maxRetries) {
+          retries++;
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        }
+      }
+    }
+    throw lastErr ?? new Error("apfel failed");
   }
 
   async function worker() {
@@ -2198,15 +2255,15 @@ async function stage5ApfelPrereq() {
       if (done % 200 === 0) {
         const dt = (performance.now() - t0) / 1000;
         const rate = done / dt;
-        console.log(`  ${done}/${LIMIT} (${rate.toFixed(1)}/s, ETA ${((queue.length) / rate / 60).toFixed(1)}min, errs=${errs})`);
+        console.log(`  ${done}/${LIMIT} (${rate.toFixed(1)}/s, ETA ${((queue.length) / rate / 60).toFixed(1)}min, errs=${errs}, retries=${retries})`);
       }
     }
   }
   await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
   fh.close();
   const dt = (performance.now() - t0) / 1000;
-  console.log(`[stage 5-apfel] done: ${done} in ${dt.toFixed(0)}s, errs=${errs}`);
-  writeStats(52, { processed: done, errors: errs, endpoint: ENDPOINT, total_seconds: dt });
+  console.log(`[stage 5-apfel] done: ${done} in ${dt.toFixed(0)}s, errs=${errs}, retries=${retries}`);
+  writeStats(52, { processed: done, errors: errs, retries, endpoint: ENDPOINT, total_seconds: dt });
 }
 
 async function stage5OllamaPrereq() {
@@ -2218,17 +2275,27 @@ async function stage5OllamaPrereq() {
   } else {
     console.log(`[stage 5-ollama] loaded ${candidates.size} cached candidate lists`);
   }
-  const cache = loadPrereqCache();
+  // OLLAMA_OUT env: separate cache path (mirror APFEL_OUT). Resume-compatible: skills already
+  // in OLLAMA_OUT are skipped. Useful for continuing a crashed/partial Apfel run.
+  const OLLAMA_OUT = Deno.env.get("OLLAMA_OUT") ?? PREREQ_CACHE;
+  const localCache = new Map<string, string>();
+  try {
+    for (const line of Deno.readTextFileSync(OLLAMA_OUT).split("\n")) {
+      if (!line) continue;
+      const tab = line.indexOf("\t");
+      localCache.set(line.slice(0, tab), line.slice(tab + 1));
+    }
+  } catch { /* fresh */ }
   const skillOrder = skills.map((s) => s.id);
   const todo: { idx: number; s: typeof skills[0]; candTitles: string[]; candIdxs: number[] }[] = [];
   for (let i = 0; i < skills.length; i++) {
     const s = skills[i];
-    if (cache.has(s.id)) continue;
+    if (localCache.has(s.id)) continue;
     const cands = candidates.get(s.id);
     if (!cands || cands.length === 0) continue;
     todo.push({ idx: i, s, candTitles: cands.map((j) => skills[j].title), candIdxs: cands });
   }
-  console.log(`[stage 5-ollama] targets: ${skills.length}, cached: ${cache.size}, to run: ${todo.length}`);
+  console.log(`[stage 5-ollama] out=${OLLAMA_OUT}, targets: ${skills.length}, cached: ${localCache.size}, to run: ${todo.length}`);
   if (!todo.length) { console.log("[stage 5-ollama] nothing to do"); return; }
 
   const MODEL = Deno.env.get("OLLAMA_PREREQ_MODEL") ?? "gpt-oss:20b";
@@ -2237,7 +2304,7 @@ async function stage5OllamaPrereq() {
   const queue = todo.slice(0, LIMIT);
   console.log(`[stage 5-ollama] model=${MODEL} concurrency=${CONCURRENCY} queued=${queue.length}`);
 
-  const fh = Deno.openSync(PREREQ_CACHE, { create: true, append: true });
+  const fh = Deno.openSync(OLLAMA_OUT, { create: true, append: true });
   const enc = new TextEncoder();
   const t0 = performance.now();
   let done = 0, errs = 0;
@@ -2687,6 +2754,42 @@ function stage6PostProc() {
   } catch { /* no seed edges */ }
   console.log(`[stage 6] seed edges: added=${seedAdded} skipped_missing=${seedSkippedMissing} dup=${seedSkippedDup} holdout=${seedHoldout} diff_override=${seedDiffOverride}`);
 
+  // A4: bidirectional low-confidence filter. If LLM picked A as prereq of B AND B as prereq
+  // of A, the direction is ambiguous. Keep only the direction consistent with raw difficulty
+  // (higher-diff skill has lower-diff prereq). Seeds exempt.
+  {
+    // Reconstruct raw LLM picks (before any filter) from pick map
+    const rawLlmPairs = new Set<string>();
+    for (const [id, resp] of pick) {
+      if (!resp || resp === "none") continue;
+      if (/-/.test(resp) || /[a-z]/.test(resp)) {
+        for (const pid of resp.split(",")) if (pid) rawLlmPairs.add(`${id}\t${pid}`);
+      } else {
+        const cands = candidates.get(id) ?? [];
+        const picks = parsePrereqResponse(resp, cands.length);
+        for (const p of picks) {
+          const prereqId = order[cands[p]];
+          if (prereqId) rawLlmPairs.add(`${id}\t${prereqId}`);
+        }
+      }
+    }
+    let dropped = 0;
+    for (let i = final.length - 1; i >= 0; i--) {
+      const [s, p] = final[i];
+      if (isSeed(s, p)) continue;
+      // Check reverse direction: skill p picked s as prereq
+      if (!rawLlmPairs.has(`${p}\t${s}`)) continue;
+      // Both directions were picked. Keep direction consistent with rawDiff: prereq should have lower raw.
+      const rs = rawDiff.get(s) ?? 0, rp = rawDiff.get(p) ?? 0;
+      // If the current direction s→p (prereq p, skill s) has rawDiff(p) > rawDiff(s), that's inverted.
+      if (rp > rs + 0.2) {
+        final.splice(i, 1);
+        dropped++;
+      }
+    }
+    if (dropped) console.log(`[stage 6] A4 bidirectional filter: dropped ${dropped} ambiguous edges`);
+  }
+
   // --- Cycle-breaker: small SCCs exist from near-duplicate skills the LLM couldn't order ---
   // (e.g. oral-health ↔ dental-health). Iteratively find SCCs; drop weakest edge per SCC.
   // Seed edges preferred-kept — only dropped if an SCC is entirely seed edges (A1).
@@ -2932,7 +3035,26 @@ function stage7Finalize() {
   // First pass: assemble candidate topic sets (skip emission until we know topic frequencies)
   type Row = { id: string; title: string; desc: string; d: number; ps: string; occ: string; topics: string[]; gStart: string; gEnd: string };
   const pending: Row[] = [];
-  let wikiEnriched = 0, frameworkFiltered = 0, descEnriched = 0, dropped = 0, p279Filtered = 0;
+  let wikiEnriched = 0, frameworkFiltered = 0, descEnriched = 0, dropped = 0, p279Filtered = 0, lcshEnriched = 0;
+  // B2/B3: LCSH + DBpedia ancestor chain caches (stages 1j, 1k). Merged into one lookup map.
+  const lcshTree = new Map<string, string[]>();
+  const loadTree = (path: string) => {
+    try {
+      for (const line of Deno.readTextFileSync(path).split("\n")) {
+        if (!line) continue;
+        const tab = line.indexOf("\t");
+        const slug = line.slice(0, tab);
+        const anc = line.slice(tab + 1).split(",").filter(Boolean);
+        if (slug && anc.length) {
+          const existing = lcshTree.get(slug);
+          lcshTree.set(slug, existing ? [...new Set([...existing, ...anc])] : anc);
+        }
+      }
+    } catch { /* missing */ }
+  };
+  loadTree(`${BUILD}/1j_lcsh_tree.tsv`);
+  loadTree(`${BUILD}/1k_dbpedia_tree.tsv`);
+  console.log(`[stage 7] loaded ${lcshTree.size} LCSH+DBpedia ancestor chains`);
   for (const s of skills) {
     if (isOrphanLeaf(s.id) && isCruft(s)) { dropped++; continue; }
     const d = diff.get(s.id);
@@ -2972,7 +3094,29 @@ function stage7Finalize() {
       if (parentTopics.length >= 4) break;
     }
     if (parentTopics.length) wikiEnriched++;
-    const topics = [...new Set([...filtered, ...parentTopics])].slice(0, TOPIC_CAP);
+    // B2: LCSH broader-chain enrichment. For each kept topic and the skill's own id/title,
+    // look up ancestor chain from LCSH tree cache and append (token-overlap guarded).
+    const lcshTopics: string[] = [];
+    const lcshCandidates = [s.id, slugify(s.title), ...filtered];
+    for (const cand of lcshCandidates) {
+      const anc = lcshTree.get(cand);
+      if (!anc) continue;
+      for (const a of anc) {
+        if (lcshTopics.includes(a)) continue;
+        if (yearRe.test(a) || wikiCategoryRe.test(a) || frameworkRe.test(a)) continue;
+        if (sigTokens(a).size === 0) continue;
+        // overlap guard: ancestor slug must share a token with skill signature
+        const aToks = sigTokens(a);
+        let ovl = 0;
+        for (const tok of aToks) if (skillTokens.has(tok)) { ovl++; break; }
+        if (!ovl) continue;
+        lcshTopics.push(a);
+        if (lcshTopics.length >= 3) break;
+      }
+      if (lcshTopics.length >= 3) break;
+    }
+    if (lcshTopics.length) lcshEnriched++;
+    const topics = [...new Set([...filtered, ...parentTopics, ...lcshTopics])].slice(0, TOPIC_CAP);
     let desc = s.description;
     const wikiText = wikiSummary.get(s.id);
     if (wikiText && desc.length < 80) { desc = wikiText; descEnriched++; }
@@ -3004,10 +3148,15 @@ function stage7Finalize() {
     "information-skills","management-skills","nondestructive-testing","mathematical-optimization",
     "handling-and-moving","personnel-management","working-with-machinery-and-specialised-equipment",
   ]);
-  // Hard blocklist: Wikipedia categories that slipped the pattern filter but are too broad
+  // Hard blocklist: Wikipedia/LCSH ancestors that slipped the pattern filter but are too broad.
+  // "professional-employees", "persons", "scientists" etc. are top-of-hierarchy collective nouns.
   const topicBlocklist = new Set([
     "photomechanical-processes", "flying-machines", "rome-officials-and-employees",
     "traffic-regulations", "units-of-measurement",
+    // LCSH top-of-hierarchy collective nouns (too broad to be useful):
+    "professional-employees", "employees", "persons", "specialists", "scientists",
+    "workers", "people", "occupations", "officials", "personnel", "staff",
+    "professionals", "practitioners", "technicians", "operators",
   ]);
   let singletonDropped = 0, genericDropped = 0;
   for (const r of pending) {
@@ -3063,6 +3212,7 @@ function stage7Finalize() {
     unreachable: emitted - visited.size,
     wiki_desc_enriched: descEnriched,
     wiki_topic_enriched: wikiEnriched,
+    lcsh_topic_enriched: lcshEnriched,
     framework_topics_filtered: frameworkFiltered,
     p279_topics_filtered: p279Filtered,
     singleton_topics_dropped: singletonDropped,
@@ -3549,6 +3699,62 @@ async function stage1eSeedEdges() {
     }
   }
 
+  // 6. OpenSALT within-framework grade ordering (A2): for each framework with CFAssociations
+  //    of type "isChildOf", group leaf standards by subject thread (via code prefix) and emit
+  //    earlier-grade → later-grade prereq edges for same-parent siblings across adjacent grades.
+  //    Only emits pairs with shared token overlap to avoid spurious cross-subject edges.
+  {
+    const dir = "data/opensalt";
+    let emitted = 0;
+    const STOPT = new Set(["the","a","an","of","in","on","for","to","and","or","is","at","by","with","from","as","be","that","this","which","can","will","should","about","each","student","students","their","they","them","are","use","uses"]);
+    const sigT = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length >= 4 && !STOPT.has(w)));
+    for (const f of Deno.readDirSync(dir)) {
+      if (!f.name.endsWith(".json") || f.name === "index.json") continue;
+      let doc: { CFItems?: { identifier: string; humanCodingScheme?: string; fullStatement?: string; educationLevel?: string[] }[] };
+      try { doc = JSON.parse(Deno.readTextFileSync(`${dir}/${f.name}`)); } catch { continue; }
+      type Node = { label: string; grade: number; code: string };
+      const nodes: Node[] = [];
+      for (const it of doc.CFItems || []) {
+        if (!it.fullStatement || it.fullStatement.length < 15) continue;
+        const grades: number[] = [];
+        for (const el of it.educationLevel || []) {
+          const v = (el || "").toUpperCase();
+          if (v === "KG" || v === "K") grades.push(0);
+          else if (v === "PK") grades.push(-1);
+          else if (/^\d+$/.test(v)) grades.push(Number(v));
+        }
+        if (!grades.length) continue;
+        const minG = Math.min(...grades);
+        if (minG < 0 || minG > 12) continue;
+        nodes.push({ label: it.fullStatement.slice(0, 120), grade: minG, code: it.humanCodingScheme || "" });
+      }
+      if (nodes.length < 10) continue;
+      // Group by grade; within framework, emit earlier-grade → later-grade pairs with token overlap
+      nodes.sort((a, b) => a.grade - b.grade);
+      for (let i = 0; i < nodes.length; i++) {
+        const ai = nodes[i];
+        const ta = sigT(ai.label);
+        if (ta.size < 2) continue;
+        // Look ahead to skills at grade+1..grade+3 with token overlap
+        for (let j = i + 1; j < nodes.length; j++) {
+          const aj = nodes[j];
+          if (aj.grade <= ai.grade) continue;
+          if (aj.grade > ai.grade + 3) break;
+          const tb = sigT(aj.label);
+          let overlap = 0;
+          for (const t of ta) if (tb.has(t)) overlap++;
+          if (overlap < 2) continue; // require ≥2 shared significant tokens
+          addRaw(ai.label, aj.label, "opensalt_grade", `${ai.code || "c"}_g${ai.grade}->${aj.code || "c"}_g${aj.grade}`);
+          emitted++;
+          if (emitted > 50000) break; // safety cap
+        }
+        if (emitted > 50000) break;
+      }
+      if (emitted > 50000) break;
+    }
+    console.log(`[stage 1e] opensalt_grade: emitted ${emitted} grade-ordering pairs`);
+  }
+
   console.log(`[stage 1e] collected ${rawPairs.length} raw pairs across ${Object.keys(perSource).length} sources`);
 
   // Pass 1: exact resolution. Collect unresolved labels for embedding fallback.
@@ -3853,6 +4059,345 @@ async function stage1fWikiResolve() {
   });
 }
 
+// ---------- stage 1j: LCSH broader-chain tree cache (B2) ----------
+// Streams LCSH gzipped N-Triples; builds URI → { label, parents[] }; writes slug → ancestor_slugs[]
+// so stage 7 can enrich topic chains without re-reading 95MB gz file every run.
+async function stage1jLcshTree() {
+  console.log("[stage 1j] building LCSH broader-chain cache…");
+  const labels = new Map<string, string>(); // uri → prefLabel
+  const parents = new Map<string, string[]>(); // uri → parent_uris
+  const PREF = "http://www.w3.org/2004/02/skos/core#prefLabel";
+  const BROADER = "http://www.w3.org/2004/02/skos/core#broader";
+  const rxPref = /^<([^>]+)>\s+<[^>]+prefLabel>\s+"((?:[^"\\]|\\.)*)"(?:@en)?\s*\.$/;
+  const rxBroader = /^<([^>]+)>\s+<[^>]+broader>\s+<([^>]+)>\s*\.$/;
+  let lines = 0;
+  await streamLines(["sh", "-c", "gunzip -c data/lcsh/subjects.skosrdf.nt.gz"], (line) => {
+    lines++;
+    if (lines % 2000000 === 0) console.log(`  ${lines} lines, ${labels.size} labels, ${parents.size} with parents`);
+    if (line.length < 60 || line[0] !== "<") return;
+    if (line.includes(PREF)) {
+      const m = rxPref.exec(line);
+      if (m) {
+        const lbl = m[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        // Reject noisy parenthesized forms and very long labels; keep human-readable subject headings
+        if (lbl.length >= 2 && lbl.length <= 80 && !lbl.includes("--")) labels.set(m[1], lbl);
+      }
+    } else if (line.includes(BROADER)) {
+      const m = rxBroader.exec(line);
+      if (m) {
+        const arr = parents.get(m[1]) ?? []; arr.push(m[2]); parents.set(m[1], arr);
+      }
+    }
+  });
+  console.log(`[stage 1j] parsed: ${labels.size} labels, ${parents.size} concepts with parents`);
+
+  // Walk each concept's broader chain up to depth 4, collect ancestor labels (dedup, preserve order)
+  const DEPTH = 4;
+  const slugToAncestors = new Map<string, string[]>();
+  for (const [uri, lbl] of labels) {
+    const slug = slugify(lbl);
+    if (!slug || slug.length > 80) continue;
+    const seen = new Set<string>([uri]);
+    const anc: string[] = [];
+    let frontier = parents.get(uri) || [];
+    for (let d = 0; d < DEPTH && frontier.length; d++) {
+      const next: string[] = [];
+      for (const p of frontier) {
+        if (seen.has(p)) continue;
+        seen.add(p);
+        const pLbl = labels.get(p);
+        if (pLbl) {
+          const pSlug = slugify(pLbl);
+          if (pSlug && pSlug !== slug && !anc.includes(pSlug)) anc.push(pSlug);
+        }
+        for (const pp of (parents.get(p) || [])) next.push(pp);
+      }
+      frontier = next;
+    }
+    if (anc.length) slugToAncestors.set(slug, anc.slice(0, 6));
+  }
+  console.log(`[stage 1j] slugs with ancestor chains: ${slugToAncestors.size}`);
+
+  // Write cache: slug \t anc1,anc2,...
+  const rows: string[] = [];
+  for (const [slug, anc] of slugToAncestors) rows.push(`${slug}\t${anc.join(",")}`);
+  Deno.writeTextFileSync(`${BUILD}/1j_lcsh_tree.tsv`, rows.join("\n") + "\n");
+  writeStats(1113, {
+    labels: labels.size,
+    concepts_with_parents: parents.size,
+    slugs_with_ancestors: slugToAncestors.size,
+  });
+}
+
+// ---------- stage 1k: DBpedia SKOS broader tree cache (B3) ----------
+// Turtle format: <subject> dcterms:subject/skos:broader <object> ; <subject> skos:prefLabel "..."@en
+async function stage1kDbpediaTree() {
+  console.log("[stage 1k] building DBpedia SKOS broader-chain cache…");
+  const labels = new Map<string, string>();
+  const parents = new Map<string, string[]>();
+  const PREF = "skos/core#prefLabel";
+  const BROADER = "skos/core#broader";
+  // N-triples format with full URIs (not Turtle prefixes)
+  const rxPref = /^<([^>]+)>\s+<[^>]+prefLabel>\s+"((?:[^"\\]|\\.)*)"(?:@en)?\s*\.$/;
+  const rxBroader = /^<([^>]+)>\s+<[^>]+broader>\s+<([^>]+)>\s*\.$/;
+  let lines = 0;
+  await streamLines(["sh", "-c", "bzcat data/dbpedia/skos_categories_en.ttl.bz2"], (line) => {
+    lines++;
+    if (lines % 2000000 === 0) console.log(`  ${lines} lines, ${labels.size} labels`);
+    if (line.length < 50) return;
+    if (line.includes(PREF)) {
+      const m = rxPref.exec(line);
+      if (m) {
+        const lbl = m[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        if (lbl.length >= 2 && lbl.length <= 80) labels.set(m[1], lbl);
+      }
+    } else if (line.includes(BROADER)) {
+      const m = rxBroader.exec(line);
+      if (m) {
+        const arr = parents.get(m[1]) ?? []; arr.push(m[2]); parents.set(m[1], arr);
+      }
+    }
+  });
+  console.log(`[stage 1k] parsed: ${labels.size} labels, ${parents.size} with parents`);
+
+  // Wikipedia-category pattern filter — kill junk during tree build
+  const JUNK = /_by_country$|_by_region$|_by_type$|_by_year$|_introduced_in_|_established_in_|_disestablished_in_|_founded_in_|_born_in_|_died_in_|_set_in_|^Category:People_in_|_people$|_in_history$/i;
+  const DEPTH = 3;
+  const slugToAncestors = new Map<string, string[]>();
+  for (const [uri, lbl] of labels) {
+    if (JUNK.test(uri) || JUNK.test(lbl)) continue;
+    const slug = slugify(lbl);
+    if (!slug || slug.length > 80) continue;
+    const seen = new Set<string>([uri]);
+    const anc: string[] = [];
+    let frontier = parents.get(uri) || [];
+    for (let d = 0; d < DEPTH && frontier.length; d++) {
+      const next: string[] = [];
+      for (const p of frontier) {
+        if (seen.has(p)) continue;
+        seen.add(p);
+        if (JUNK.test(p)) continue;
+        const pLbl = labels.get(p);
+        if (pLbl && !JUNK.test(pLbl)) {
+          const pSlug = slugify(pLbl);
+          if (pSlug && pSlug !== slug && !anc.includes(pSlug)) anc.push(pSlug);
+        }
+        for (const pp of (parents.get(p) || [])) next.push(pp);
+      }
+      frontier = next;
+    }
+    if (anc.length) slugToAncestors.set(slug, anc.slice(0, 5));
+  }
+  console.log(`[stage 1k] slugs with ancestor chains: ${slugToAncestors.size}`);
+  // Stream-write to avoid OOM (1M+ rows join too large for single buffer)
+  const outPath = `${BUILD}/1k_dbpedia_tree.tsv`;
+  const fh = Deno.openSync(outPath, { create: true, write: true, truncate: true });
+  const encOut = new TextEncoder();
+  for (const [slug, anc] of slugToAncestors) {
+    fh.writeSync(encOut.encode(`${slug}\t${anc.join(",")}\n`));
+  }
+  fh.close();
+  writeStats(1114, {
+    labels: labels.size,
+    concepts_with_parents: parents.size,
+    slugs_with_ancestors: slugToAncestors.size,
+  });
+}
+
+// ---------- stage 1f2: fuzzy retry — altLabels + title variants (B1) ----------
+async function stage1f2WikiRetry() {
+  console.log("[stage 1f2] fuzzy retry for unmatched skills…");
+  // Load current state of 1f cache
+  const cachePath = `${BUILD}/1f_wiki.jsonl`;
+  const resolved = new Map<string, { wiki_title?: string; qid?: string }>();
+  try {
+    const text = Deno.readTextFileSync(cachePath);
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      try {
+        const d = JSON.parse(line);
+        resolved.set(d.id, { wiki_title: d.wiki_title, qid: d.qid });
+      } catch { /* skip */ }
+    }
+  } catch { throw new Error("run stage 1f first"); }
+
+  const idx = loadSkillIndex();
+  const unmatched: string[] = [];
+  for (const id of idx.idSet) {
+    const r = resolved.get(id);
+    if (!r || !r.wiki_title) unmatched.push(id);
+  }
+  console.log(`[stage 1f2] unmatched: ${unmatched.length} / ${idx.idSet.size}`);
+  if (!unmatched.length) {
+    writeStats(1112, { unmatched: 0, new_matches: 0 });
+    return;
+  }
+
+  // Collect alternate labels per skill id
+  const titleById = new Map<string, string>();
+  const altsById = new Map<string, string[]>();
+  {
+    const tlines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
+    const hdr = tlines[0].split("\t");
+    const iDesc = hdr.indexOf("description");
+    for (let i = 1; i < tlines.length; i++) {
+      const c = tlines[i].split("\t");
+      if (c[0]) titleById.set(c[0], c[1] || "");
+      // Use first sentence of description as another candidate if short
+      const desc = c[iDesc] || "";
+      const firstSent = desc.split(/[.!?]\s/)[0];
+      if (firstSent && firstSent.length < 60 && firstSent.length > 4) {
+        const arr = altsById.get(c[0]) ?? []; arr.push(firstSent); altsById.set(c[0], arr);
+      }
+    }
+  }
+
+  // ESCO altLabels from source CSV
+  try {
+    const rows = parseCsv(Deno.readTextFileSync("data/esco/skills_en.csv"));
+    const hdr = rows[0];
+    const iLabel = hdr.indexOf("preferredLabel");
+    const iAlt = hdr.indexOf("altLabels");
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const pref = (r[iLabel] || "").trim();
+      const alt = (r[iAlt] || "").trim();
+      if (!pref || !alt) continue;
+      const id = slugify(pref);
+      if (!idx.idSet.has(id)) continue;
+      const labels = alt.split(/\n+/).map((s) => s.trim()).filter((s) => s.length > 2 && s.length < 80);
+      if (!labels.length) continue;
+      const arr = altsById.get(id) ?? []; for (const l of labels) arr.push(l); altsById.set(id, arr);
+    }
+  } catch { /* no esco */ }
+
+  // Lightcast: already well-named, skip.
+  // ONET: element name is already title. Try ESCO-style variant "X (computing)" strip: remove parenthetical
+  for (const id of unmatched) {
+    const t = titleById.get(id);
+    if (!t) continue;
+    const noParen = t.replace(/\s*\([^)]*\)\s*/g, " ").trim();
+    if (noParen && noParen !== t) {
+      const arr = altsById.get(id) ?? []; arr.push(noParen); altsById.set(id, arr);
+    }
+    // Strip verb prefix for ESCO-style action skills
+    const verbStripped = t.replace(/^(manage|perform|provide|ensure|apply|use|develop|maintain|implement|assess|evaluate)\s+/i, "").trim();
+    if (verbStripped && verbStripped !== t && verbStripped.length > 4) {
+      const arr = altsById.get(id) ?? []; arr.push(verbStripped); altsById.set(id, arr);
+    }
+  }
+
+  const toArticleTitle = (raw: string): string => {
+    const s = raw.replace(/[_-]/g, " ").replace(/\s+/g, " ").trim();
+    if (!s) return "";
+    return s[0].toUpperCase() + s.slice(1);
+  };
+
+  // Build queue: (id, [candidate titles]). Pass to batch-resolver.
+  type Task = { id: string; cands: string[] };
+  const tasks: Task[] = [];
+  for (const id of unmatched) {
+    const alts = altsById.get(id) ?? [];
+    if (!alts.length) continue;
+    const cands = [...new Set(alts.map(toArticleTitle).filter(Boolean))].slice(0, 3);
+    if (cands.length) tasks.push({ id, cands });
+  }
+  console.log(`[stage 1f2] tasks with alt candidates: ${tasks.length}`);
+
+  const BATCH = 50;
+  const CONCURRENCY = 3;
+  const UA = "skill-tree/1.0 (research)";
+  const fh = Deno.openSync(cachePath, { append: true });
+  const enc = new TextEncoder();
+  const t0 = performance.now();
+  let progress = 0, newMatches = 0, errors = 0;
+
+  // Token overlap guard: matched article's title must share a significant token with our skill title
+  const STOP = new Set(["the","a","an","of","to","for","in","on","and","or","with","at","by","from","as","is"]);
+  const sigSet = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length >= 3 && !STOP.has(w)));
+
+  async function resolveBatch(taskBatch: Task[]): Promise<Map<string, { title: string; pageid: number; qid?: string }>> {
+    // Flatten candidate titles across tasks; dedupe
+    const titleToTasks = new Map<string, string[]>();
+    for (const t of taskBatch) {
+      for (const c of t.cands) {
+        const arr = titleToTasks.get(c) ?? []; arr.push(t.id); titleToTasks.set(c, arr);
+      }
+    }
+    const titles = [...titleToTasks.keys()];
+    if (!titles.length) return new Map();
+    const url = `https://en.wikipedia.org/w/api.php?action=query&format=json&redirects=1&prop=pageprops&ppprop=wikibase_item&titles=${encodeURIComponent(titles.join("|"))}&origin=*`;
+    const r = await fetch(url, { headers: { "user-agent": UA } });
+    if (!r.ok) {
+      if (r.status === 429) await new Promise((res) => setTimeout(res, 2000));
+      throw new Error(`http ${r.status}`);
+    }
+    const j = await r.json();
+    const normalizedMap = new Map<string, string>();
+    for (const n of j.query?.normalized || []) normalizedMap.set(n.from, n.to);
+    const redirectMap = new Map<string, string>();
+    for (const rd of j.query?.redirects || []) redirectMap.set(rd.from, rd.to);
+    const pages = j.query?.pages || {};
+    const titleToPage = new Map<string, { pageid: number; title: string; qid?: string; missing: boolean }>();
+    for (const pid in pages) {
+      const p = pages[pid];
+      titleToPage.set(p.title, {
+        pageid: p.pageid,
+        title: p.title,
+        qid: p.pageprops?.wikibase_item,
+        missing: "missing" in p,
+      });
+    }
+    const hits = new Map<string, { title: string; pageid: number; qid?: string }>();
+    for (const [requested, ids] of titleToTasks) {
+      const norm = normalizedMap.get(requested) || requested;
+      const target = redirectMap.get(norm) || norm;
+      const page = titleToPage.get(target);
+      if (!page || page.missing || !page.pageid) continue;
+      // Token overlap guard: wiki article title must share a token with SKILL title (not candidate)
+      for (const id of ids) {
+        if (hits.has(id)) continue;
+        const skillToks = sigSet(titleById.get(id) || id.replace(/-/g, " "));
+        const wikiToks = sigSet(page.title);
+        let overlap = 0;
+        for (const tok of skillToks) if (wikiToks.has(tok)) overlap++;
+        if (overlap === 0 && skillToks.size > 0) continue; // strict overlap guard
+        hits.set(id, { title: page.title, pageid: page.pageid, qid: page.qid });
+      }
+    }
+    return hits;
+  }
+
+  for (let start = 0; start < tasks.length; start += BATCH * CONCURRENCY) {
+    const group = tasks.slice(start, start + BATCH * CONCURRENCY);
+    const batches: Task[][] = [];
+    for (let i = 0; i < group.length; i += BATCH) batches.push(group.slice(i, i + BATCH));
+    const results = await Promise.all(batches.map(async (b) => {
+      try { return await resolveBatch(b); }
+      catch { errors++; return new Map<string, { title: string; pageid: number; qid?: string }>(); }
+    }));
+    for (const hits of results) {
+      for (const [id, h] of hits) {
+        fh.writeSync(enc.encode(JSON.stringify({ id, wiki_title: h.title, pageid: h.pageid, qid: h.qid, ts: Date.now(), via: "alt" }) + "\n"));
+        newMatches++;
+      }
+    }
+    progress += group.length;
+    if (progress % 500 < BATCH * CONCURRENCY) {
+      const rate = progress / ((performance.now() - t0) / 1000);
+      console.log(`[stage 1f2] ${progress}/${tasks.length} (${rate.toFixed(0)}/s, new_matches=${newMatches}, errors=${errors})`);
+    }
+  }
+  fh.close();
+  writeStats(1112, {
+    unmatched,
+    tasks: tasks.length,
+    new_matches: newMatches,
+    errors,
+    seconds: (performance.now() - t0) / 1000,
+  });
+}
+
 // ---------- stage 1g: fetch Wikidata P279/P31 parent chains for resolved QIDs ----------
 
 async function stage1gWdParents() {
@@ -4114,7 +4659,7 @@ async function stage1iQidLabels() {
 
 // ---------- stage 8: eval suite — quality measures against ground truth + graph shape ----------
 
-function stage8Eval() {
+async function stage8Eval() {
   console.log("[stage 8] computing quality measures…");
 
   // Load final skills.tsv
@@ -4168,7 +4713,10 @@ function stage8Eval() {
       const c = line.split("\t");
       const src = canon(c[0]), dst = canon(c[1]), src_tag = c[2], holdout = c[4] === "1";
       if (!holdout) continue;
-      const group = src_tag.startsWith("alcpl_") ? "alcpl" : src_tag.startsWith("moocx_") ? "moocx" : src_tag;
+      const group = src_tag.startsWith("alcpl_") ? "alcpl"
+        : src_tag.startsWith("moocx_") ? "moocx"
+        : src_tag === "opensalt_grade" ? "opensalt_grade"
+        : src_tag;
       bySrc[group] ??= { total: 0, matched: 0 };
       bySrc[group].total++;
       if (edgePair.has(`${src}→${dst}`)) bySrc[group].matched++;
@@ -4351,6 +4899,96 @@ function stage8Eval() {
     };
   }
 
+  // ---- 15b. Precision eval via Apfel (E2) — sample N inferred edges, LLM-judges plausibility ----
+  {
+    const N_SAMPLE = Number(Deno.env.get("PRECISION_SAMPLE") ?? "0"); // set to 200+ to enable
+    const ENDPOINT = Deno.env.get("APFEL_ENDPOINT") ?? "http://127.0.0.1:11435/v1/chat/completions";
+    if (N_SAMPLE > 0) {
+      // Resume from cache if present
+      const cachePath = `${BUILD}/8_precision_cache.tsv`;
+      const cache = new Map<string, { verdict: string; reason: string }>();
+      try {
+        for (const line of Deno.readTextFileSync(cachePath).split("\n")) {
+          if (!line) continue;
+          const c = line.split("\t");
+          cache.set(`${c[0]}→${c[1]}`, { verdict: c[2], reason: c[3] || "" });
+        }
+      } catch { /* fresh */ }
+      // Deterministic sample
+      const allEdges = edges.slice();
+      const sampleStep = Math.max(1, Math.floor(allEdges.length / N_SAMPLE));
+      const sampled: string[] = [];
+      for (let i = 0; i < allEdges.length; i += sampleStep) sampled.push(allEdges[i]);
+      const todo = sampled.filter((e) => !cache.has(e));
+      console.log(`[stage 8 precision] sampled ${sampled.length}, cached ${sampled.length - todo.length}, to run ${todo.length}`);
+      const fh = Deno.openSync(cachePath, { append: true, create: true, write: true });
+      const enc = new TextEncoder();
+      async function judge(edgeKey: string): Promise<{ verdict: string; reason: string }> {
+        const [src, dst] = edgeKey.split("→");
+        const s = byId.get(src), d = byId.get(dst);
+        if (!s || !d) return { verdict: "skip", reason: "missing skill" };
+        const prompt = `Judge whether learning skill A is a reasonable prerequisite for learning skill B.
+
+A: ${s.title}
+B: ${d.title}
+
+Reply with exactly one of: YES (A is a plausible prerequisite of B), NO (A is not a prerequisite of B), or UNRELATED (A and B aren't in related domains).`;
+        const res = await fetch(ENDPOINT, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "apple-foundationmodel",
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0, max_tokens: 20,
+          }),
+        });
+        if (!res.ok) throw new Error(`apfel ${res.status}`);
+        const j = await res.json();
+        const reply = (j.choices?.[0]?.message?.content ?? "").trim().toUpperCase();
+        const verdict = reply.startsWith("YES") ? "yes"
+          : reply.startsWith("UNRELATED") ? "unrelated"
+          : reply.startsWith("NO") ? "no"
+          : "unclear";
+        return { verdict, reason: reply.slice(0, 80).replace(/[\t\n\r]/g, " ") };
+      }
+      const CONCURRENCY = 8;
+      const queue = [...todo];
+      let done = 0, errors = 0;
+      async function worker() {
+        while (queue.length) {
+          const e = queue.shift();
+          if (!e) return;
+          try {
+            const v = await judge(e);
+            cache.set(e, v);
+            const [src, dst] = e.split("→");
+            fh.writeSync(enc.encode(`${src}\t${dst}\t${v.verdict}\t${v.reason}\n`));
+            done++;
+            if (done % 50 === 0) console.log(`[stage 8 precision] ${done}/${todo.length}`);
+          } catch { errors++; }
+        }
+      }
+      await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+      fh.close();
+      // Compute precision = yes / (yes + no + unrelated). "unclear" excluded.
+      let yes = 0, no = 0, unrelated = 0, unclear = 0;
+      for (const e of sampled) {
+        const v = cache.get(e);
+        if (!v) continue;
+        if (v.verdict === "yes") yes++;
+        else if (v.verdict === "no") no++;
+        else if (v.verdict === "unrelated") unrelated++;
+        else unclear++;
+      }
+      const denom = yes + no + unrelated;
+      results.precision_eval = {
+        sampled: sampled.length,
+        yes, no, unrelated, unclear,
+        precision: denom ? +(yes / denom).toFixed(3) : 0,
+        errors,
+      };
+    }
+  }
+
   // ---- 16. Source attribution — per-source edge counts + per-edge dump (E3) ----
   {
     const seedEdges = new Set<string>();
@@ -4447,6 +5085,9 @@ const stages: Record<string, () => void | Promise<void>> = {
   "onet-desc": stage1dOnetDesc,
   "seed-edges": stage1eSeedEdges,
   "wiki-resolve": stage1fWikiResolve,
+  "wiki-retry": stage1f2WikiRetry,
+  "lcsh-tree": stage1jLcshTree,
+  "dbpedia-tree": stage1kDbpediaTree,
   "wd-parents": stage1gWdParents,
   "wiki-descs": stage1hWikiDescs,
   "qid-labels": stage1iQidLabels,
