@@ -19,14 +19,25 @@
 - [x] Tag backfill stage 3b: embedding-NN fills tags for untagged canonicals (1,918/4,230 enriched).
 - [x] Drop dead `certs` column; emit `grade_start`/`grade_end` from existing `grade:XX` tags (0.1% → 22% coverage).
 
+## Quality pass 3 (2026-04-14)
+- [x] A1: seed-edge survival — band-inversion, onet:tech, hub-cap filters all exempt seeds. 12 more seed edges preserved.
+- [x] A5: per-topic hub cap (30 per (prereq, child-topic)) replaces global HUB_CAP=80. 5,318 within-topic spam edges dropped; genuine foundational hubs preserved via expanded global cap of 150.
+- [x] A6: cross-domain foundation whitelist. Foundations (math, reading, writing, problem-solving, etc.) exempt from cross-domain filter (232 exemptions).
+- [x] C1/B3: Wikipedia-category pattern blocklist (`*-officials-and-employees`, `*-by-country`, `*-introduced-in-*`, `^people-in-*`, etc.). Kills `rome-officials-and-employees` class at source.
+- [x] C2: topic doc-freq cap (>1.3% of skills drops unless whitelisted) + explicit blocklist for `photomechanical-processes`, `flying-machines`, `traffic-regulations`. 4,744 generic-topic references dropped.
+- [x] C4: tag backfill now processes skills with EITHER occs-empty OR topics-empty (was both-empty). 21,187 occupations + 6,710 topics backfilled (vs 1,918 prior). Threshold lowered 0.70 → 0.60.
+
 ## Known limits (future work)
-- [ ] 5-9% orphan rate — mostly peer-orphan leaves. Fix needs true topic hierarchy (Wikidata P279 etc.)
-- [ ] Some occupation tags still reflect embedding bias more than truth (e.g. `computer-numerically-controlled-tool-operators` on generic skills)
-- [ ] alcpl holdout recall 0.20 (up from 0.04); khan/moocx still 0 — LLM prereq inference misses most ground-truth edges. Try ensemble with rule-based or revised prompt.
-- [ ] Full stage-1 re-run required to realize slugify fix (eliminates 13k truncated IDs, 176 `-2` dupes, HTML entity leaks).
-- [ ] Topic "rome-officials-and-employees" and similar Wikipedia categories survive P279 filters — add co-occurrence sanity check.
+- [ ] khan/moocx/opensalt_precedes recall still 0 — seed labels don't resolve to skill ids (Khan concepts aren't ingested as skills; MOOCCubeX Chinese labels have <10% resolution). Fix: add Khan/Junyi as skill sources OR improve label-resolution fallback.
+- [ ] metacademy 0.143, alcpl 0.25. Cycle-breaker drops ~29 seed edges (all-seed SCCs). A2 full expansion (Junyi hierarchy, ASSISTments temporal, MOOCCubeX pairs, CSP grade ordering) deferred — needs streaming parsers + skill-universe expansion.
+- [ ] Difficulty still uniform-banded (20 buckets of ~5050) — isotonic regression against grade anchors not implemented (D1-D3).
+- [ ] Wiki resolution 13.8% — fuzzy match + altLabel retry (B1) not implemented.
+- [ ] LCSH broader-chain trees (B2) and DBpedia hierarchy (B3) unused as parent-topic source.
+- [ ] Orphan rate 9.1% (down from 9.2%). Peer-orphan leaves persist.
+- [ ] Domain leakage mean 0.337 — structural issue with sparse topics; needs wiki coverage uplift first.
 
 ## Ideas
-- [ ] which skills are most valuable? use occupation salaries
-- [ ] ucsd map of science visualization
+- [ ] A3+A4: expand stage 5 retrieval to topic-embedding peers + bidirectional verify (no new LLM calls)
+- [ ] E1-E4: increase holdout to ≥500 edges; precision eval via Haiku sample-200; per-edge source/confidence dump
+- [ ] Add Khan/Junyi as skill sources (expensive: full stage 1 + embeddings re-run)
 - [ ] Wikidata P279 subclass hierarchy as parent-topic source

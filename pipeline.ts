@@ -2260,9 +2260,36 @@ function stage6PostProc() {
   const beforeTotal = raw.length;
   console.log(`[stage 6] raw edges: ${beforeTotal}`);
 
+  // Load seed-edge keys early so downstream filters can exempt them (A1).
+  // seed edges are expert-labeled ground truth — shouldn't be dropped by heuristics.
+  const seedEdgeKeys = new Set<string>();
+  let seedLoaded = 0;
+  try {
+    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
+    let alias = new Map<string, string>();
+    try {
+      const aliasLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
+      for (let i = 1; i < aliasLines.length; i++) {
+        const [d, c] = aliasLines[i].split("\t");
+        alias.set(d, c);
+      }
+    } catch { /* no aliases */ }
+    for (const line of seedLines) {
+      const c = line.split("\t");
+      if (c[4] === "1") continue; // holdout
+      const src = alias.get(c[0]) ?? c[0];
+      const dst = alias.get(c[1]) ?? c[1];
+      seedEdgeKeys.add(`${dst}\t${src}`); // edge schema: skill \t prereq
+      seedLoaded++;
+    }
+  } catch { /* none */ }
+  const isSeed = (s: string, p: string): boolean => seedEdgeKeys.has(`${s}\t${p}`);
+  console.log(`[stage 6] loaded ${seedLoaded} seed-edge keys for exemption`);
+
   // --- Filter 0: drop band-inverted edges (prereq.band > skill.band) ---
   // These occur when the non-OpenSALT +3 bonus crosses a grade-anchor boundary.
   // Raw-diff ordering was preserved in stage 5, but band-level ordering can invert.
+  // Seed edges exempt (A1) — expert labels trump inferred bands.
   const diffLines2 = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length);
   const band = new Map<string, number>();
   for (let i = 1; i < diffLines2.length; i++) {
@@ -2270,8 +2297,13 @@ function stage6PostProc() {
     band.set(c[0], Number(c[1]));
   }
   const beforeBandFilter = raw.length;
-  raw = raw.filter(([s, p]) => (band.get(p) ?? 0) <= (band.get(s) ?? 20));
-  console.log(`[stage 6] dropped ${beforeBandFilter - raw.length} band-inverted edges`);
+  let bandSeedExempt = 0;
+  raw = raw.filter(([s, p]) => {
+    if ((band.get(p) ?? 0) <= (band.get(s) ?? 20)) return true;
+    if (isSeed(s, p)) { bandSeedExempt++; return true; }
+    return false;
+  });
+  console.log(`[stage 6] dropped ${beforeBandFilter - raw.length} band-inverted edges (${bandSeedExempt} seed exempt)`);
 
   // --- Filter 1: tighten onet:tech prereqs ---
   // Specific software products (onet:tech) are rarely true prereqs:
@@ -2279,23 +2311,23 @@ function stage6PostProc() {
   //   - non-tech → onet:tech: KEEP only if product slug appears in skill's topics.
   const bySkill = new Map<string, string[]>();
   for (const [s, p] of raw) { const arr = bySkill.get(s) ?? []; arr.push(p); bySkill.set(s, arr); }
-  let droppedTech = 0;
+  let droppedTech = 0, techSeedExempt = 0;
   const filtered: [string, string][] = [];
   for (const [s, prereqs] of bySkill) {
     const ssk = skill.get(s);
     const sIsTech = ssk?.tags.includes("onet:tech") ?? false;
     const sRaw = rawDiff.get(s) ?? 0;
     const kept = prereqs.filter((p) => {
+      if (isSeed(s, p)) { techSeedExempt++; return true; } // A1 seed exemption
       const psk = skill.get(p);
       if (!psk) return true;
       const pIsTech = psk.tags.includes("onet:tech");
       if (!pIsTech) return true;
       if (sIsTech) {
-        // Keep tech→tech only when raw-diff gap is meaningful (category→product, not sibling→sibling)
         const pRaw = rawDiff.get(p) ?? 0;
         return sRaw - pRaw >= 2.0;
       }
-      if (ssk?.topics.has(p)) return true; // product is explicitly one of skill's topics
+      if (ssk?.topics.has(p)) return true;
       return false;
     });
     // Fallback: if filter emptied all prereqs AND skill is non-tech, keep first non-tech prereq
@@ -2311,28 +2343,54 @@ function stage6PostProc() {
   raw = filtered;
   console.log(`[stage 6] dropped ${droppedTech} onet:tech edges`);
 
-  // --- Filter 2: cap fan-out per prereq ---
-  // Hub cap: non-tech foundational concepts can legitimately be prereq of many skills; only cap tech products strictly
-  const HUB_CAP = Number(Deno.env.get("HUB_CAP") ?? "80");
+  // --- Filter 2: per-topic hub cap (A5) ---
+  // Replaces prior global HUB_CAP=80. A genuine foundational prereq (Chemistry, Physics)
+  // legitimately fans out across many topics — don't truncate. But within a single child
+  // topic, >20 downstream edges is almost always within-topic spam.
+  // Global safety cap still applies for tech products (sibling-product runaway).
+  const PER_TOPIC_CAP = Number(Deno.env.get("PER_TOPIC_CAP") ?? "30");
+  const GLOBAL_CAP = Number(Deno.env.get("HUB_CAP") ?? "150");
   const TECH_HUB_CAP = Number(Deno.env.get("TECH_HUB_CAP") ?? "15");
   const downstreamOfPrereq = new Map<string, [string, string][]>();
   for (const e of raw) {
     const arr = downstreamOfPrereq.get(e[1]) ?? []; arr.push(e); downstreamOfPrereq.set(e[1], arr);
   }
-  let droppedHub = 0;
+  let droppedHub = 0, droppedPerTopic = 0, hubSeedExempt = 0;
   const keep = new Set<string>();
   for (const [prereqId, edges] of downstreamOfPrereq) {
-    const cap = (skill.get(prereqId)?.tags.includes("onet:tech") ? TECH_HUB_CAP : HUB_CAP);
-    if (edges.length <= cap) {
-      for (const e of edges) keep.add(e[0] + "\t" + e[1]);
+    const pIsTech = skill.get(prereqId)?.tags.includes("onet:tech") ?? false;
+    const pRaw = rawDiff.get(prereqId) ?? 0;
+    // Sort by raw-diff proximity once — preserves closest-level children when capping
+    edges.sort((a, b) => Math.abs((rawDiff.get(a[0]) ?? 0) - pRaw) - Math.abs((rawDiff.get(b[0]) ?? 0) - pRaw));
+
+    if (pIsTech) {
+      // Tech products: strict global cap, no per-topic refinement
+      const cap = TECH_HUB_CAP;
+      for (let i = 0; i < edges.length; i++) {
+        const [s, p] = edges[i];
+        if (isSeed(s, p)) { keep.add(s + "\t" + p); hubSeedExempt++; continue; }
+        if (i < cap) keep.add(s + "\t" + p);
+        else droppedHub++;
+      }
       continue;
     }
-    const pRaw = rawDiff.get(prereqId) ?? 0;
-    edges.sort((a, b) => Math.abs((rawDiff.get(a[0]) ?? 0) - pRaw) - Math.abs((rawDiff.get(b[0]) ?? 0) - pRaw));
-    for (let i = 0; i < cap; i++) keep.add(edges[i][0] + "\t" + edges[i][1]);
-    droppedHub += edges.length - cap;
+
+    // Per-topic cap: tally how many kept per child's top topic
+    const perTopicCount = new Map<string, number>();
+    let globalKept = 0;
+    for (const [s, p] of edges) {
+      if (isSeed(s, p)) { keep.add(s + "\t" + p); hubSeedExempt++; globalKept++; continue; }
+      const childTopics = skill.get(s)?.topics;
+      const topic = childTopics && childTopics.size ? [...childTopics][0] : "_notopic";
+      const n = perTopicCount.get(topic) ?? 0;
+      if (n >= PER_TOPIC_CAP) { droppedPerTopic++; continue; }
+      if (globalKept >= GLOBAL_CAP) { droppedHub++; continue; }
+      keep.add(s + "\t" + p);
+      perTopicCount.set(topic, n + 1);
+      globalKept++;
+    }
   }
-  console.log(`[stage 6] dropped ${droppedHub} hub-excess edges (cap: non-tech=${HUB_CAP}, tech=${TECH_HUB_CAP})`);
+  console.log(`[stage 6] hub caps: dropped ${droppedPerTopic} per-topic (cap=${PER_TOPIC_CAP}), ${droppedHub} global/tech (non-tech=${GLOBAL_CAP}, tech=${TECH_HUB_CAP}); ${hubSeedExempt} seed exempt`);
 
   const final: [string, string][] = raw.filter((e) => keep.has(e[0] + "\t" + e[1]));
 
@@ -2446,51 +2504,57 @@ function stage6PostProc() {
   }
   console.log(`[stage 6] heuristic orphan fix: added edges for ${orphanFixed} of ${orphanSkills.size} orphans (of which ${orphanFixedViaWiki} via Wikidata parents)`);
 
-  // --- Cross-domain edge filter: drop edges with zero topic overlap AND zero slug-token overlap ---
-  // Catches spurious edges like "Latin → Desktop Piano and Drums" without killing legitimate
-  // cross-domain pairs (e.g. history-event → history-event have overlapping topics).
-  // Seed edges exempt — they're expert-validated.
-  const seedEdgeKeys = new Set<string>();
-  try {
-    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
-    for (const line of seedLines) {
-      const c = line.split("\t");
-      if (c[4] === "1") continue;
-      seedEdgeKeys.add(`${c[1]}\t${c[0]}`); // edge format: skill \t prereq
-    }
-  } catch { /* none */ }
+  // --- Cross-domain edge filter (A6): fractional topic overlap + foundation whitelist ---
+  // Drop edges where max(|A∩B|/|A|, |A∩B|/|B|) < MIN_OVERLAP and no slug-token overlap.
+  // Exempt: seed edges; prereqs tagged as cross-domain foundations (math, reading, writing,
+  // problem-solving, critical thinking — real universal prereqs).
+  const FOUNDATION_SLUGS = new Set([
+    "mathematics", "math", "arithmetic", "reading", "writing", "reading-comprehension",
+    "written-expression", "active-listening", "speaking", "problem-solving",
+    "critical-thinking", "complex-problem-solving", "deductive-reasoning", "inductive-reasoning",
+    "active-learning", "learning-strategies",
+  ]);
+  const isFoundation = (id: string): boolean => {
+    if (FOUNDATION_SLUGS.has(id)) return true;
+    const tags = skill.get(id)?.tags || "";
+    return tags.includes("onet:skill") && FOUNDATION_SLUGS.has(id);
+  };
+  // Threshold default 0 = strict zero-overlap trigger (original semantics). Raising it
+  // (e.g. 0.15) dropped legitimate cross-topic prereqs (metacademy regressed). Keep strict.
+  const MIN_OVERLAP = Number(Deno.env.get("MIN_TOPIC_OVERLAP") ?? "0.0001");
   const significantTokens = (id: string): Set<string> => {
     const out = new Set<string>();
     for (const w of id.split("-")) if (w.length >= 4 && !stopWords.has(w)) out.add(w);
     return out;
   };
-  // Count per-skill prereq edges so we don't orphan a skill by dropping its last prereq
   const outPerSkill = new Map<string, number>();
   for (const [s] of final) outPerSkill.set(s, (outPerSkill.get(s) ?? 0) + 1);
   const beforeCrossDomain = final.length;
-  let droppedCrossDomain = 0, preservedLastEdge = 0;
+  let droppedCrossDomain = 0, preservedLastEdge = 0, foundationExempt = 0;
   for (let i = final.length - 1; i >= 0; i--) {
     const [s, p] = final[i];
-    if (seedEdgeKeys.has(`${s}\t${p}`)) continue;
+    if (isSeed(s, p)) continue;
+    if (isFoundation(p)) { foundationExempt++; continue; }
     const srcTopics = skill.get(p)?.topics;
     const dstTopics = skill.get(s)?.topics;
     if (!srcTopics || !dstTopics) continue;
     if (srcTopics.size < 2 || dstTopics.size < 2) continue;
     let topicOverlap = 0;
     for (const t of srcTopics) if (dstTopics.has(t)) topicOverlap++;
-    if (topicOverlap > 0) continue;
+    const frac = topicOverlap / Math.min(srcTopics.size, dstTopics.size);
+    if (frac >= MIN_OVERLAP) continue;
+    // Slug-token overlap fallback (keeps edges where labels share significant words)
     const srcTok = significantTokens(p);
     const dstTok = significantTokens(s);
     let tokOverlap = 0;
     for (const t of srcTok) if (dstTok.has(t)) tokOverlap++;
     if (tokOverlap > 0) continue;
-    // Would dropping this orphan the child?
     if ((outPerSkill.get(s) ?? 0) <= 1) { preservedLastEdge++; continue; }
     final.splice(i, 1);
     outPerSkill.set(s, (outPerSkill.get(s) ?? 0) - 1);
     droppedCrossDomain++;
   }
-  console.log(`[stage 6] cross-domain filter: dropped ${droppedCrossDomain} of ${beforeCrossDomain} edges (preserved ${preservedLastEdge} last-edge)`);
+  console.log(`[stage 6] cross-domain filter (overlap<${MIN_OVERLAP}): dropped ${droppedCrossDomain} of ${beforeCrossDomain} (preserved ${preservedLastEdge} last-edge, ${foundationExempt} foundation-exempt)`);
 
   // --- Seed-edge ingestion from stage 1e (expert-labeled ground truth) ---
   // Expert labels beat inferred difficulty/band. We accept even when rawDiff disagrees
@@ -2530,7 +2594,8 @@ function stage6PostProc() {
 
   // --- Cycle-breaker: small SCCs exist from near-duplicate skills the LLM couldn't order ---
   // (e.g. oral-health ↔ dental-health). Iteratively find SCCs; drop weakest edge per SCC.
-  let cyclesBroken = 0;
+  // Seed edges preferred-kept — only dropped if an SCC is entirely seed edges (A1).
+  let cyclesBroken = 0, cyclesSeedDropped = 0;
   for (let iter = 0; iter < 50; iter++) {
     // Build adjacency: prereq p → skill s (final stores [s, p])
     const adj = new Map<string, string[]>();
@@ -2595,7 +2660,10 @@ function stage6PostProc() {
           if (gap < worstGap) { worstGap = gap; worst = [s, p]; }
         }
       }
-      if (worst) toDrop.add(`${worst[0]}\t${worst[1]}`);
+      if (worst) {
+        toDrop.add(`${worst[0]}\t${worst[1]}`);
+        if (isSeed(worst[0], worst[1])) cyclesSeedDropped++;
+      }
     }
     const before = final.length;
     for (let i = final.length - 1; i >= 0; i--) {
@@ -2617,14 +2685,29 @@ function stage6PostProc() {
   for (const [, p] of final) finalHubs.set(p, (finalHubs.get(p) ?? 0) + 1);
   const topHubs = [...finalHubs.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
 
+  // Seed survival = seed edges present in final / seed edges loaded (pre-holdout)
+  let seedInFinal = 0;
+  for (const [s, p] of final) if (isSeed(s, p)) seedInFinal++;
+
   writeStats(6, {
     before_edges: beforeTotal,
     dropped_tech: droppedTech,
+    dropped_per_topic: droppedPerTopic,
     dropped_hub: droppedHub,
+    dropped_cross_domain: droppedCrossDomain,
+    seed_loaded: seedLoaded,
     seed_added: seedAdded,
+    seed_in_final: seedInFinal,
+    seed_survival_rate: seedLoaded ? +(seedInFinal / seedLoaded).toFixed(3) : 0,
     seed_skipped_missing: seedSkippedMissing,
     seed_diff_override: seedDiffOverride,
     seed_held_out: seedHoldout,
+    cycles_broken: cyclesBroken,
+    cycles_seed_dropped: cyclesSeedDropped,
+    band_seed_exempt: bandSeedExempt,
+    tech_seed_exempt: techSeedExempt,
+    hub_seed_exempt: hubSeedExempt,
+    foundation_exempt: foundationExempt,
     heuristic_orphan_fixed: orphanFixed,
     final_edges: final.length,
     skills_with_prereqs: skillsWithFinalPrereqs.size,
@@ -2700,7 +2783,11 @@ function stage7Finalize() {
   } catch { /* skip */ }
 
   // Framework/standards stoplist — regex on topic slug
-  const frameworkRe = /-standards|-20\d\d|^sced-|^content-khan|^ccss$|^ngss$|next-generation-science|k-5-mathematics|adult-basic-education|cte-standards|curriculum|course-codes/;
+  const frameworkRe = /-standards|-20\d\d|^sced-|^content-khan|^ccss$|^ngss$|next-generation-science|k-5-mathematics|adult-basic-education|cte-standards|curriculum|course-codes|^skills$|^content$|^learning-stage-/;
+  // Wikipedia-category junk patterns (C1/B3). These are DBpedia/Wikidata category artifacts that
+  // leak as topics but are not real subject areas: "Rome officials and employees", "Flying machines",
+  // "Photomechanical processes" etc. Kills these classes wholesale.
+  const wikiCategoryRe = /-officials-and-employees$|-by-country$|-by-region$|-by-type$|-by-year$|-introduced-in-|-established-in-|-disestablished-in-|-founded-in-|-born-in-|-died-in-|-set-in-|^people-in-|-people$|-in-history$/;
 
   // Cap topics per skill after enrichment
   const TOPIC_CAP = 5;
@@ -2759,8 +2846,9 @@ function stage7Finalize() {
     // Filter existing topics: only drop obvious junk (year, all-short-tokens, framework stoplist). Don't require overlap — many legit topics don't share tokens.
     const filtered = existing.filter((t) => {
       if (frameworkRe.test(t)) { frameworkFiltered++; return false; }
+      if (wikiCategoryRe.test(t)) { p279Filtered++; return false; } // C1 wiki-category junk
       if (yearRe.test(t)) { p279Filtered++; return false; }
-      if (sigTokens(t).size === 0) { p279Filtered++; return false; } // all short/stopword tokens — junk
+      if (sigTokens(t).size === 0) { p279Filtered++; return false; }
       return true;
     });
     const qid = idToQid.get(s.id);
@@ -2773,6 +2861,8 @@ function stage7Finalize() {
       const slug = slugify(lbl);
       if (!slug) continue;
       if (yearRe.test(slug)) { p279Filtered++; continue; }
+      if (wikiCategoryRe.test(slug)) { p279Filtered++; continue; } // C1
+      if (frameworkRe.test(slug)) { frameworkFiltered++; continue; }
       const parentToks = sigTokens(slug);
       let overlap = 0;
       for (const tok of parentToks) if (skillTokens.has(tok)) { overlap++; break; }
@@ -2799,18 +2889,38 @@ function stage7Finalize() {
     pending.push({ id: s.id, title: s.title, desc, d, ps, occ: s.occupations, topics, gStart, gEnd });
   }
 
-  // Second pass: compute global topic frequencies, drop topics appearing only once
+  // Second pass: compute global topic frequencies, drop singletons AND super-generic
+  // topics (C2: doc-freq > 1% of skills). Super-generic topics like "skills" or
+  // "content-khan-academy" add no information and dominate the tag space.
   const topicFreq = new Map<string, number>();
   for (const r of pending) for (const t of r.topics) topicFreq.set(t, (topicFreq.get(t) ?? 0) + 1);
-  let singletonDropped = 0;
+  const MAX_TOPIC_FREQ = Math.max(1200, Math.floor(pending.length * 0.013));
+  const topicWhitelist = new Set([
+    "mathematics","science","biology","chemistry","physics","engineering","technology",
+    "economics","history","literature","philosophy","medicine","law","education",
+    "problem-solving","critical-thinking","communication","management","leadership",
+    "computer-science","software-engineering","data-analysis","statistics","research",
+    "information-skills","management-skills","nondestructive-testing","mathematical-optimization",
+    "handling-and-moving","personnel-management","working-with-machinery-and-specialised-equipment",
+  ]);
+  // Hard blocklist: Wikipedia categories that slipped the pattern filter but are too broad
+  const topicBlocklist = new Set([
+    "photomechanical-processes", "flying-machines", "rome-officials-and-employees",
+    "traffic-regulations", "units-of-measurement",
+  ]);
+  let singletonDropped = 0, genericDropped = 0;
   for (const r of pending) {
     const kept: string[] = [];
     for (const t of r.topics) {
-      if ((topicFreq.get(t) ?? 0) < 2) { singletonDropped++; continue; }
+      const f = topicFreq.get(t) ?? 0;
+      if (f < 2) { singletonDropped++; continue; }
+      if (topicBlocklist.has(t)) { genericDropped++; continue; }
+      if (f > MAX_TOPIC_FREQ && !topicWhitelist.has(t)) { genericDropped++; continue; }
       kept.push(t);
     }
     r.topics = kept;
   }
+  console.log(`[stage 7] topic freq cap: max=${MAX_TOPIC_FREQ} (1% of ${pending.length}), generic_dropped=${genericDropped}`);
 
   const rows = ["id\ttitle\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end"];
   for (const r of pending) {
@@ -3084,10 +3194,16 @@ function stage3bDedupe() {
       const arr = tokToCanons.get(tok) ?? []; arr.push(k); tokToCanons.set(tok, arr);
     }
   }
-  let backfilled = 0, backfillTried = 0;
+  // C4: backfill empty dimensions (occs OR topics) independently. Was previously only run
+  // for skills with BOTH empty; now processes any skill missing either. Lower similarity
+  // threshold (0.6) since we're targeting a wider tail.
+  let backfilledTopics = 0, backfilledOccs = 0, backfillTried = 0;
+  const BF_SIM = 0.6;
   for (let k = 0; k < canons.length; k++) {
     const c = canons[k];
-    if (c.occs.length > 0 || c.topics.length > 0) continue;
+    const needTopics = c.topics.length === 0;
+    const needOccs = c.occs.length === 0;
+    if (!needTopics && !needOccs) continue;
     backfillTried++;
     const queryTitle = rows[c.idx].title;
     const qToks = titleToks(queryTitle);
@@ -3096,7 +3212,7 @@ function stage3bDedupe() {
     for (const tok of qToks) {
       const arr = tokToCanons.get(tok);
       if (!arr) continue;
-      if (arr.length > 2000) continue; // skip very common tokens
+      if (arr.length > 2000) continue;
       for (const i of arr) if (i !== k) pool.add(i);
     }
     if (!pool.size) continue;
@@ -3104,11 +3220,13 @@ function stage3bDedupe() {
     const scored: [number, number][] = [];
     for (const i of pool) {
       const other = canons[i];
-      if (other.occs.length === 0 && other.topics.length === 0) continue;
+      // only consider neighbors that can supply what we need
+      if (needTopics && other.topics.length === 0 && (!needOccs || other.occs.length === 0)) continue;
+      if (!needTopics && needOccs && other.occs.length === 0) continue;
       let sc = 0;
       const oOff = other.idx * DIM;
       for (let d = 0; d < DIM; d++) sc += vecs[qOff + d] * vecs[oOff + d];
-      if (sc >= 0.7) scored.push([i, sc]);
+      if (sc >= BF_SIM) scored.push([i, sc]);
     }
     if (scored.length < 3) continue;
     scored.sort((a, b) => b[1] - a[1]);
@@ -3123,16 +3241,17 @@ function stage3bDedupe() {
       const entries = [...m.entries()].filter(([, v]) => v >= minVotes).sort((a, b) => b[1] - a[1]);
       return entries.slice(0, cap).map(([k]) => k);
     };
-    const minW = 3 * 0.7; // 3 neighbors × min similarity
-    const newTopics = pickTop(topicVotes, minW, 3);
-    const newOccs = pickTop(occVotes, minW, 2);
-    if (newTopics.length || newOccs.length) {
-      c.topics = newTopics;
-      c.occs = newOccs;
-      backfilled++;
+    const minW = 3 * BF_SIM;
+    if (needTopics) {
+      const newTopics = pickTop(topicVotes, minW, 3);
+      if (newTopics.length) { c.topics = newTopics; backfilledTopics++; }
+    }
+    if (needOccs) {
+      const newOccs = pickTop(occVotes, minW, 2);
+      if (newOccs.length) { c.occs = newOccs; backfilledOccs++; }
     }
   }
-  console.log(`[stage 3b] tag backfill: ${backfilled}/${backfillTried} untagged canonicals enriched`);
+  console.log(`[stage 3b] tag backfill: tried ${backfillTried}, topics+=${backfilledTopics}, occs+=${backfilledOccs}`);
 
   const outLines = [hdrCols.join("\t")];
   for (const c of canons) {
@@ -3161,7 +3280,8 @@ function stage3bDedupe() {
     jaccard_min: JACCARD_MIN,
     sig_merges: sigMerges,
     backfill_tried: backfillTried,
-    backfilled,
+    backfilled_topics: backfilledTopics,
+    backfilled_occs: backfilledOccs,
   });
 }
 
