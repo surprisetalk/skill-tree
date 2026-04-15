@@ -34,23 +34,27 @@
 - [x] E4: cycle-cut log to `build/6_cycle_cuts.tsv` (shows which edges cycle-breaker dropped and whether they were seed or inferred).
 
 ## Metrics (across all quality passes)
-| metric              | baseline | pass 3  | pass 4   |
-| ------------------- | -------- | ------- | -------- |
-| orphan rate         | 0.092    | 0.0883  | **0.0844** |
-| metacademy recall*  | 0.143    | 0.087   | 0.087    |
-| alcpl recall*       | 0.250    | 0.156   | 0.156    |
-| opensalt_precedes*  | 0.000    | 0.111   | 0.111    |
-| opensalt_grade*     | —        | —       | 0.030    |
-| kendall_tau anchor  | 0.777    | 0.776   | 0.776    |
-| seed_in_final       | 291      | 306     | **22,386** |
-| total edges         | 218,459  | 215,790 | 243,783  |
-| unique topics       | 5,188    | 5,050   | **7,001** |
-| wiki coverage       | 0.138    | 0.138   | 0.145    |
-| LCSH enriched       | —        | —       | 40,443 skills |
+| metric              | baseline | pass 3  | pass 4   | pass 5       |
+| ------------------- | -------- | ------- | -------- | ------------ |
+| orphan rate         | 0.092    | 0.0883  | 0.0844   | **0.0791**   |
+| metacademy recall*  | 0.143    | 0.087   | 0.087    | 0.087        |
+| alcpl recall*       | 0.250    | 0.156   | 0.156    | 0.156        |
+| opensalt_precedes*  | 0.000    | 0.111   | 0.111    | **0.222**    |
+| opensalt_grade*     | —        | —       | 0.030    | **0.037**    |
+| kendall_tau anchor  | 0.777    | 0.776   | 0.776    | 0.776        |
+| seed_in_final       | 291      | 306     | 22,386   | **22,602**   |
+| total edges         | 218,459  | 215,790 | 243,783  | 307,268      |
+| skills emitted      | —        | —       | 94,528   | **97,264**   |
+| unique topics       | 5,188    | 5,050   | 7,001    | 7,001        |
+| wiki coverage       | 0.138    | 0.138   | 0.145    | 0.141        |
+| domain leakage      | 0.337    | —       | 0.302    | 0.310        |
+| LCSH enriched       | —        | —       | 40,443   | 41,172       |
 
 \* recall drops vs baseline reflect larger, more stable denominators (E1 doubled holdout) — the earlier high values were small-sample noise.
 
 Pass 4 key wins: **77× more seed edges in final graph** (22,386 vs 291), **+39% unique topic vocabulary** from LCSH/DBpedia ancestor chains, reduced orphan rate.
+
+Pass 5 key wins: union-merged Ollama llama3.2:3b prereqs with Haiku cache (~14k overnight on local hardware, 34k new candidate edges). **2× opensalt_precedes recall** (0.111→0.222), **-6% orphan rate**, +2,736 skills preserved. Small precision cost (domain_leakage +0.8pp).
 
 ## Quality pass 4 (2026-04-14, local LLM)
 - [x] B1: stage 1f2 fuzzy-retry using ESCO altLabels + paren-strip + verb-strip variants. Token-overlap guard. +785 matches (13.8% → 14.6% wiki resolution).
