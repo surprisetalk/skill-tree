@@ -170,7 +170,9 @@ function appendTsvCache(path: string, entries: Record<string, string>) {
 function forEachLine(path: string, fn: (line: string) => void) {
   try {
     for (const l of Deno.readTextFileSync(path).split("\n")) if (l) fn(l);
-  } catch { /* missing */ }
+  } catch (e) {
+    if (!(e instanceof Deno.errors.NotFound)) console.warn(`[forEachLine] WARN: ${path} — ${(e as Error).message}`);
+  }
 }
 
 async function streamLines(cmd: string[], onLine: (line: string) => void) {
@@ -976,7 +978,7 @@ async function stageSeedEdges() {
     }
   }
 
-  // Metacademy
+  // Metacademy — Wikipedia-mapped CSV
   {
     const rows = parseCsv(Deno.readTextFileSync("data/metacademy/Metacademy-prerequisite-pairs-transformed-to-wikipedia.csv"));
     for (let i = 1; i < rows.length; i++) {
@@ -985,22 +987,69 @@ async function stageSeedEdges() {
     }
   }
 
+  // Metacademy — raw concept dependencies.txt (393 concept dirs)
+  {
+    const CONCEPTS = "data/metacademy/metacademy-content/concepts";
+    const titleByDir = new Map<string, string>();
+    const dirs: string[] = [];
+    try {
+      for (const f of Deno.readDirSync(CONCEPTS)) {
+        if (!f.isDirectory || f.name === "ANNOTATED_EXAMPLE") continue;
+        dirs.push(f.name);
+        try { titleByDir.set(f.name, Deno.readTextFileSync(`${CONCEPTS}/${f.name}/title.txt`).trim()); }
+        catch { /* title missing — fall back to dir name below */ }
+      }
+    } catch (e) { console.warn(`[seed-edges] WARN: Metacademy concepts dir unavailable — ${(e as Error).message}`); }
+    const resolveTag = (tag: string): string => {
+      const t = tag.trim();
+      if (!t) return "";
+      const dashToUnder = t.replace(/-/g, "_");
+      const underToDash = t.replace(/_/g, "-");
+      for (const key of [t, dashToUnder, underToDash]) {
+        const title = titleByDir.get(key);
+        if (title) return title;
+      }
+      return t.replace(/[_-]/g, " ");
+    };
+    let emitted = 0;
+    for (const dir of dirs) {
+      const target = titleByDir.get(dir) || dir.replace(/_/g, " ");
+      let deps: string;
+      try { deps = Deno.readTextFileSync(`${CONCEPTS}/${dir}/dependencies.txt`); } catch { continue; }
+      for (const line of deps.split("\n")) {
+        const m = line.match(/^\s*tag:\s*(\S+)\s*$/);
+        if (!m) continue;
+        const pre = resolveTag(m[1]);
+        if (pre && target) { addRaw(pre, target, "metacademy_raw", `${m[1]}->${dir}`); emitted++; }
+      }
+    }
+    console.log(`[seed-edges] metacademy_raw: ${emitted} pairs from ${dirs.length} concept dirs`);
+  }
+
   // MOOCCubeX
-  const translations: Record<string, string> =
-    (() => { try { return JSON.parse(Deno.readTextFileSync("data/mooccubex/translations.json")); } catch { return {}; } })();
+  const translations: Record<string, string> = (() => {
+    try { return JSON.parse(Deno.readTextFileSync("data/mooccubex/translations.json")); }
+    catch (e) {
+      console.warn(`[seed-edges] WARN: data/mooccubex/translations.json missing — Chinese labels will pass through untranslated (${(e as Error).message})`);
+      return {};
+    }
+  })();
   for (const domain of ["cs", "math", "psy"]) {
     let bytes: Uint8Array;
-    try { bytes = Deno.readFileSync(`data/mooccubex/${domain}.json.gz`); } catch { continue; }
+    try { bytes = Deno.readFileSync(`data/mooccubex/${domain}.json.gz`); }
+    catch (e) { console.warn(`[seed-edges] WARN: skipping MOOCCubeX ${domain} — ${(e as Error).message}`); continue; }
     const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream("gzip"));
     const text = await new Response(stream).text();
+    let parseFails = 0;
     for (const line of text.split("\n")) {
       if (!line) continue;
       let obj: { c1?: string; c2?: string; ground_truth?: number };
-      try { obj = JSON.parse(line); } catch { continue; }
+      try { obj = JSON.parse(line); } catch { parseFails++; continue; }
       if (obj.ground_truth !== 1 || !obj.c1 || !obj.c2) continue;
       addRaw(translations[obj.c1] || obj.c1, translations[obj.c2] || obj.c2,
         `moocx_${domain}`, `${obj.c1}->${obj.c2}`);
     }
+    if (parseFails > 0) console.warn(`[seed-edges] WARN: MOOCCubeX ${domain} dropped ${parseFails} malformed JSON lines`);
   }
 
   // OpenSALT precedes
@@ -1009,7 +1058,8 @@ async function stageSeedEdges() {
       if (!f.name.endsWith(".json") || f.name === "index.json") continue;
       let doc: { CFItems?: { identifier: string; humanCodingScheme?: string; fullStatement?: string }[];
         CFAssociations?: { associationType?: string; originNodeURI?: { identifier?: string; title?: string }; destinationNodeURI?: { identifier?: string; title?: string } }[] };
-      try { doc = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`)); } catch { continue; }
+      try { doc = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`)); }
+      catch (e) { console.warn(`[seed-edges] WARN: skipping OpenSALT framework ${f.name} — ${(e as Error).message}`); continue; }
       const itemMap = new Map<string, { code: string; statement: string }>();
       for (const it of doc.CFItems || []) {
         itemMap.set(it.identifier, { code: it.humanCodingScheme || "", statement: it.fullStatement || "" });
@@ -1036,7 +1086,8 @@ async function stageSeedEdges() {
     outer: for (const f of Deno.readDirSync("data/opensalt")) {
       if (!f.name.endsWith(".json") || f.name === "index.json") continue;
       let doc: { CFItems?: { identifier: string; humanCodingScheme?: string; fullStatement?: string; educationLevel?: string[] }[] };
-      try { doc = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`)); } catch { continue; }
+      try { doc = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`)); }
+      catch (e) { console.warn(`[seed-edges] WARN: skipping OpenSALT grade ${f.name} — ${(e as Error).message}`); continue; }
       type Node = { label: string; grade: number; code: string };
       const nodes: Node[] = [];
       for (const it of doc.CFItems || []) {
@@ -1848,10 +1899,94 @@ function stageDifficulty() {
         khanAnchored++;
       }
     }
-  } catch { /* no khan */ }
+  } catch (e) { console.warn(`[difficulty] WARN: Khan anchors unavailable — ${(e as Error).message}`); }
+
+  let zoneAnchored = 0;
+  try {
+    const zoneRows = parseTsv(Deno.readTextFileSync("data/onet/Job Zones.txt"));
+    const zh = zoneRows[0];
+    const iZs = zh.indexOf("O*NET-SOC Code"), iZz = zh.indexOf("Job Zone");
+    const socToZone = new Map<string, number>();
+    for (let i = 1; i < zoneRows.length; i++) {
+      const soc = zoneRows[i][iZs], z = Number(zoneRows[i][iZz]);
+      if (soc && Number.isFinite(z) && z >= 1 && z <= 5) socToZone.set(soc, z);
+    }
+    const cmr = new Map<string, string>();
+    for (const r of parseTsv(Deno.readTextFileSync("data/onet/Content Model Reference.txt")).slice(1))
+      if (r[0] && r[1]) cmr.set(r[0], r[1]);
+    const skillZoneSum = new Map<string, { w: number; wz: number }>();
+    for (const fname of ["Skills.txt", "Knowledge.txt", "Abilities.txt"]) {
+      const rows = parseTsv(Deno.readTextFileSync(`data/onet/${fname}`));
+      const h = rows[0];
+      const iS = h.indexOf("O*NET-SOC Code"), iE = h.indexOf("Element ID"),
+            iSc = h.indexOf("Scale ID"), iV = h.indexOf("Data Value");
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][iSc] !== "IM") continue;
+        const name = cmr.get(rows[i][iE]);
+        const zone = socToZone.get(rows[i][iS]);
+        if (!name || zone === undefined) continue;
+        const w = Number(rows[i][iV]);
+        if (!Number.isFinite(w) || w <= 0) continue;
+        const key = slugify(name);
+        const e = skillZoneSum.get(key) ?? { w: 0, wz: 0 };
+        e.w += w; e.wz += w * zone;
+        skillZoneSum.set(key, e);
+      }
+    }
+    // O*NET Tasks: each task statement is linked to exactly one SOC, so we can
+    // anchor each task directly via its SOC's zone. Same for DWAs via Task→DWA.
+    const taskSocByTid = new Map<string, string>();
+    const taskTextByTid = new Map<string, string>();
+    {
+      const rows = parseTsv(Deno.readTextFileSync("data/onet/Task Statements.txt"));
+      const h = rows[0];
+      const iS = h.indexOf("O*NET-SOC Code"), iTid = h.indexOf("Task ID"), iTask = h.indexOf("Task");
+      for (let i = 1; i < rows.length; i++) {
+        const tid = rows[i][iTid], task = rows[i][iTask], soc = rows[i][iS];
+        if (!tid || !task || !soc) continue;
+        if (!taskSocByTid.has(tid)) { taskSocByTid.set(tid, soc); taskTextByTid.set(tid, task); }
+        const key = slugify(task);
+        const zone = socToZone.get(soc);
+        if (zone === undefined) continue;
+        const e = skillZoneSum.get(key) ?? { w: 0, wz: 0 };
+        e.w += 1; e.wz += zone;
+        skillZoneSum.set(key, e);
+      }
+    }
+    try {
+      const dwaTitle = new Map<string, string>();
+      for (const r of parseTsv(Deno.readTextFileSync("data/onet/DWA Reference.txt")).slice(1))
+        if (r[0] && r[1]) dwaTitle.set(r[0] || "", r[1] || "");
+      const t2d = parseTsv(Deno.readTextFileSync("data/onet/Tasks to DWAs.txt"));
+      const h = t2d[0];
+      const iTid = h.indexOf("Task ID"), iDid = h.indexOf("DWA ID");
+      for (let i = 1; i < t2d.length; i++) {
+        const tid = t2d[i][iTid], did = t2d[i][iDid];
+        const title = dwaTitle.get(did);
+        const soc = taskSocByTid.get(tid);
+        if (!title || !soc) continue;
+        const zone = socToZone.get(soc);
+        if (zone === undefined) continue;
+        const key = slugify(title);
+        const e = skillZoneSum.get(key) ?? { w: 0, wz: 0 };
+        e.w += 1; e.wz += zone;
+        skillZoneSum.set(key, e);
+      }
+    } catch (e) { console.warn(`[difficulty] WARN: DWA zone mapping skipped — ${(e as Error).message}`); }
+
+    const idToIdx = new Map<string, number>();
+    for (let i = 0; i < skills.length; i++) idToIdx.set(skills[i].id, i);
+    for (const [key, { w, wz }] of skillZoneSum) {
+      const i = idToIdx.get(key);
+      if (i === undefined || !Number.isNaN(anchor[i])) continue;
+      anchor[i] = 11.5 + 1.5 * (wz / w);
+      zoneAnchored++;
+    }
+  } catch (e) { console.warn(`[difficulty] WARN: Job Zone anchors unavailable — ${(e as Error).message}`); }
+
   const anchorIdxs: number[] = [];
   for (let i = 0; i < skills.length; i++) if (!Number.isNaN(anchor[i])) anchorIdxs.push(i);
-  console.log(`[difficulty] anchors: grade=${gradeAnchored}, khan=${khanAnchored}, total=${anchorIdxs.length}`);
+  console.log(`[difficulty] anchors: grade=${gradeAnchored}, khan=${khanAnchored}, zone=${zoneAnchored}, total=${anchorIdxs.length}`);
 
   const K = Number(Deno.env.get("KNN_K") ?? "15");
   const t0 = performance.now();
@@ -1988,9 +2123,7 @@ function stageDifficulty() {
     return pavY[lo] + t * (pavY[hi] - pavY[lo]);
   };
   const calibrated = new Float32Array(skills.length);
-  for (let i = 0; i < skills.length; i++) {
-    calibrated[i] = calibrate(jittered[i]) + (skills[i].sources.includes("opensalt") ? 0 : 3);
-  }
+  for (let i = 0; i < skills.length; i++) calibrated[i] = calibrate(jittered[i]);
 
   const band = new Int32Array(skills.length);
   const bandCounts = new Array(20).fill(0);
@@ -2021,7 +2154,7 @@ function stageDifficulty() {
   const tau = concordant + discordant ? (concordant - discordant) / (concordant + discordant) : 0;
   writeStats(4, {
     skills: skills.length,
-    anchors: { grade: gradeAnchored, khan: khanAnchored, total: anchorIdxs.length },
+    anchors: { grade: gradeAnchored, khan: khanAnchored, zone: zoneAnchored, total: anchorIdxs.length },
     within_topic: withinTopic,
     global_fallbacks: globalFallback,
     band_distribution: bandCounts,
@@ -2805,8 +2938,9 @@ function stageFinalize() {
   const childCount = new Map<string, number>();
   for (const [, p] of prereqs) for (const pid of p) childCount.set(pid, (childCount.get(pid) ?? 0) + 1);
   const isOrphanLeaf = (id: string) => (prereqs.get(id) || []).length === 0 && (childCount.get(id) ?? 0) === 0;
-  const isCruft = (s: { id: string; title: string; description: string }) => {
+  const isCruft = (s: { id: string; title: string; description: string; topics: string }) => {
     if (aliasCanonicals.has(s.id)) return false;
+    if (!(s.description || "").trim() && !(s.topics || "").trim()) return true;
     if (s.id.split("-").length >= 5 && (s.description || "").length < 60) return true;
     if (/^review-records|^prepare-inserts|^seal-containers/.test(s.id)) return true;
     return false;
