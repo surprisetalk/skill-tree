@@ -1802,13 +1802,15 @@ function stage4Difficulty() {
       const altSlug = slugify(skills[i].title);
       if (!slugToIdx.has(altSlug)) slugToIdx.set(altSlug, i);
     }
-    for (const [lbl, v] of labelToV) {
-      const i = slugToIdx.get(lbl);
-      if (i === undefined) continue;
-      if (!Number.isNaN(anchor[i])) continue; // keep explicit grade tag if present
-      const vGrade = (v - vMin) / (vMax - vMin) * 12; // linear to 0-12
-      anchor[i] = vGrade;
-      khanAnchored++;
+    if (vMax > vMin) {
+      for (const [lbl, v] of labelToV) {
+        const i = slugToIdx.get(lbl);
+        if (i === undefined) continue;
+        if (!Number.isNaN(anchor[i])) continue; // keep explicit grade tag if present
+        const vGrade = (v - vMin) / (vMax - vMin) * 12; // linear to 0-12
+        anchor[i] = vGrade;
+        khanAnchored++;
+      }
     }
   } catch { /* no khan data */ }
   const totalAnchored = gradeAnchored + khanAnchored;
@@ -3500,9 +3502,9 @@ function stage6PostProc() {
     foundation_exempt: foundationExempt,
     heuristic_orphan_fixed: orphanFixed,
     final_edges: final.length,
-    skills_with_prereqs: skillsWithFinalPrereqs.size,
+    skills_with_prereqs: new Set(final.map((e) => e[0])).size,
     skills_lost_all_prereqs: lostAll,
-    orphan_rate: 1 - skillsWithFinalPrereqs.size / skill.size,
+    orphan_rate: 1 - new Set(final.flatMap((e) => [e[0], e[1]])).size / skill.size,
     top_hubs_after: topHubs.map(([id, n]) => [id, n, skill.get(id)?.title.slice(0, 60)]),
   });
 }
@@ -3845,7 +3847,7 @@ function stage7Finalize() {
   writeStats(7, {
     skills_emitted: emitted,
     skills_dropped_cruft: dropped,
-    edges: edgeLines.length,
+    edges: [...prereqs.values()].reduce((s, a) => s + a.length, 0),
     skills_with_prereqs: prereqs.size,
     orphan_skills: emitted - prereqs.size,
     roots: roots.length,
@@ -5342,10 +5344,10 @@ async function stage8Eval() {
   const rows: FRow[] = sLines.slice(1).map((l) => {
     const c = l.split("\t");
     return {
-      id: c[0], title: c[1], difficulty: Number(c[3]),
-      prereqs: c[4] ? c[4].split(",").filter(Boolean) : [],
-      topics: c[6] ? c[6].split(",").filter(Boolean) : [],
-      occupations: c[5] ? c[5].split(",").filter(Boolean) : [],
+      id: c[0], title: c[1], difficulty: Number(c[4]),
+      prereqs: c[5] ? c[5].split(",").filter(Boolean) : [],
+      occupations: c[6] ? c[6].split(",").filter(Boolean) : [],
+      topics: c[7] ? c[7].split(",").filter(Boolean) : [],
     };
   });
   const byId = new Map(rows.map((r) => [r.id, r] as const));

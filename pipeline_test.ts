@@ -223,9 +223,47 @@ Deno.test("final: final_edges preserves strict raw-difficulty ordering", () => {
   const edgeLines = Deno.readTextFileSync("build/6_edges.tsv").split("\n").filter((l) => l.length).slice(1);
   for (let i = 0; i < Math.min(edgeLines.length, 1000); i++) {
     const [s, p] = edgeLines[i].split("\t");
-    const ds = diff.get(s)!, dp = diff.get(p)!;
+    const ds = diff.get(s), dp = diff.get(p);
+    if (ds === undefined || dp === undefined) continue; // edge references skill not in final output
     assert(dp <= ds, `edge ${s}(b${ds}) → ${p}(b${dp}) has prereq above skill`);
   }
+});
+
+Deno.test("stage 8: eval metrics are sane (not column-shifted)", () => {
+  let s: Record<string, unknown>;
+  try { s = JSON.parse(Deno.readTextFileSync("build/8_stats.json")); } catch { return; }
+
+  // Kendall tau should be positive (difficulty correlates with Khan ordering)
+  const kt = s.khan_tau as { kendall_tau: number | null };
+  if (kt?.kendall_tau !== null) {
+    assert(kt.kendall_tau > 0, `kendall_tau ${kt.kendall_tau} should be positive`);
+  }
+
+  // Graph must be a DAG
+  const cy = s.cycles as { dag: boolean; leftover_after_kahn: number };
+  assert(cy.dag, `cycles.dag should be true, leftover=${cy.leftover_after_kahn}`);
+
+  // Depth should be > 1 (not a flat graph)
+  const dd = s.depth_distribution as { max: number };
+  assert(dd.max > 1, `depth max=${dd.max} — graph is flat, likely column-shift bug`);
+
+  // Top out-degree nodes should be real skill IDs, not bare numbers
+  const br = s.branching as { top_out_degree: [string, number, string | null][] };
+  for (const [id] of br.top_out_degree) {
+    assert(!/^\d+$/.test(id), `top hub "${id}" is a bare number — likely difficulty parsed as prereq`);
+  }
+
+  // Reachability: roots should exist
+  const re = s.reachability as { roots: number; reachable: number };
+  assert(re.roots > 0, "no roots — every skill has prereqs?");
+  assert(re.reachable > re.roots, "nothing reachable beyond roots");
+});
+
+Deno.test("stage 6: orphan_rate is in [0, 1]", () => {
+  let s: Record<string, unknown>;
+  try { s = JSON.parse(Deno.readTextFileSync("build/6_stats.json")); } catch { return; }
+  const r = s.orphan_rate as number;
+  assert(r >= 0 && r <= 1, `orphan_rate ${r} outside [0,1]`);
 });
 
 Deno.test("stage 1: no embedded tabs or newlines in fields", () => {
