@@ -13,9 +13,81 @@ type Skill = { id: string; title: string; description: string; sources: string[]
 
 // ---------- util ----------
 
+const NAMED_ENTITY: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+  rsquo: "'", lsquo: "'", rdquo: '"', ldquo: '"', sbquo: ",", bdquo: '"',
+  ndash: "-", mdash: "-", hellip: "…", middot: "·", bull: "•",
+  acirc: "â", aacute: "á", agrave: "à", auml: "ä", atilde: "ã", aring: "å", aelig: "æ",
+  ecirc: "ê", eacute: "é", egrave: "è", euml: "ë",
+  icirc: "î", iacute: "í", igrave: "ì", iuml: "ï",
+  ocirc: "ô", oacute: "ó", ograve: "ò", ouml: "ö", otilde: "õ", oslash: "ø",
+  ucirc: "û", uacute: "ú", ugrave: "ù", uuml: "ü",
+  ccedil: "ç", ntilde: "ñ", szlig: "ß", yacute: "ý", yuml: "ÿ",
+  Acirc: "Â", Aacute: "Á", Agrave: "À", Auml: "Ä", Atilde: "Ã", Aring: "Å", AElig: "Æ",
+  Ecirc: "Ê", Eacute: "É", Egrave: "È", Euml: "Ë",
+  Icirc: "Î", Iacute: "Í", Igrave: "Ì", Iuml: "Ï",
+  Ocirc: "Ô", Oacute: "Ó", Ograve: "Ò", Ouml: "Ö", Otilde: "Õ", Oslash: "Ø",
+  Ucirc: "Û", Uacute: "Ú", Ugrave: "Ù", Uuml: "Ü",
+  Ccedil: "Ç", Ntilde: "Ñ", Yacute: "Ý",
+  copy: "©", reg: "®", trade: "™", deg: "°", plusmn: "±", times: "×", divide: "÷",
+};
 const decodeEntities = (s: string) => s
-  .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-  .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ");
+  .replace(/&([a-zA-Z]+);/g, (m, name) => NAMED_ENTITY[name] ?? m)
+  .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+  .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+
+// Strip HTML/XML tags, decode entities, normalize curly quotes/dashes, strip markdown bold, clean trailing punct.
+const normalizeText = (s: string): string => {
+  if (!s) return "";
+  let t = decodeEntities(s);
+  t = t.replace(/<\/?[a-z][^>]*>/gi, "");
+  t = t.replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(/[\u201C\u201D\u201E\u201F]/g, '"');
+  t = t.replace(/[\u2010\u2011\u2012\u2013\u2014]/g, "-");
+  t = t.replace(/\*\*([^*]+)\*\*/g, "$1"); // strip markdown bold
+  t = t.replace(/Â\s*/g, " "); // UTF-8 double-encoding artifact (NBSP → Â)
+  t = t.replace(/â€[\u0090-\u009F\u200B-\u200F]*/g, ""); // UTF-8 double-encoded smart quotes/dashes
+  t = t.replace(/Ã[\u0080-\u00BF]/g, (m) => { // UTF-8 double-encoded accented chars
+    try { return new TextDecoder().decode(new Uint8Array([...m].map((c) => c.charCodeAt(0)))); }
+    catch { return m; }
+  });
+  t = t.replace(/\s+/g, " ").trim();
+  return t;
+};
+
+// Remove inline parentheticals (e.g., ...) / (i.e., ...) and any long aside, plus
+// trailing ", such as ..." enumerations. Returns the cleaned title.
+const denoiseTitle = (s: string): string => {
+  if (!s) return "";
+  let t = s;
+  t = t.replace(/\s*\((?:e\.g\.|i\.e\.)[^)]*\)/gi, "");
+  t = t.replace(/\s*\([^)]{60,}\)/g, "");
+  t = t.replace(/,?\s+such as\b[^.]*\.?$/i, ".");
+  t = t.replace(/^(perform|conduct|provide|ensure|coordinate)\s+(the|an?|of)\s+/i, "$1 ");
+  t = t.replace(/[\s:;\-–—]+$/g, "");
+  t = t.replace(/^[•▪►■◆]\s*/, ""); // strip leading bullet chars
+  t = t.replace(/^\d+\.\s+/, ""); // strip leading numbered-list prefix ("2. Community...")
+  t = t.replace(/\s+\([A-Z]\)$/g, ""); // strip trailing single-letter subject markers "(E)", "(H)", "(G)"
+  t = t.replace(/\s+\(Supplemental\)$/gi, ""); // strip "(Supplemental)" marker
+  t = t.replace(/\.$/g, ""); // strip trailing period (sentence → skill name)
+  t = t.replace(/;?\s+and$/i, ""); // strip trailing "; and" (incomplete list item)
+  t = t.replace(/\$([^$]+)\$/g, "$1"); // strip LaTeX $...$ delimiters, keep content
+  t = t.replace(/\\bmod\b/g, "mod").replace(/\\small\b\s*/g, ""); // clean LaTeX commands
+  t = t.replace(/\s+/g, " ").trim();
+  return t;
+};
+
+// OpenSALT-specific: strip "the student will / SWBAT / upon completion …" prefix
+const stripStudentPrefix = (s: string): string => {
+  if (!s) return s;
+  let t = s.replace(/^(the\s+)?students?\s+will\s+(be\s+able\s+to\s+)?/i, "")
+           .replace(/^students?\s+can\s+/i, "")
+           .replace(/^by\s+the\s+end\s+of[^,.]+,\s*/i, "")
+           .replace(/^upon\s+completion[^,.]+,\s*/i, "")
+           .replace(/^(tswbat|swbat)[:\s]+/i, "")
+           .trim();
+  if (!t) return s;
+  return t[0].toUpperCase() + t.slice(1);
+};
 
 const slugify = (s: string) => {
   const base = decodeEntities(s).toLowerCase()
@@ -159,10 +231,13 @@ function stage1List() {
     const iTask = hdr.indexOf("Task");
     const iType = hdr.indexOf("Task Type");
     const seen = new Set<string>();
-    let n = 0, dup = 0;
+    let n = 0, dup = 0, naDropped = 0;
     for (let i = 1; i < rows.length; i++) {
       const task = rows[i][iTask]?.trim();
       if (!task) continue;
+      const taskType = rows[i][iType]?.trim() || "";
+      // Drop tasks with no Task Type (n/a) — these are noisier and lack context.
+      if (!taskType) { naDropped++; continue; }
       const key = task.toLowerCase();
       if (seen.has(key)) { dup++; continue; }
       seen.add(key);
@@ -171,11 +246,11 @@ function stage1List() {
         title: task,
         description: "",
         sources: ["onet"],
-        tags: ["onet:task", rows[i][iType] ? `onet:${rows[i][iType].toLowerCase()}` : "onet:task"],
+        tags: ["onet:task", `onet:${taskType.toLowerCase()}`],
       });
       n++;
     }
-    console.log(`  onet tasks: ${n} (dedup ${dup})`);
+    console.log(`  onet tasks: ${n} (dedup ${dup}, n/a_dropped ${naDropped})`);
   }
 
   // ONET DWAs (Detailed Work Activities)
@@ -199,6 +274,8 @@ function stage1List() {
 
   // ONET Technology Skills (specific tools)
   {
+    const TECH_MODE = Deno.env.get("ONET_TECH_MODE") ?? "hot"; // "hot" | "all"
+    const BRAND_RE = /^[!\d]|\b(Inc|LLC|Corp|Corporation|Ltd|GmbH|Co\.)\b|\bSoftware\s+\d/;
     const rows = parseTsv(Deno.readTextFileSync("data/onet/Technology Skills.txt"));
     const hdr = rows[0];
     const iExample = hdr.indexOf("Example");
@@ -215,38 +292,52 @@ function stage1List() {
       const prev = seen.get(key);
       if (!prev || (hot && !prev.hot)) seen.set(key, { orig: ex, desc: cat, hot });
     }
-    let n = 0;
+    let n = 0, modeDropped = 0, brandDropped = 0;
     for (const { orig, desc, hot } of seen.values()) {
+      if (TECH_MODE === "hot" && !hot) { modeDropped++; continue; }
+      if (BRAND_RE.test(orig)) { brandDropped++; continue; }
+      // Differentiate description so embeddings don't collapse to ~50 commodity vectors
+      const fullDesc = desc ? `${orig} — ${desc}` : "";
       raw.push({
         id: "",
         title: orig,
-        description: desc,
+        description: fullDesc,
         sources: ["onet"],
         tags: ["onet:tech", ...(hot ? ["onet:hot"] : []), ...(desc ? [`onet:tech:${slugify(desc)}`] : [])],
       });
       n++;
     }
-    console.log(`  onet tech: ${n}`);
+    console.log(`  onet tech: ${n} (mode=${TECH_MODE}, mode_dropped=${modeDropped}, brand_dropped=${brandDropped})`);
   }
 
   // Lightcast
   {
     const infill = loadInfillCache();
     const j = JSON.parse(Deno.readTextFileSync("data/lightcast/skills.json"));
-    let n = 0, infilled = 0, placeholdered = 0;
+    let n = 0, infilled = 0, placeholdered = 0, certsDropped = 0;
     const missingIds: string[] = [];
+    const certs: { id: string; title: string; type: string; category: string }[] = [];
     for (const s of j.data) {
       if (!s.name) continue;
       const title = s.name.trim();
       const id = slugify(title);
+      const typeName = s.type?.name ?? "";
+      const category = s.category?.name ?? s.subcategory?.name ?? "";
+      // Certifications are credentials, not learnable skills — split out to certifications.tsv.
+      if (typeName === "Certification") {
+        certs.push({ id, title, type: typeName, category });
+        certsDropped++;
+        continue;
+      }
       let desc = infill.get(id) ?? "";
-      const tags = s.type?.name ? [`lightcast:${s.type.name}`] : ["lightcast"];
+      const tags = typeName ? [`lightcast:${typeName}`] : ["lightcast"];
       if (desc) {
         infilled++;
       } else {
-        // Placeholder: type name beats blank as embedding signal.
-        // Tagged so downstream stages can identify and target a refill batch.
-        if (s.type?.name) { desc = s.type.name; placeholdered++; }
+        // Prefer category-aware placeholder over bare type name (avoids 27k items
+        // collapsing to "Specialized Skill" embedding).
+        if (category) { desc = `${title} — ${category}`; placeholdered++; }
+        else if (typeName) { desc = typeName; placeholdered++; }
         tags.push("desc:placeholder");
         missingIds.push(id);
       }
@@ -254,7 +345,11 @@ function stage1List() {
       n++;
     }
     Deno.writeTextFileSync(`${BUILD}/1_lightcast_missing.tsv`, missingIds.join("\n") + "\n");
-    console.log(`  lightcast: ${n} (infilled: ${infilled}, placeholder: ${placeholdered}, missing→${BUILD}/1_lightcast_missing.tsv)`);
+    if (certs.length) {
+      const lines = ["id\ttitle\ttype\tcategory", ...certs.map((c) => `${c.id}\t${c.title}\t${c.type}\t${c.category}`)];
+      Deno.writeTextFileSync(`${BUILD}/1_certifications.tsv`, lines.join("\n") + "\n");
+    }
+    console.log(`  lightcast: ${n} (infilled: ${infilled}, placeholder: ${placeholdered}, certs_split=${certsDropped} →${BUILD}/1_certifications.tsv, missing→${BUILD}/1_lightcast_missing.tsv)`);
   }
 
   // OpenSALT CFItems — each framework file has CFItems[] with fullStatement
@@ -273,7 +368,7 @@ function stage1List() {
       const lastSpace = head.lastIndexOf(" ");
       return (lastSpace > cap * 0.5 ? head.slice(0, lastSpace) : head).trim() + "…";
     };
-    let n = 0, scaffoldingType = 0, scaffoldingPattern = 0, truncated = 0, perFrameDup = 0;
+    let n = 0, scaffoldingType = 0, scaffoldingPattern = 0, truncated = 0, perFrameDup = 0, studentPrefixStripped = 0, pureVerbDropped = 0;
     for (const e of Deno.readDirSync("data/opensalt")) {
       if (!e.name.endsWith(".json") || e.name === "index.json") continue;
       const j = JSON.parse(Deno.readTextFileSync(`data/opensalt/${e.name}`));
@@ -288,19 +383,47 @@ function stage1List() {
         const notes = (it.notes || "").trim();
         if (!fullStmt && !abbrev) { scaffoldingPattern++; continue; }
         // Pick the shorter non-empty statement as title; keep the longer as description.
+        // BUT don't prefer abbrev when it looks like a bare code (e.g. "K.RL.2.2", "TF.ATL.3.2.d").
+        const CODE_RE = /^[A-Z0-9\u2013\u2014–-][\w.\u2013\u2014–-]*$/;
         let title: string;
         let description: string;
-        if (abbrev && (!fullStmt || abbrev.length < fullStmt.length)) {
+        if (abbrev && (!fullStmt || abbrev.length < fullStmt.length) && !(abbrev.length <= 20 && CODE_RE.test(abbrev))) {
           title = abbrev;
           description = fullStmt && fullStmt !== abbrev ? fullStmt : notes;
         } else {
           title = fullStmt;
           description = notes && notes !== fullStmt ? notes : "";
         }
+        // Strip bullets and numbering before prefix checks
+        title = title.replace(/^[•▪►■◆]\s*/, "").replace(/^\d+\.\s+/, "");
+        // Strip student-output prefix language ("the student will / SWBAT / upon completion …")
+        const beforePrefix = title;
+        title = stripStudentPrefix(title);
+        if (title !== beforePrefix) studentPrefixStripped++;
+        // Strip "Benchmark X.X:" / "Standard X:" / "Indicator X:" prefix
+        title = title.replace(/^(Benchmark|Standard|Indicator)\s+[\d.]+\s*:\s*/i, "").trim();
         if (title.length > 300) { title = truncTitle(title, 300); truncated++; }
+        // Drop titles that are bare compliance codes, single chars, or too short to be meaningful
+        if (title.length <= 2 || (title.length <= 20 && CODE_RE.test(title))) { scaffoldingPattern++; continue; }
+        // Drop deprecated items, proficiency level scaffolding, test instructions, single-word headers
+        if (/^DEPRECATED\b/i.test(title)) { scaffoldingPattern++; continue; }
+        if (/^(Essential|Proficient|Advanced|Intermediate|Beginning|Emerging|Developing|Extending|Exceeding|Level)\s+[IVX0-9]+/i.test(title) && title.length < 30) { scaffoldingPattern++; continue; }
+        if (/^(Use the (clock|timer)|Click the|Press the|Drag the|Open the app)/i.test(title)) { scaffoldingPattern++; continue; }
+        if (/^(Constructed Response|Hook Activity|Background Information|Vocabulary Activity|Document Analysis)\s*:/i.test(title)) { scaffoldingPattern++; continue; }
+        if (/^(Sample Problem|Example)\s*:/i.test(title)) { scaffoldingPattern++; continue; }
+        if (/^Particular Topics in /i.test(title)) { scaffoldingPattern++; continue; }
+        if (/\?\s*(Hook Activity|Background Information|Vocabulary Activity|Document Analysis|Writing)$/i.test(title)) { scaffoldingPattern++; continue; }
+        if (/\s+(Hook Activity|Writing Activity|Vocabulary Activity|Assessment Activity)$/i.test(title)) { scaffoldingPattern++; continue; }
+        // Second-person competency statements ("You follow...", "You are sought...") are not skills
+        if (/^You\s+[a-z]/i.test(title) && title.length > 20) { scaffoldingPattern++; continue; }
+        // Single-word OpenSALT titles are too generic to be useful skills
+        if (!/\s/.test(title) && title.length < 20) { scaffoldingPattern++; continue; }
         // Drop scaffolding by pattern only when it looks like a header (short + matches)
         if (SCAFFOLDING_RE.test(title) && title.length < 50 && !it.CFItemType) { scaffoldingPattern++; continue; }
         if (/^(CFItemType|Course|Subject)\s*:/.test(title)) { scaffoldingPattern++; continue; }
+        // Drop pure-verb-prompt rows with no concrete noun ("understand the X", <60 chars, no type)
+        if (/^(understand|recognize|demonstrate|apply|identify|know|explain|describe)\s+(the|how|that|what|why|when|where|a|an)\s/i.test(title)
+            && title.length < 60 && !it.CFItemType) { pureVerbDropped++; continue; }
         // Per-framework dedupe: same title repeated within one file is filler
         const localKey = title.toLowerCase();
         if (seenInFrame.has(localKey)) { perFrameDup++; continue; }
@@ -329,8 +452,62 @@ function stage1List() {
         n++;
       }
     }
-    console.log(`  opensalt: ${n} (scaffolding_type=${scaffoldingType}, scaffolding_pattern=${scaffoldingPattern}, truncated=${truncated}, per_frame_dup=${perFrameDup})`);
+    console.log(`  opensalt: ${n} (scaffolding_type=${scaffoldingType}, scaffolding_pattern=${scaffoldingPattern}, pure_verb_dropped=${pureVerbDropped}, student_prefix_stripped=${studentPrefixStripped}, truncated=${truncated}, per_frame_dup=${perFrameDup})`);
   }
+
+  // Apply Apfel infill cache to ALL sources (loadInfillCache only feeds Lightcast parser)
+  const apfelInfill = new Map<string, string>();
+  try {
+    for (const line of Deno.readTextFileSync(`${BUILD}/1b_apfel_infill.tsv`).split("\n")) {
+      if (!line) continue;
+      const tab = line.indexOf("\t");
+      if (tab > 0) apfelInfill.set(line.slice(0, tab), line.slice(tab + 1));
+    }
+  } catch { /* no file */ }
+  let apfelFilled = 0;
+  for (const s of raw) {
+    if (s.description) continue;
+    const id = slugify(s.title);
+    const desc = apfelInfill.get(id);
+    if (desc) { s.description = desc; apfelFilled++; }
+  }
+  if (apfelFilled) console.log(`[stage 1] apfel infill applied: ${apfelFilled}`);
+
+  // Normalize all titles and descriptions: HTML entities, tags, curly quotes, trailing punct.
+  // Then run titles through de-noising regex (strip "(e.g., ...)", ", such as ...", etc.).
+  // Preserve the pre-denoise text as description if denoising shrinks the title >30%.
+  let normalized = 0, denoised = 0;
+  for (const s of raw) {
+    const t0 = s.title;
+    const d0 = s.description;
+    s.title = normalizeText(s.title);
+    s.description = normalizeText(s.description);
+    // Drop boilerplate / broken descriptions
+    if (/^The SCED provides a series of unused codes/i.test(s.description)) s.description = "";
+    if (/We took this down/i.test(s.description)) s.description = "";
+    if (/^\*\*(See |Standards (related|that))/i.test(s.description)) s.description = "";
+    if (/^(\*\*)?Big Idea:/i.test(s.description)) s.description = "";
+    if (/^Modeling is best interpreted not as a collection/i.test(s.description)) s.description = "";
+    if (/On the state assessment, items measuring/i.test(s.description)) s.description = "";
+    if (/^Students need not use formal/i.test(s.description)) s.description = "";
+    if (/^Examples may include but are not limited/i.test(s.description)) s.description = "";
+    if (/^\d\.$/.test(s.description)) s.description = ""; // bare "1." etc
+    // Strip meta-prefixes from descriptions (keep the content after)
+    s.description = s.description.replace(/^(Progression|Clarification|Note|Sample|Sample Problem)\s*:\s*/i, "");
+    // Strip trailing colon from title
+    s.title = s.title.replace(/\s*:$/g, "");
+    if (s.title !== t0 || s.description !== d0) normalized++;
+    const before = s.title;
+    const after = denoiseTitle(before);
+    if (after && after !== before) {
+      denoised++;
+      if (!s.description && (before.length - after.length) / before.length > 0.3) {
+        s.description = before;
+      }
+      s.title = after;
+    }
+  }
+  console.log(`[stage 1] normalized=${normalized}, denoised=${denoised}`);
 
   // Apply summarize cache: replace long titles with concise summaries, keep original as description
   let summarized = 0, onetEnriched = 0;
@@ -350,6 +527,27 @@ function stage1List() {
     }
   }
   console.log(`[stage 1] applied ${summarized} summaries, ${onetEnriched} onet descriptions`);
+
+  // Long-title hard cap: after normalization, denoising, and summarization, drop OpenSALT
+  // and ONET-Task rows whose title is still >12 words / >100 chars. These are compliance
+  // statements that didn't compress; downstream stages waste work on them.
+  let longTitleDropped = 0;
+  const survivors: Skill[] = [];
+  for (const s of raw) {
+    // Drop deprecated items from any source
+    if (/^DEPRECATED\b/i.test(s.title)) { longTitleDropped++; continue; }
+    const fromOpensalt = s.sources.includes("opensalt");
+    const fromOnetTask = s.tags.some((t) => t === "onet:task");
+    const wordCount = s.title.split(/\s+/).filter(Boolean).length;
+    if ((fromOpensalt || fromOnetTask) && (wordCount > 12 || s.title.length > 100)) {
+      longTitleDropped++;
+      continue;
+    }
+    survivors.push(s);
+  }
+  raw.length = 0;
+  raw.push(...survivors);
+  console.log(`[stage 1] long_title_dropped=${longTitleDropped} (opensalt/onet-task, >12 words or >100 chars)`);
 
   // Dedupe by fuzzy key
   console.log(`[stage 1] raw rows: ${raw.length}; deduping…`);
@@ -449,16 +647,17 @@ const CHAT_MODEL = Deno.env.get("CHAT_MODEL") ?? "gpt-oss:20b";
 const INFILL_CACHE = `${BUILD}/1b_infill.tsv`;
 
 function loadInfillCache(): Map<string, string> {
-  try {
-    const text = Deno.readTextFileSync(INFILL_CACHE);
-    const m = new Map<string, string>();
-    for (const line of text.split("\n")) {
-      if (!line) continue;
-      const [k, v] = line.split("\t");
-      m.set(k, v ?? "");
-    }
-    return m;
-  } catch { return new Map(); }
+  const m = new Map<string, string>();
+  for (const path of [INFILL_CACHE, `${BUILD}/1b_apfel_infill.tsv`]) {
+    try {
+      for (const line of Deno.readTextFileSync(path).split("\n")) {
+        if (!line) continue;
+        const [k, v] = line.split("\t");
+        if (k && v && !m.has(k)) m.set(k, v); // first-seen wins (Anthropic cache preferred)
+      }
+    } catch { /* missing is fine */ }
+  }
+  return m;
 }
 
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
@@ -473,11 +672,20 @@ const ANTHROPIC_HEADERS = {
   "anthropic-beta": "message-batches-2024-09-24",
 };
 
+const REFUSAL_RE = /(cannot|unable to|not familiar with|not (?:able|aware|sure)|do(?:n't| not) have|no (?:recognized |clear |standard )?(?:definition|meaning)|without (?:more |further |additional )?(?:context|information)|could you (?:provide|clarify|specify)|recognized definition|clear workplace skill)/i;
+
 function cleanDef(raw: string): string {
-  return raw.trim()
+  const trimmed = raw.trim()
     .replace(/^[\s"'*_-]+|[\s"'*_-]+$/g, "")
-    .replace(/\s+/g, " ")
-    .slice(0, 400);
+    .replace(/\s+/g, " ");
+  if (!trimmed) return "";
+  if (REFUSAL_RE.test(trimmed)) return "";
+  if (trimmed.length <= 400) return trimmed;
+  const head = trimmed.slice(0, 400);
+  const lastSent = Math.max(head.lastIndexOf(". "), head.lastIndexOf("? "), head.lastIndexOf("! "));
+  if (lastSent > 200) return head.slice(0, lastSent + 1).trim();
+  const lastSpace = head.lastIndexOf(" ");
+  return (lastSpace > 200 ? head.slice(0, lastSpace) : head).trim() + "…";
 }
 
 // Map custom_id ↔ full skill id; custom_id must be ≤64 chars and unique.
@@ -550,19 +758,33 @@ function appendInfill(map: Record<string, string>) {
   fh.close();
 }
 
+// Known short tech names that are real skills despite being ≤3 chars; everything else
+// at that length is opaque code that the LLM tends to hallucinate or refuse on.
+const SHORT_TECH_WHITELIST = new Set([
+  "r", "go", "c#", "c++", "ada", "apl", "awk", "css", "db2", "git", "ios", "jet",
+  "lua", "mdx", "mmx", "php", "qml", "sql", "tcl", "xml", "yml", "vim", "tex", "rsa",
+]);
+
 async function stage1bInfill() {
   if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_API_KEY not set");
 
   // Identify Lightcast skills needing infill
   const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
   const targets: { id: string; title: string }[] = [];
+  let opaqueSkipped = 0;
   for (let i = 1; i < lines.length; i++) {
     const c = lines[i].split("\t");
-    if (c[3].includes("lightcast") && !c[2]) targets.push({ id: c[0], title: c[1] });
+    if (!c[3].includes("lightcast") || c[2]) continue;
+    const title = c[1];
+    if (title.length <= 3 && !SHORT_TECH_WHITELIST.has(title.toLowerCase())) {
+      opaqueSkipped++;
+      continue;
+    }
+    targets.push({ id: c[0], title });
   }
   const cache = loadInfillCache();
   const todo = targets.filter((t) => !cache.has(t.id));
-  console.log(`[stage 1b] targets: ${targets.length}, cached: ${targets.length - todo.length}, to submit: ${todo.length}`);
+  console.log(`[stage 1b] targets: ${targets.length}, opaque_skipped: ${opaqueSkipped}, cached: ${targets.length - todo.length}, to submit: ${todo.length}`);
 
   // Check for existing in-flight batch
   let state: { id: string; idMap: Record<string, string> } | null = null;
@@ -860,7 +1082,7 @@ function taggedTsvPath(): string {
   try { Deno.statSync(`${BUILD}/3b_tagged_deduped.tsv`); return `${BUILD}/3b_tagged_deduped.tsv`; } catch { return `${BUILD}/3_tagged.tsv`; }
 }
 
-const OLLAMA = "http://localhost:11434";
+const OLLAMA = Deno.env.get("OLLAMA_HOST") ?? "http://localhost:11434";
 const EMBED_MODEL = "nomic-embed-text";
 const EMBED_DIM = 768;
 const CACHE_PATH = `${BUILD}/2_cache.bin`;
@@ -2337,6 +2559,158 @@ async function stage5ApfelPrereq() {
   writeStats(52, { processed: done, errors: errs, retries, endpoint: ENDPOINT, total_seconds: dt });
 }
 
+// Generic Apfel one-shot helper: apply `prompt(target)` to each pending target,
+// append `id\tresponse` to `outPath`. Resume-friendly: skips ids already in cache.
+async function apfelBatch<T extends { id: string }>(
+  label: string,
+  outPath: string,
+  targets: T[],
+  prompt: (t: T) => string,
+  maxTokens = 60,
+): Promise<void> {
+  const cache = new Set<string>();
+  try {
+    for (const line of Deno.readTextFileSync(outPath).split("\n")) {
+      if (!line) continue;
+      const tab = line.indexOf("\t");
+      cache.add(line.slice(0, tab));
+    }
+  } catch { /* fresh */ }
+  const todo = targets.filter((t) => !cache.has(t.id));
+  console.log(`[${label}] out=${outPath}, targets=${targets.length}, cached=${cache.size}, to run=${todo.length}`);
+  if (!todo.length) return;
+
+  const ENDPOINT = Deno.env.get("APFEL_ENDPOINT") ?? "http://127.0.0.1:11435/v1/chat/completions";
+  const CONCURRENCY = Number(Deno.env.get("APFEL_CONCURRENCY") ?? "4");
+  const LIMIT = Deno.env.get("APFEL_LIMIT") ? Number(Deno.env.get("APFEL_LIMIT")) : todo.length;
+  const queue = todo.slice(0, LIMIT);
+  console.log(`[${label}] endpoint=${ENDPOINT} concurrency=${CONCURRENCY} queued=${queue.length}`);
+
+  const fh = Deno.openSync(outPath, { create: true, append: true });
+  const enc = new TextEncoder();
+  const t0 = performance.now();
+  let done = 0, errs = 0, retries = 0;
+
+  async function call(p: string): Promise<string> {
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "apple-foundationmodel",
+            messages: [{ role: "user", content: p }],
+            temperature: 0.0,
+            max_tokens: maxTokens,
+          }),
+        });
+        if (!res.ok) throw new Error(`apfel ${res.status}`);
+        const j = await res.json();
+        return (j.choices?.[0]?.message?.content ?? "").replace(/[\t\n\r]/g, " ").trim();
+      } catch (e) {
+        lastErr = e as Error;
+        if (attempt < 3) { retries++; await new Promise((r) => setTimeout(r, 500 * (attempt + 1))); }
+      }
+    }
+    throw lastErr ?? new Error("apfel failed");
+  }
+
+  async function worker() {
+    while (queue.length) {
+      const item = queue.shift();
+      if (!item) break;
+      try {
+        const raw = await call(prompt(item));
+        if (/^skip$/i.test(raw.trim())) { done++; continue; }
+        const cleaned = cleanDef(raw); // refusal-pattern + length safety; empty → skip caching
+        if (cleaned) {
+          fh.writeSync(enc.encode(`${item.id}\t${cleaned}\n`));
+        }
+      } catch (e) {
+        errs++;
+        if (errs < 5) console.warn(`[${label}] err ${item.id}: ${(e as Error).message.slice(0, 100)}`);
+      }
+      done++;
+      if (done % 200 === 0) {
+        const dt = (performance.now() - t0) / 1000;
+        const rate = done / dt;
+        console.log(`  ${done}/${LIMIT} (${rate.toFixed(1)}/s, ETA ${(queue.length / rate / 60).toFixed(1)}min, errs=${errs}, retries=${retries})`);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+  fh.close();
+  const dt = (performance.now() - t0) / 1000;
+  console.log(`[${label}] done: ${done} in ${dt.toFixed(0)}s, errs=${errs}, retries=${retries}`);
+}
+
+// Stage 1c via Apfel: extract concise skill name from long titles. Writes to 1c_summarize.tsv
+// (same cache file as the Haiku batch stage), so subsequent stage-1 runs apply the summaries.
+async function stage1cApfelSummarize() {
+  const MAX_LEN = Number(Deno.env.get("SUMMARIZE_MAX_LEN") ?? "80");
+  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
+  const targets: { id: string; title: string }[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    if (c[1].length > MAX_LEN) targets.push({ id: c[0], title: c[1] });
+  }
+  await apfelBatch(
+    "stage 1c-apfel",
+    SUMMARIZE_CACHE,
+    targets,
+    (t) => `Extract a concise 2-6 word skill name (verb phrase preferred). Output only the name — no preamble, no quotes, no trailing period.\n\nStandard: ${t.title}\n\nSkill name:`,
+    40,
+  );
+}
+
+// Stage 1b via Apfel: define Lightcast skills lacking descriptions. Writes to 1b_apfel_infill.tsv
+// by default (separate from Haiku cache); can be merged into 1b_infill.tsv before stage 1.
+async function stage1bApfelInfill() {
+  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
+  const targets: { id: string; title: string }[] = [];
+  let opaqueSkipped = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    if (!c[3].includes("lightcast")) continue;
+    // Target items with empty desc OR placeholder desc (type name / category fallback)
+    if (c[2] && !c[4]?.includes("desc:placeholder")) continue;
+    const title = c[1];
+    if (title.length <= 3 && !SHORT_TECH_WHITELIST.has(title.toLowerCase())) { opaqueSkipped++; continue; }
+    targets.push({ id: c[0], title });
+  }
+  console.log(`[stage 1b-apfel] opaque_skipped=${opaqueSkipped}`);
+  const out = Deno.env.get("APFEL_INFILL_OUT") ?? `${BUILD}/1b_apfel_infill.tsv`;
+  await apfelBatch(
+    "stage 1b-apfel",
+    out,
+    targets,
+    (t) => `Define this workplace skill in exactly one concise sentence. Be concrete and factual. Output only the definition — no preamble, no "refers to", no quotation marks. Never repeat the skill name verbatim at the start. If you do not have a clear definition, output the single word: SKIP\n\nSkill: ${t.title}\n\nDefinition:`,
+    120,
+  );
+}
+
+// Infill ALL skills with empty descriptions (any source).
+async function stage1bApfelInfillAll() {
+  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
+  const targets: { id: string; title: string }[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    if (c[2]) continue; // has description
+    const title = c[1];
+    if (title.length <= 3 && !SHORT_TECH_WHITELIST.has(title.toLowerCase())) continue;
+    targets.push({ id: c[0], title });
+  }
+  const out = Deno.env.get("APFEL_INFILL_OUT") ?? `${BUILD}/1b_apfel_infill.tsv`;
+  await apfelBatch(
+    "stage 1b-apfel-all",
+    out,
+    targets,
+    (t) => `Define this skill or standard in exactly one concise sentence. Be concrete and factual. Output only the definition — no preamble, no "refers to", no quotation marks. Never repeat the skill name verbatim at the start. If you do not have a clear definition, output the single word: SKIP\n\nSkill: ${t.title}\n\nDefinition:`,
+    120,
+  );
+}
+
 async function stage5OllamaPrereq() {
   const { skills } = parseSkillsWithDifficulty();
   let candidates = loadPrereqCandidates();
@@ -3647,7 +4021,19 @@ function stage3bDedupe() {
   const JACCARD_MIN = Number(Deno.env.get("DEDUPE_JACCARD") ?? "0.7");
   const wordSets = rows.map((r) => wordSet(r.title));
 
-  let merged = 0, rejectedByJaccard = 0, skippedHuge = 0;
+  // Significant-token overlap (non-stopword, len≥3) — separate from raw Jaccard, used as
+  // an additional precision gate to prevent embedding-drift false-merges in jargon-heavy fields.
+  const sigTokens = (s: string): Set<string> => {
+    const out = new Set<string>();
+    for (const w of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)) {
+      if (w.length >= 3 && !SIG_STOP.has(w)) out.add(w);
+    }
+    return out;
+  };
+  const sigSets = rows.map((r) => sigTokens(r.title));
+  const SIG_OVERLAP_MIN = 0.4;
+
+  let merged = 0, rejectedByJaccard = 0, rejectedByOverlap = 0, rejectedByLength = 0, skippedHuge = 0;
   for (const [, idxs] of buckets) {
     if (idxs.length < 2) continue;
     if (idxs.length > 1500) { skippedHuge++; continue; } // huge generic topics: skip to stay quadratic-tractable
@@ -3655,7 +4041,18 @@ function stage3bDedupe() {
       for (let b = a + 1; b < idxs.length; b++) {
         // quick Jaccard gate before cosine (cheaper)
         const j = jaccard(wordSets[idxs[a]], wordSets[idxs[b]]);
-        if (j < JACCARD_MIN) continue;
+        if (j < JACCARD_MIN) { rejectedByJaccard++; continue; }
+        // Title-length-ratio guard: don't merge a long compliance statement with a short skill label.
+        const la = rows[idxs[a]].title.length, lb = rows[idxs[b]].title.length;
+        if (Math.max(la, lb) / Math.max(1, Math.min(la, lb)) > 3) { rejectedByLength++; continue; }
+        // Significant-token overlap fraction (precision gate against jargon embedding drift)
+        const sa = sigSets[idxs[a]], sb = sigSets[idxs[b]];
+        if (sa.size && sb.size) {
+          let inter = 0;
+          for (const t of sa) if (sb.has(t)) inter++;
+          const overlap = inter / Math.min(sa.size, sb.size);
+          if (overlap < SIG_OVERLAP_MIN) { rejectedByOverlap++; continue; }
+        }
         let sc = 0;
         const oa = idxs[a] * DIM, ob = idxs[b] * DIM;
         for (let d = 0; d < DIM; d++) sc += vecs[oa + d] * vecs[ob + d];
@@ -3666,7 +4063,7 @@ function stage3bDedupe() {
     }
   }
   console.log(`[stage 3b] skipped ${skippedHuge} oversize buckets`);
-  void rejectedByJaccard;
+  console.log(`[stage 3b] rejected: jaccard=${rejectedByJaccard}, overlap=${rejectedByOverlap}, length=${rejectedByLength}`);
   console.log(`[stage 3b] ${merged} cosine+jaccard merges (on top of ${qidMerges} QID merges)`);
 
   // Build id → canonical_id alias map (preserves stable survivors)
@@ -3998,12 +4395,16 @@ async function stage1eSeedEdges() {
         nodes.push({ label: it.fullStatement.slice(0, 120), grade: minG, code: it.humanCodingScheme || "" });
       }
       if (nodes.length < 10) continue;
-      // Group by grade; within framework, emit earlier-grade → later-grade pairs with token overlap
+      // Group by grade; within framework, emit earlier-grade → later-grade pairs with token overlap.
+      // Require ≥3 shared significant tokens (was ≥2) and cap per (parent_grade, child_grade) at 5
+      // to prevent fan-out spam from generic vocab overlaps.
       nodes.sort((a, b) => a.grade - b.grade);
+      const PAIR_CAP = 5;
+      const perGradePair = new Map<string, number>();
       for (let i = 0; i < nodes.length; i++) {
         const ai = nodes[i];
         const ta = sigT(ai.label);
-        if (ta.size < 2) continue;
+        if (ta.size < 3) continue;
         // Look ahead to skills at grade+1..grade+3 with token overlap
         for (let j = i + 1; j < nodes.length; j++) {
           const aj = nodes[j];
@@ -4012,7 +4413,11 @@ async function stage1eSeedEdges() {
           const tb = sigT(aj.label);
           let overlap = 0;
           for (const t of ta) if (tb.has(t)) overlap++;
-          if (overlap < 2) continue; // require ≥2 shared significant tokens
+          if (overlap < 3) continue; // tightened: ≥3 shared significant tokens
+          const k = `${ai.grade}->${aj.grade}`;
+          const c = perGradePair.get(k) ?? 0;
+          if (c >= PAIR_CAP) continue;
+          perGradePair.set(k, c + 1);
           addRaw(ai.label, aj.label, "opensalt_grade", `${ai.code || "c"}_g${ai.grade}->${aj.code || "c"}_g${aj.grade}`);
           emitted++;
           if (emitted > 50000) break; // safety cap
@@ -5367,6 +5772,9 @@ const stages: Record<string, () => void | Promise<void>> = {
   prereq: stage5Prereq,
   "prereq-ollama": stage5OllamaPrereq,
   "prereq-apfel": stage5ApfelPrereq,
+  "summarize-apfel": stage1cApfelSummarize,
+  "infill-apfel": stage1bApfelInfill,
+  "infill-apfel-all": stage1bApfelInfillAll,
   postproc: stage6PostProc,
   finalize: stage7Finalize,
   eval: stage8Eval,
