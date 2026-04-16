@@ -34,27 +34,25 @@
 - [x] E4: cycle-cut log to `build/6_cycle_cuts.tsv` (shows which edges cycle-breaker dropped and whether they were seed or inferred).
 
 ## Metrics (across all quality passes)
-| metric              | baseline | pass 3  | pass 4   | pass 5       |
-| ------------------- | -------- | ------- | -------- | ------------ |
-| orphan rate         | 0.092    | 0.0883  | 0.0844   | **0.0791**   |
-| metacademy recall*  | 0.143    | 0.087   | 0.087    | 0.087        |
-| alcpl recall*       | 0.250    | 0.156   | 0.156    | 0.156        |
-| opensalt_precedes*  | 0.000    | 0.111   | 0.111    | **0.222**    |
-| opensalt_grade*     | —        | —       | 0.030    | **0.037**    |
-| kendall_tau anchor  | 0.777    | 0.776   | 0.776    | 0.776        |
-| seed_in_final       | 291      | 306     | 22,386   | **22,602**   |
-| total edges         | 218,459  | 215,790 | 243,783  | 307,268      |
-| skills emitted      | —        | —       | 94,528   | **97,264**   |
-| unique topics       | 5,188    | 5,050   | 7,001    | 7,001        |
-| wiki coverage       | 0.138    | 0.138   | 0.145    | 0.141        |
-| domain leakage      | 0.337    | —       | 0.302    | 0.310        |
-| LCSH enriched       | —        | —       | 40,443   | 41,172       |
 
-\* recall drops vs baseline reflect larger, more stable denominators (E1 doubled holdout) — the earlier high values were small-sample noise.
+**Note:** passes 1-5 metrics were computed by a broken eval (stage 8 column indices off by 2 — difficulty was read as description, prereqs as difficulty numbers). Those numbers were meaningless. Pass 7 is the first with a correct eval stage.
 
-Pass 4 key wins: **77× more seed edges in final graph** (22,386 vs 291), **+39% unique topic vocabulary** from LCSH/DBpedia ancestor chains, reduced orphan rate.
-
-Pass 5 key wins: union-merged Ollama llama3.2:3b prereqs with Haiku cache (~14k overnight on local hardware, 34k new candidate edges). **2× opensalt_precedes recall** (0.111→0.222), **-6% orphan rate**, +2,736 skills preserved. Small precision cost (domain_leakage +0.8pp).
+| metric              | pass 7 (corrected)  |
+| ------------------- | ------------------- |
+| orphan rate         | 0.089               |
+| khan recall         | 0.054 (13/242)      |
+| alcpl recall        | 0.053 (1/19)        |
+| metacademy recall   | 0.118 (2/17)        |
+| kendall_tau         | 0.762               |
+| seed_in_final       | 1,195               |
+| total edges         | 141,332             |
+| skills emitted      | 65,651              |
+| unique topics       | 6,611               |
+| wiki coverage       | 0.209               |
+| domain leakage      | 0.289               |
+| LCSH enriched       | 29,222              |
+| depth p50/p95/max   | 4 / 11 / 21         |
+| DAG                 | true                |
 
 ## Quality pass 4 (2026-04-14, local LLM)
 - [x] B1: stage 1f2 fuzzy-retry using ESCO altLabels + paren-strip + verb-strip variants. Token-overlap guard. +785 matches (13.8% → 14.6% wiki resolution).
@@ -72,17 +70,17 @@ Pass 5 key wins: union-merged Ollama llama3.2:3b prereqs with Haiku cache (~14k 
 - [x] P2: hypernym/strict-subset prereq filter in stage 6 (before tech filter). Drops edges where prereq's significant slug tokens are a strict subset of child's (e.g. `manage-staff` ⊂ `manage-musical-staff`). Seeds exempt; single-token prereqs (math, algebra) exempt. 1,336 edges dropped (747 seed exempt).
 - [x] P3: synonym-pair both-direction drop inside A4. When LLM picked both A→B and B→A AND slug-token Jaccard ≥ 0.5 (or subset), drop both (they're near-duplicates not prereqs). 38 pairs dropped. Remaining bidirectional pairs handled by P1.
 
-| metric              | pass 5     | pass 6       |
-| ------------------- | ---------- | ------------ |
-| cycles.dag          | false      | **true**     |
-| leftover_after_kahn | 80,284     | **0**        |
-| bidirectional pairs | 750        | **0**        |
-| total edges         | 307,268    | 302,811      |
-| seed_edges_in_final | 22,602     | 21,005       |
-| orphan_rate         | 0.0791     | 0.0806       |
-| domain_leakage mean | 0.310      | 0.297        |
+Pass 6 key wins: strict DAG enforcement via Kahn topo-sort per SCC (was 80k nodes in cycles).
 
-Pass 6 key wins: **graph is now an actual DAG** — the prerequisite graph was not acyclic before (82% of skills sat inside cycles). Seed survival drops ~7% due to seed back-edges in SCCs, offset by elimination of the 80k-node cyclic blob.
+## Quality pass 7 (2026-04-15, eval bug fix + data cleanup)
+- [x] Fixed stage 8 eval: column indices were off by 2 (display_title/description columns added but indices not updated). ALL prior eval metrics were wrong — kendall_tau was -1, graph appeared 100% cyclic, all holdout recall was 0.
+- [x] Fixed stage 7 `edges` stat: was reporting raw input lines (307k) instead of surviving edges after orphan filtering (143k). 169k phantom edges were being counted.
+- [x] Fixed stage 6 `orphan_rate`: formula went negative (-0.37) because skillsWithFinalPrereqs was a stale snapshot and could exceed skill.size.
+- [x] Added edge membership filter in stage 6: drop edges referencing skill IDs not in the tagged-deduped skill set (was polluting the edge list and causing 169k orphan drops in stage 7).
+- [x] Added Khan V-Position division-by-zero guard.
+- [x] Added topic blocklist for LCSH/DBpedia junk: `judaism-customs-and-practices`, `descriptive-cataloging`, `ibm-computers`, `wikiproject-countries-projects`, `wikiproject-africa-projects`, etc.
+- [x] Added eval sanity tests to pipeline_test.ts (kendall_tau > 0, DAG true, depth > 1, hub IDs aren't bare numbers).
+- [x] Fixed pre-existing test bug: `final_edges` ordering test crashed on edges referencing skills dropped in stage 7.
 
 ## Known limits (future work)
 - [ ] khan/moocx recall ~0 — seed labels don't resolve to skill ids. Fix: add Khan/Junyi as skill sources OR expand label-resolution fallback.

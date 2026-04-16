@@ -2866,6 +2866,10 @@ function stage6PostProc() {
       .filter(([s, p]) => s !== p);
     console.log(`[stage 6] applied ${alias.size} aliases`);
   } catch { /* no dedupe */ }
+  // Drop edges referencing skills not in the tagged-deduped skill set
+  const beforeOrphanFilter = raw.length;
+  raw = raw.filter(([s, p]) => skill.has(s) && skill.has(p));
+  if (beforeOrphanFilter - raw.length > 0) console.log(`[stage 6] dropped ${beforeOrphanFilter - raw.length} edges referencing unknown skill ids`);
   const beforeTotal = raw.length;
   console.log(`[stage 6] raw edges: ${beforeTotal}`);
 
@@ -3010,18 +3014,18 @@ function stage6PostProc() {
       continue;
     }
 
-    // Per-topic cap: tally how many kept per child's top topic
+    // Per-topic cap: tally how many kept per child's topics (check all, not just first)
     const perTopicCount = new Map<string, number>();
     let globalKept = 0;
     for (const [s, p] of edges) {
       if (isSeed(s, p)) { keep.add(s + "\t" + p); hubSeedExempt++; globalKept++; continue; }
       const childTopics = skill.get(s)?.topics;
-      const topic = childTopics && childTopics.size ? [...childTopics][0] : "_notopic";
-      const n = perTopicCount.get(topic) ?? 0;
-      if (n >= PER_TOPIC_CAP) { droppedPerTopic++; continue; }
+      const topics = childTopics && childTopics.size ? [...childTopics] : ["_notopic"];
+      // Edge is capped if ANY of the child's topics has hit the cap
+      if (topics.some((t) => (perTopicCount.get(t) ?? 0) >= PER_TOPIC_CAP)) { droppedPerTopic++; continue; }
       if (globalKept >= GLOBAL_CAP) { droppedHub++; continue; }
       keep.add(s + "\t" + p);
-      perTopicCount.set(topic, n + 1);
+      for (const t of topics) perTopicCount.set(t, (perTopicCount.get(t) ?? 0) + 1);
       globalKept++;
     }
   }
@@ -3785,6 +3789,13 @@ function stage7Finalize() {
     "professional-employees", "employees", "persons", "specialists", "scientists",
     "workers", "people", "occupations", "officials", "personnel", "staff",
     "professionals", "practitioners", "technicians", "operators",
+    // Wikipedia/LCSH category artifacts (not meaningful skill topics):
+    "judaism-customs-and-practices", "descriptive-cataloging", "ibm-computers",
+    "wikiproject-countries-projects", "wikiproject-africa-projects",
+    "computer-input-output-equipment", "history-of-technology",
+    "personality-tests", "diagnostic-equipment-industry", "industrial-equipment-industry",
+    "portable-computers", "telecommunication-equipment-industry",
+    "law-interpretation-and-construction",
   ]);
   let singletonDropped = 0, genericDropped = 0;
   for (const r of pending) {
