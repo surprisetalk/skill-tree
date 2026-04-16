@@ -968,13 +968,14 @@ async function stageSeedEdges() {
     }
   }
 
-  // AL-CPL
+  // AL-CPL — per readme: "*.preqs: concept pairs with prerequisite relations.
+  // The second concept (2nd column) is a prerequisite of the first concept (1st column)."
   for (const domain of ["data_mining", "geometry", "physics", "precalculus"]) {
     let text: string;
     try { text = Deno.readTextFileSync(`data/al-cpl/data/${domain}.preqs`); } catch { continue; }
     for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
-      const [pre, tgt] = line.split(",");
-      if (pre && tgt) addRaw(pre, tgt, `alcpl_${domain}`, line);
+      const [dependent, prereq] = line.split(",");
+      if (dependent && prereq) addRaw(prereq, dependent, `alcpl_${domain}`, line);
     }
   }
 
@@ -1313,6 +1314,10 @@ function parseOccupationRefs(): { label: string; desc: string }[] {
   return refs;
 }
 
+// Drop geographic/temporal/biographical categories — they provide zero signal for skills
+// and cause false positives like polyline → "railway-lines-in-europe".
+const TOPIC_BADCAT2 = /(\b(in|of|from|by|for)\b\s+(Europe|Asia|Africa|America|Oceania|Antarctica|England|France|Germany|China|Japan|India|Russia|USSR|USA|Britain|Scotland|Ireland|Italy|Spain|Canada|Australia|Mexico|Brazil|Argentina|Iran|Iraq|Egypt|Turkey|Greece))|(\bcentury|centuries|\bdecade|\b\d{4}s\b|\b\d{3,4}\s*(BC|AD|BCE|CE)\b)|(\bpeople\b|\bbiography|\bbiographies|\bdeaths\b|\bbirths\b|\bmarriage|\bfamily\b)|(\bdisasters|\bincidents|\baccidents|\bwars\b|\bbattles|\belections)|^(19|20)\d{2}s?\b|^\d{1,2}(st|nd|rd|th)\s*(century|millennium)/i;
+
 async function parseTopicRefs(perSource: number): Promise<{ label: string; desc: string }[]> {
   const BADCAT = /^(Wikipedia|Lists of|List of|Categories |Redirects|Articles |Stubs|Templates|Commons|Set indices)/i;
   const topSource = async (name: string, cmd: string[]) => {
@@ -1456,6 +1461,15 @@ async function stageTag() {
 
   const occRefs = parseOccupationRefs();
   const topicRefs = await parseTopicRefs(Number(Deno.env.get("TOPIC_PER_SOURCE") ?? "5000"));
+  // Retroactively filter topic refs by geographic/temporal patterns. Their embeddings are
+  // already in the cache, so we keep them in-place but mark them as "poisoned" so they
+  // are never matched.
+  const topicPoisoned = new Uint8Array(topicRefs.length);
+  let topicDropped = 0;
+  for (let i = 0; i < topicRefs.length; i++) {
+    if (TOPIC_BADCAT2.test(topicRefs[i].label)) { topicPoisoned[i] = 1; topicDropped++; }
+  }
+  console.log(`[tag] poisoned ${topicDropped}/${topicRefs.length} topic refs (geographic/temporal)`);
   const occVecs = await embedBatch(occRefs.map((r) => r.label), "tag:occ");
   const topicVecs = await embedBatch(topicRefs.map((r) => r.label), "tag:topic");
 
@@ -1472,14 +1486,55 @@ async function stageTag() {
   const OCC_TH = Number(Deno.env.get("OCC_THRESHOLD") ?? "0.60");
   const TOPIC_TH = Number(Deno.env.get("TOPIC_THRESHOLD") ?? "0.62");
   const IDF_MAX = Number(Deno.env.get("IDF_MAX_FRAC") ?? "0.015");
+  const LEXICAL_GUARD = Deno.env.get("TAG_LEXICAL_GUARD") !== "0";
 
-  const oversamplePass = (refMat: Float32Array, refCount: number, keep: number, th: number) => {
+  const TAG_STOP = new Set([
+    "the","a","an","and","or","of","to","for","in","on","at","by","with","from","as","is","are","be",
+    "that","this","these","those","their","its","into","such","than","then","also","over","under",
+    "about","above","below","between","through","during","after","before","because","while","other","which",
+    "where","when","what","each","both","some","most","many","much","more","less","only","very","just",
+    "can","should","would","could","may","might","will","shall","does","did","done","has","have","had",
+  ]);
+  const tokenize = (s: string): Set<string> => {
+    const out = new Set<string>();
+    const norm = s.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(Boolean);
+    for (const w of norm) {
+      if (w.length < 4) continue;
+      if (TAG_STOP.has(w)) continue;
+      out.add(w);
+      // singular/plural normalization: add stem without trailing s
+      if (w.length >= 5 && w.endsWith("s") && !w.endsWith("ss")) out.add(w.slice(0, -1));
+    }
+    return out;
+  };
+  const skillToks = skills.map((s) => tokenize(`${s.title} ${s.description}`));
+  // Build a corpus-frequency table so "common" words (line, data, system, device…) don't
+  // satisfy the lexical guard on their own.
+  const docFreq = new Map<string, number>();
+  for (const toks of skillToks) for (const t of toks) docFreq.set(t, (docFreq.get(t) ?? 0) + 1);
+  const COMMON_CUTOFF = Math.max(500, Math.floor(skills.length * 0.01));
+  const commonWord = (t: string): boolean => (docFreq.get(t) ?? 0) > COMMON_CUTOFF;
+
+  const oversamplePass = (refMat: Float32Array, refCount: number, refs: { label: string }[], keep: number, th: number, poisoned?: Uint8Array) => {
     const out: { idx: number; score: number }[][] = new Array(skills.length);
     const refHits = new Int32Array(refCount);
+    const refToks = refs.map((r) => tokenize(r.label));
     for (let i = 0; i < skills.length; i++) {
       const sOff = i * DIM;
+      const skToks = skillToks[i];
       const top: { idx: number; score: number }[] = [];
       for (let r = 0; r < refCount; r++) {
+        if (poisoned && poisoned[r]) continue;
+        if (LEXICAL_GUARD) {
+          let hits = 0;
+          let rareHit = false;
+          for (const t of refToks[r]) {
+            if (!skToks.has(t)) continue;
+            hits++;
+            if (!commonWord(t)) rareHit = true;
+          }
+          if (!rareHit && hits < 2) continue;
+        }
         let s = 0;
         const rOff = r * DIM;
         for (let d = 0; d < DIM; d++) s += skillVecs[sOff + d] * refMat[rOff + d];
@@ -1513,11 +1568,11 @@ async function stageTag() {
   };
 
   const OVERSAMPLE = 5;
-  console.log(`[tag] matching ${skills.length}×${occRefs.length} occs`);
-  const occPass = oversamplePass(occMat, occRefs.length, OCC_K * OVERSAMPLE, OCC_TH);
+  console.log(`[tag] matching ${skills.length}×${occRefs.length} occs (lexical_guard=${LEXICAL_GUARD})`);
+  const occPass = oversamplePass(occMat, occRefs.length, occRefs, OCC_K * OVERSAMPLE, OCC_TH);
   const occMask = pruneMask(occPass.refHits, occRefs, "occ");
-  console.log(`[tag] matching ${skills.length}×${topicRefs.length} topics`);
-  const topicPass = oversamplePass(topicMat, topicRefs.length, TOPIC_K * OVERSAMPLE, TOPIC_TH);
+  console.log(`[tag] matching ${skills.length}×${topicRefs.length} topics (lexical_guard=${LEXICAL_GUARD})`);
+  const topicPass = oversamplePass(topicMat, topicRefs.length, topicRefs, TOPIC_K * OVERSAMPLE, TOPIC_TH, topicPoisoned);
   const topicMask = pruneMask(topicPass.refHits, topicRefs, "topic");
 
   const OCC_PAIR_MIN = Number(Deno.env.get("OCC_PAIR_MIN") ?? "0.5");
@@ -1628,21 +1683,94 @@ function stageDedupe() {
   const vecs = normalizedEmbeddingsForSkills(rows.map((r) => r.id));
   const DEDUPE_COSINE = Number(Deno.env.get("DEDUPE_COSINE") ?? "0.96");
 
+  // Antonym/modifier pairs that must NOT be merged with each other.
+  // When A and B share all other tokens but one is in one group and the other is in another,
+  // we treat them as distinct concepts.
+  const ANTONYM_GROUPS: string[][] = [
+    ["theoretical","practical","applied"],
+    ["commercial","industrial","residential","military","civil","consumer"],
+    ["1d","2d","3d","4d"],
+    ["first","second","third","fourth","fifth"],
+    ["introductory","advanced","intermediate","beginner","basic"],
+    ["micro","macro","nano","mini","mega"],
+    ["pre","post","anti","pro","non","sub","super"],
+    ["internal","external"],
+    ["public","private"],
+    ["input","output"],
+    ["front","back","side","top","bottom"],
+    ["positive","negative","neutral"],
+    ["online","offline"],
+    ["qualitative","quantitative"],
+    ["domestic","international","foreign"],
+    ["static","dynamic"],
+    ["manual","automatic","automated"],
+    ["wired","wireless"],
+    ["analog","digital"],
+    ["primary","secondary","tertiary"],
+    ["open","closed"],
+    ["augmented","mixed","virtual"],
+  ];
+  const antonymGroupOf = new Map<string, number>();
+  ANTONYM_GROUPS.forEach((g, gi) => g.forEach((w) => antonymGroupOf.set(w, gi)));
+  const antonymClash = (titleA: string, titleB: string): boolean => {
+    const tA = titleA.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    const tB = titleB.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    const groupsA = new Map<number, Set<string>>();
+    const groupsB = new Map<number, Set<string>>();
+    for (const t of tA) {
+      const g = antonymGroupOf.get(t);
+      if (g === undefined) continue;
+      if (!groupsA.has(g)) groupsA.set(g, new Set());
+      groupsA.get(g)!.add(t);
+    }
+    for (const t of tB) {
+      const g = antonymGroupOf.get(t);
+      if (g === undefined) continue;
+      if (!groupsB.has(g)) groupsB.set(g, new Set());
+      groupsB.get(g)!.add(t);
+    }
+    for (const [g, setA] of groupsA) {
+      const setB = groupsB.get(g);
+      if (!setB) continue;
+      let sameWord = false;
+      for (const w of setA) if (setB.has(w)) { sameWord = true; break; }
+      if (!sameWord) return true; // different antonym word in same group
+    }
+    for (const [g, setB] of groupsB) {
+      if (!groupsA.has(g)) continue;
+      // Already handled above.
+      void g; void setB;
+    }
+    return false;
+  };
+
+  const sourceCount = (r: Row): number => {
+    if (!r.sources) return 0;
+    return r.sources.split(",").filter(Boolean).length;
+  };
+
   const parent = new Int32Array(rows.length);
   for (let i = 0; i < rows.length; i++) parent[i] = i;
   function find(i: number): number { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
-  function union(a: number, b: number) {
+  function union(a: number, b: number): boolean {
     const ra = find(a), rb = find(b);
-    if (ra === rb) return;
-    const keep = rows[ra].title.length <= rows[rb].title.length ? ra : rb;
+    if (ra === rb) return false;
+    if (antonymClash(rows[ra].title, rows[rb].title)) return false;
+    const sa = sourceCount(rows[ra]);
+    const sb = sourceCount(rows[rb]);
+    let keep: number;
+    if (sa !== sb) keep = sa > sb ? ra : rb;
+    else keep = rows[ra].title.length <= rows[rb].title.length ? ra : rb;
     parent[keep === ra ? rb : ra] = keep;
+    return true;
   }
 
   // Token-sort signature merge
   const SIG_STOP = new Set(["a","an","the","of","to","for","in","on","at","by","with","is","are","be","or","and","from","as","their","its","this","that","these","those"]);
   const tokenSig = (title: string): string => {
     const toks = title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/)
-      .filter((w) => w.length >= 3 && !SIG_STOP.has(w));
+      .filter((w) => w.length >= 2 && !SIG_STOP.has(w))
+      .filter((w) => w.length >= 3 || /[0-9]/.test(w));
     toks.sort();
     return toks.join(" ");
   };
@@ -1652,12 +1780,15 @@ function stageDedupe() {
     if (!sig) continue;
     const arr = sigBuckets.get(sig) ?? []; arr.push(i); sigBuckets.set(sig, arr);
   }
-  let sigMerges = 0;
+  let sigMerges = 0, sigBlocked = 0;
   for (const idxs of sigBuckets.values()) {
     if (idxs.length < 2) continue;
-    for (let k = 1; k < idxs.length; k++) { union(idxs[0], idxs[k]); sigMerges++; }
+    for (let k = 1; k < idxs.length; k++) {
+      if (union(idxs[0], idxs[k])) sigMerges++;
+      else sigBlocked++;
+    }
   }
-  console.log(`[dedupe] token-sort merges: ${sigMerges}`);
+  console.log(`[dedupe] token-sort merges: ${sigMerges} (blocked ${sigBlocked} antonym-clash)`);
 
   // Topic-bucket merge with jaccard + cosine
   const buckets = new Map<string, number[]>();
@@ -1688,7 +1819,7 @@ function stageDedupe() {
   };
   const sigSets = rows.map((r) => sigTokens(r.title));
 
-  let merged = 0, skippedHuge = 0;
+  let merged = 0, skippedHuge = 0, cosBlocked = 0;
   for (const idxs of buckets.values()) {
     if (idxs.length < 2) continue;
     if (idxs.length > 1500) { skippedHuge++; continue; }
@@ -1707,12 +1838,12 @@ function stageDedupe() {
         const oa = idxs[a] * DIM, ob = idxs[b] * DIM;
         for (let d = 0; d < DIM; d++) sc += vecs[oa + d] * vecs[ob + d];
         if (sc < DEDUPE_COSINE) continue;
-        union(idxs[a], idxs[b]);
-        merged++;
+        if (union(idxs[a], idxs[b])) merged++;
+        else cosBlocked++;
       }
     }
   }
-  console.log(`[dedupe] cosine+jaccard merges: ${merged} (skipped ${skippedHuge} oversize buckets)`);
+  console.log(`[dedupe] cosine+jaccard merges: ${merged} (blocked ${cosBlocked} antonym, skipped ${skippedHuge} oversize buckets)`);
 
   const alias = new Map<string, string>();
   let survivors = 0, dropped = 0;
@@ -1871,32 +2002,41 @@ function stageDifficulty() {
     const lines = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split("\n").filter((l) => l.length);
     const h = lines[0].split("\t");
     const iN = h.indexOf("Data Name"), iD = h.indexOf("Display Name"), iV = h.indexOf("V-Position");
-    const labelToV = new Map<string, number>();
+    // Build the richer skill index (title + slug + id) once for resolveConcept-style matching.
+    const idSet = new Set<string>();
+    const titleToId = new Map<string, string>();
+    const slugToId = new Map<string, string>();
+    const idToIdx = new Map<string, number>();
+    for (let i = 0; i < skills.length; i++) {
+      idSet.add(skills[i].id);
+      idToIdx.set(skills[i].id, i);
+      const t = (skills[i].title || "").toLowerCase().trim();
+      if (t && !titleToId.has(t)) titleToId.set(t, skills[i].id);
+      slugToId.set(skills[i].id, skills[i].id);
+      const altSlug = slugify(skills[i].title || "");
+      if (altSlug && !slugToId.has(altSlug)) slugToId.set(altSlug, skills[i].id);
+    }
+    const kidx = { idSet, titleToId, slugToId };
+    const labelsV: [string, number][] = [];
     let vMin = Infinity, vMax = -Infinity;
     for (let i = 1; i < lines.length; i++) {
       const c = lines[i].split("\t");
       const v = Number(c[iV]);
       if (!Number.isFinite(v)) continue;
       vMin = Math.min(vMin, v); vMax = Math.max(vMax, v);
-      for (const lbl of [c[iN], c[iD]]) {
-        if (lbl) {
-          const slug = slugify(lbl);
-          if (!labelToV.has(slug)) labelToV.set(slug, v);
-        }
-      }
-    }
-    const slugToIdx = new Map<string, number>();
-    for (let i = 0; i < skills.length; i++) {
-      slugToIdx.set(skills[i].id, i);
-      const alt = slugify(skills[i].title);
-      if (!slugToIdx.has(alt)) slugToIdx.set(alt, i);
+      if (c[iN]) labelsV.push([c[iN], v]);
+      if (c[iD]) labelsV.push([c[iD], v]);
     }
     if (vMax > vMin) {
-      for (const [lbl, v] of labelToV) {
-        const i = slugToIdx.get(lbl);
+      const seen = new Set<string>();
+      for (const [lbl, v] of labelsV) {
+        const id = resolveConcept(lbl, kidx);
+        if (!id || seen.has(id)) continue;
+        const i = idToIdx.get(id);
         if (i === undefined || !Number.isNaN(anchor[i])) continue;
         anchor[i] = (v - vMin) / (vMax - vMin) * 12;
         khanAnchored++;
+        seen.add(id);
       }
     }
   } catch (e) { console.warn(`[difficulty] WARN: Khan anchors unavailable — ${(e as Error).message}`); }
@@ -2516,6 +2656,40 @@ function stagePostproc() {
   });
   console.log(`[postproc] dropped ${beforeBand - raw.length} band-inverted (${bandExempt} seed exempt)`);
 
+  // Filter 0a: raw-difficulty monotonicity (catches same-band reversals)
+  const RAW_EPS = Number(Deno.env.get("RAW_MONOTONIC_EPS") ?? "0.05");
+  let rawExempt = 0;
+  const beforeRaw = raw.length;
+  raw = raw.filter(([s, p]) => {
+    const sR = rawDiff.get(s);
+    const pR = rawDiff.get(p);
+    if (sR === undefined || pR === undefined) return true;
+    if (pR <= sR - RAW_EPS) return true;
+    if (isSeed(s, p)) { rawExempt++; return true; }
+    return false;
+  });
+  console.log(`[postproc] dropped ${beforeRaw - raw.length} raw-inverted (${rawExempt} seed exempt)`);
+
+  // Filter 0b: domain-skill specificity guard.
+  // A broad domain skill (≤2 tokens in its slug, e.g. "arithmetic", "algebra", "geometry")
+  // should not have highly-specific prereqs (e.g. "partial-fraction-decomposition") chosen
+  // by the LLM. Those are usually sub-concepts mis-picked as prereqs. Only allow seed edges
+  // or prereqs that are themselves broad (≤ skill.tokens + 1).
+  const tokenCount = (id: string): number => {
+    let n = 0; for (const w of id.split("-")) if (w.length >= 2) n++; return n;
+  };
+  const beforeDomain = raw.length;
+  let domainExempt = 0;
+  raw = raw.filter(([s, p]) => {
+    const sTok = tokenCount(s);
+    if (sTok > 2) return true;
+    const pTok = tokenCount(p);
+    if (pTok <= sTok + 1) return true;
+    if (isSeed(s, p)) { domainExempt++; return true; }
+    return false;
+  });
+  console.log(`[postproc] dropped ${beforeDomain - raw.length} domain-specificity (${domainExempt} seed exempt)`);
+
   // Filter 0b: hypernym
   const HYP_STOP = new Set(["a","an","the","of","to","for","in","on","at","by","with","and","or","from","as","is","are","be","that","this","these","those","their","its"]);
   const sigSlugToks = (id: string): Set<string> => {
@@ -2617,25 +2791,33 @@ function stagePostproc() {
   const stopWords = new Set<string>();
   for (const [w, list] of wordToSkills) if (list.length > 300) stopWords.add(w);
   const heurUseCount = new Map<string, number>();
-  const HEUR_CAP = 25;
+  const HEUR_CAP = 15;
+  const HEUR_MIN_GAP = Number(Deno.env.get("HEUR_MIN_GAP") ?? "4");
+  const HEUR_DISABLE = Deno.env.get("DISABLE_ORPHAN_FIX") === "1";
   let orphanFixed = 0;
-  for (const orphanId of orphanSkills) {
+  const orphanTitleTok = (id: string): Set<string> => {
+    const out = new Set<string>();
+    for (const w of id.split("-")) if (w.length >= 4 && !stopWords.has(w)) out.add(w);
+    return out;
+  };
+  for (const orphanId of HEUR_DISABLE ? [] : orphanSkills) {
     const ssk = skill.get(orphanId)!;
     const sRaw = rawDiff.get(orphanId) ?? 0;
+    const titleToks = orphanTitleTok(orphanId);
+    // Candidate words must appear in orphan's own TITLE (not just topics).
     const candWords = new Set<string>();
-    for (const topic of ssk.topics) for (const w of topic.split("-")) if (w.length >= 5) candWords.add(w);
+    for (const w of titleToks) if (w.length >= 5) candWords.add(w);
     const cands = new Map<string, number>();
     for (const w of candWords) {
-      if (w.length < 5 || stopWords.has(w)) continue;
+      if (stopWords.has(w)) continue;
       const list = wordToSkills.get(w);
       if (!list) continue;
       for (const candId of list) {
         if (candId === orphanId) continue;
-        if (!(candId === w || candId.startsWith(w + "-"))) continue;
+        if (candId !== w) continue; // only exact-slug matches
         if (skill.get(candId)?.tags.includes("onet:tech")) continue;
-        if (sRaw - (rawDiff.get(candId) ?? 0) < 3) continue;
-        const score = candId === w ? 100 : (candId.split("-").length <= 3 ? 10 : 1);
-        cands.set(candId, Math.max(cands.get(candId) ?? 0, score));
+        if (sRaw - (rawDiff.get(candId) ?? 0) < HEUR_MIN_GAP) continue;
+        cands.set(candId, 100);
       }
     }
     if (cands.size === 0) continue;
@@ -2643,8 +2825,7 @@ function stagePostproc() {
       b[1] - a[1]
       || (heurUseCount.get(a[0]) ?? 0) - (heurUseCount.get(b[0]) ?? 0)
       || (rawDiff.get(a[0]) ?? 0) - (rawDiff.get(b[0]) ?? 0));
-    for (const [candId, score] of ranked) {
-      if (score < 10) break;
+    for (const [candId] of ranked) {
       const n = heurUseCount.get(candId) ?? 0;
       if (n >= HEUR_CAP) continue;
       final.push([orphanId, candId]);
