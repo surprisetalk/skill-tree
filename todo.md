@@ -83,14 +83,13 @@ Pass 6 key wins: strict DAG enforcement via Kahn topo-sort per SCC (was 80k node
 - [x] Fixed pre-existing test bug: `final_edges` ordering test crashed on edges referencing skills dropped in stage 7.
 - [x] Fixed per-topic hub cap: was only checking child's first topic (`[...childTopics][0]`), now checks all topics. Per-topic drops went from ~79k to ~18k — the cap now properly limits within-topic spam across all of a child's topics.
 
+## Pipeline simplification (2026-04-15)
+- [x] Rewrote pipeline.ts monolith: 5,635 → 3,024 lines (46% reduction). 26 stages → 11. Ollama-only (deleted Anthropic Batches, Apfel OpenAI-compat, and all Wikipedia/Wikidata resolve stages). Merged 1b/1c/1d batch machinery into a single `resumableOllama` helper. All 22 tests in pipeline_test.ts still pass against regenerated output.
+
 ## Known limits (future work)
 - [ ] khan/moocx recall ~0 — seed labels don't resolve to skill ids. Fix: add Khan/Junyi as skill sources OR expand label-resolution fallback.
-- [ ] Wiki resolution 14.6% — could reach 25-30% with smarter fuzzy match (wbsearchentities API + token validation) + MW opensearch guard.
-- [ ] Full Apfel stage-5 re-run (~100k × 2-5s each ≈ 6-12 hours) — infrastructure ready, not executed.
-- [ ] Merge strategy for Apfel vs Haiku caches (consensus union vs confidence-weighted).
-- [ ] Domain leakage mean 0.337 — should improve with B2+B3 ancestor chains; needs verification run.
+- [ ] Domain leakage mean 0.337 — should improve with LCSH+DBpedia ancestor chains; needs verification run.
 
 ## Ideas
 - [ ] Add Khan/Junyi as skill sources (expensive: full stage 1 + embeddings re-run)
-- [ ] Wikidata P279 subclass hierarchy as parent-topic source
-- [ ] Topic "rome-officials-and-employees" and similar Wikipedia categories survive P279 filters — add co-occurrence sanity check
+- [ ] Topic "rome-officials-and-employees" and similar Wikipedia categories survive filters — add co-occurrence sanity check
