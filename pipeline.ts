@@ -145,6 +145,36 @@ function writeStats(stage: number, stats: Record<string, unknown>) {
   console.log(JSON.stringify(stats, null, 2));
 }
 
+function loadTsvCache(...paths: string[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const path of paths) {
+    try {
+      for (const line of Deno.readTextFileSync(path).split("\n")) {
+        if (!line) continue;
+        const tab = line.indexOf("\t");
+        if (tab < 0) continue;
+        if (!m.has(line.slice(0, tab))) m.set(line.slice(0, tab), line.slice(tab + 1));
+      }
+    } catch { /* missing */ }
+  }
+  return m;
+}
+
+function appendTsvCache(path: string, entries: Record<string, string>) {
+  const enc = new TextEncoder();
+  const fh = Deno.openSync(path, { create: true, append: true });
+  for (const [k, v] of Object.entries(entries))
+    fh.writeSync(enc.encode(`${k}\t${v.replace(/[\t\n\r]/g, " ")}\n`));
+  fh.close();
+}
+
+// Iterate lines of an optional file. Missing file → no-op (enrichment sources are best-effort).
+function forEachLine(path: string, fn: (line: string) => void) {
+  try {
+    for (const l of Deno.readTextFileSync(path).split("\n")) if (l) fn(l);
+  } catch { /* missing */ }
+}
+
 // ---------- stage 1: list ----------
 
 function stage1List() {
@@ -359,6 +389,20 @@ function stage1List() {
       "Component", "Section", "Module", "Chapter", "Unit",
     ]);
     const SCAFFOLDING_RE = /^(\s*)?(grade|kindergarten|pre-?k|elementary|middle school|high school|[0-9]+(st|nd|rd|th)\s+grade|unit\s+\d|chapter\s+\d|section\s+\d|module\s+\d|standard\s+\d|topic\s+\d|strand|domain)\b/i;
+    // Unconditional scaffolding patterns (prefix and suffix forms merged into one regex).
+    const SCAFFOLDING_SIMPLE_RE = new RegExp(
+      [
+        /^DEPRECATED\b/,
+        /^(?:Use the (?:clock|timer)|Click the|Press the|Drag the|Open the app)/,
+        /^(?:Constructed Response|Hook Activity|Background Information|Vocabulary Activity|Document Analysis)\s*:/,
+        /^(?:Sample Problem|Example)\s*:/,
+        /^Particular Topics in /,
+        /^(?:CFItemType|Course|Subject)\s*:/,
+        /\?\s*(?:Hook Activity|Background Information|Vocabulary Activity|Document Analysis|Writing)$/,
+        /\s+(?:Hook Activity|Writing Activity|Vocabulary Activity|Assessment Activity)$/,
+      ].map((r) => r.source).join("|"),
+      "i",
+    );
     // Truncate to last sentence boundary ≤cap; fall back to last word boundary.
     const truncTitle = (t: string, cap: number): string => {
       if (t.length <= cap) return t;
@@ -403,24 +447,15 @@ function stage1List() {
         // Strip "Benchmark X.X:" / "Standard X:" / "Indicator X:" prefix
         title = title.replace(/^(Benchmark|Standard|Indicator)\s+[\d.]+\s*:\s*/i, "").trim();
         if (title.length > 300) { title = truncTitle(title, 300); truncated++; }
-        // Drop titles that are bare compliance codes, single chars, or too short to be meaningful
+        // Drop bare compliance codes, single chars, or too short to be meaningful
         if (title.length <= 2 || (title.length <= 20 && CODE_RE.test(title))) { scaffoldingPattern++; continue; }
-        // Drop deprecated items, proficiency level scaffolding, test instructions, single-word headers
-        if (/^DEPRECATED\b/i.test(title)) { scaffoldingPattern++; continue; }
+        // Unconditional scaffolding patterns: deprecation markers, test instructions, activity headers.
+        if (SCAFFOLDING_SIMPLE_RE.test(title)) { scaffoldingPattern++; continue; }
+        // Conditional patterns (pattern + length/type guard)
         if (/^(Essential|Proficient|Advanced|Intermediate|Beginning|Emerging|Developing|Extending|Exceeding|Level)\s+[IVX0-9]+/i.test(title) && title.length < 30) { scaffoldingPattern++; continue; }
-        if (/^(Use the (clock|timer)|Click the|Press the|Drag the|Open the app)/i.test(title)) { scaffoldingPattern++; continue; }
-        if (/^(Constructed Response|Hook Activity|Background Information|Vocabulary Activity|Document Analysis)\s*:/i.test(title)) { scaffoldingPattern++; continue; }
-        if (/^(Sample Problem|Example)\s*:/i.test(title)) { scaffoldingPattern++; continue; }
-        if (/^Particular Topics in /i.test(title)) { scaffoldingPattern++; continue; }
-        if (/\?\s*(Hook Activity|Background Information|Vocabulary Activity|Document Analysis|Writing)$/i.test(title)) { scaffoldingPattern++; continue; }
-        if (/\s+(Hook Activity|Writing Activity|Vocabulary Activity|Assessment Activity)$/i.test(title)) { scaffoldingPattern++; continue; }
-        // Second-person competency statements ("You follow...", "You are sought...") are not skills
         if (/^You\s+[a-z]/i.test(title) && title.length > 20) { scaffoldingPattern++; continue; }
-        // Single-word OpenSALT titles are too generic to be useful skills
-        if (!/\s/.test(title) && title.length < 20) { scaffoldingPattern++; continue; }
-        // Drop scaffolding by pattern only when it looks like a header (short + matches)
+        if (!/\s/.test(title) && title.length < 20) { scaffoldingPattern++; continue; } // single-word, too generic
         if (SCAFFOLDING_RE.test(title) && title.length < 50 && !it.CFItemType) { scaffoldingPattern++; continue; }
-        if (/^(CFItemType|Course|Subject)\s*:/.test(title)) { scaffoldingPattern++; continue; }
         // Drop pure-verb-prompt rows with no concrete noun ("understand the X", <60 chars, no type)
         if (/^(understand|recognize|demonstrate|apply|identify|know|explain|describe)\s+(the|how|that|what|why|when|where|a|an)\s/i.test(title)
             && title.length < 60 && !it.CFItemType) { pureVerbDropped++; continue; }
@@ -456,14 +491,7 @@ function stage1List() {
   }
 
   // Apply Apfel infill cache to ALL sources (loadInfillCache only feeds Lightcast parser)
-  const apfelInfill = new Map<string, string>();
-  try {
-    for (const line of Deno.readTextFileSync(`${BUILD}/1b_apfel_infill.tsv`).split("\n")) {
-      if (!line) continue;
-      const tab = line.indexOf("\t");
-      if (tab > 0) apfelInfill.set(line.slice(0, tab), line.slice(tab + 1));
-    }
-  } catch { /* no file */ }
+  const apfelInfill = loadTsvCache(`${BUILD}/1b_apfel_infill.tsv`);
   let apfelFilled = 0;
   for (const s of raw) {
     if (s.description) continue;
@@ -643,22 +671,9 @@ function stage1List() {
 
 // ---------- stage 1b: infill Lightcast descriptions ----------
 
-const CHAT_MODEL = Deno.env.get("CHAT_MODEL") ?? "gpt-oss:20b";
 const INFILL_CACHE = `${BUILD}/1b_infill.tsv`;
 
-function loadInfillCache(): Map<string, string> {
-  const m = new Map<string, string>();
-  for (const path of [INFILL_CACHE, `${BUILD}/1b_apfel_infill.tsv`]) {
-    try {
-      for (const line of Deno.readTextFileSync(path).split("\n")) {
-        if (!line) continue;
-        const [k, v] = line.split("\t");
-        if (k && v && !m.has(k)) m.set(k, v); // first-seen wins (Anthropic cache preferred)
-      }
-    } catch { /* missing is fine */ }
-  }
-  return m;
-}
+const loadInfillCache = () => loadTsvCache(INFILL_CACHE, `${BUILD}/1b_apfel_infill.tsv`);
 
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const CLAUDE_MODEL = Deno.env.get("CLAUDE_MODEL") ?? "claude-haiku-4-5-20251001";
@@ -695,30 +710,54 @@ async function shortId(fullId: string, idx: number): Promise<string> {
   return `s${idx.toString(36)}_${hex}`;
 }
 
-async function submitBatch(todo: { id: string; title: string }[]): Promise<{ batchId: string; idMap: Record<string, string> }> {
+async function submitAnthropicBatch(
+  items: { id: string; userContent: string }[],
+  opts: { system: string; model: string; maxTokens: number; label: string },
+): Promise<{ batchId: string; idMap: Record<string, string> }> {
   const idMap: Record<string, string> = {};
-  const requests = await Promise.all(todo.map(async (t, i) => {
+  const requests = await Promise.all(items.map(async (t, i) => {
     const cid = await shortId(t.id, i);
     idMap[cid] = t.id;
     return {
       custom_id: cid,
       params: {
-        model: CLAUDE_MODEL,
-        max_tokens: 120,
-        system: [{ type: "text", text: INFILL_SYSTEM, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: `Define: ${t.title}` }],
+        model: opts.model,
+        max_tokens: opts.maxTokens,
+        system: [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: t.userContent }],
       },
     };
   }));
-  const res = await fetch("https://api.anthropic.com/v1/messages/batches", {
-    method: "POST",
-    headers: ANTHROPIC_HEADERS,
-    body: JSON.stringify({ requests }),
-  });
-  if (!res.ok) throw new Error(`batch submit ${res.status}: ${await res.text()}`);
-  const j = await res.json();
-  console.log(`[stage 1b] batch submitted: ${j.id} (${requests.length} requests)`);
-  return { batchId: j.id, idMap };
+  const body = JSON.stringify({ requests });
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages/batches", {
+        method: "POST",
+        headers: ANTHROPIC_HEADERS,
+        body,
+      });
+      if (res.ok) {
+        const j = await res.json();
+        console.log(`[${opts.label}] batch submitted: ${j.id} (${requests.length} requests)`);
+        return { batchId: j.id, idMap };
+      }
+      const txt = await res.text();
+      if (res.status === 429 || res.status >= 500) {
+        const delay = Math.min(60 * attempt, 300);
+        console.warn(`  [retry ${attempt}/8] ${res.status} — sleeping ${delay}s`);
+        await new Promise((r) => setTimeout(r, delay * 1000));
+        continue;
+      }
+      throw new Error(`${opts.label} batch submit ${res.status}: ${txt}`);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (new RegExp(`${opts.label} batch submit [1-4]\\d\\d`).test(msg)) throw err;
+      const delay = Math.min(30 * attempt, 300);
+      console.warn(`  [retry ${attempt}/8] network: ${msg.slice(0, 80)} — sleeping ${delay}s`);
+      await new Promise((r) => setTimeout(r, delay * 1000));
+    }
+  }
+  throw new Error(`${opts.label} batch submit: retries exhausted`);
 }
 
 async function pollBatch(id: string): Promise<{ status: string; resultsUrl?: string; counts?: Record<string, number> }> {
@@ -749,14 +788,7 @@ async function downloadBatchResults(url: string, idMap: Record<string, string>):
   return out;
 }
 
-function appendInfill(map: Record<string, string>) {
-  const enc = new TextEncoder();
-  const fh = Deno.openSync(INFILL_CACHE, { create: true, append: true });
-  for (const [id, desc] of Object.entries(map)) {
-    fh.writeSync(enc.encode(`${id}\t${desc.replace(/[\t\n\r]/g, " ")}\n`));
-  }
-  fh.close();
-}
+const appendInfill = (map: Record<string, string>) => appendTsvCache(INFILL_CACHE, map);
 
 // Known short tech names that are real skills despite being ≤3 chars; everything else
 // at that length is opaque code that the LLM tends to hallucinate or refuse on.
@@ -825,7 +857,10 @@ async function stage1bInfill() {
     console.log(`[stage 1b] INFILL_LIMIT → ${chunk.length}`);
   }
 
-  const { batchId, idMap } = await submitBatch(chunk);
+  const { batchId, idMap } = await submitAnthropicBatch(
+    chunk.map((t) => ({ id: t.id, userContent: `Define: ${t.title}` })),
+    { system: INFILL_SYSTEM, model: CLAUDE_MODEL, maxTokens: 120, label: "stage 1b" },
+  );
   Deno.writeTextFileSync(BATCH_STATE, JSON.stringify({ id: batchId, idMap }));
   console.log(`[stage 1b] batch submitted. Re-run \`pipeline.ts infill\` to poll for results.`);
 }
@@ -836,71 +871,15 @@ const ONET_DESC_CACHE = `${BUILD}/1d_onet_desc.tsv`;
 const ONET_DESC_BATCH_STATE = `${BUILD}/1d_batch.json`;
 const ONET_DESC_SYSTEM = `Expand the given workplace task into a 1-2 sentence description of what the task involves. Be concrete and factual. No preamble. No quotation marks. Return only the description.`;
 
-function loadOnetDescCache(): Map<string, string> {
-  try {
-    const text = Deno.readTextFileSync(ONET_DESC_CACHE);
-    const m = new Map<string, string>();
-    for (const line of text.split("\n")) {
-      if (!line) continue;
-      const tab = line.indexOf("\t");
-      if (tab < 0) continue;
-      m.set(line.slice(0, tab), line.slice(tab + 1) || "");
-    }
-    return m;
-  } catch { return new Map(); }
-}
+const loadOnetDescCache = () => loadTsvCache(ONET_DESC_CACHE);
 
-function appendOnetDesc(map: Record<string, string>) {
-  const enc = new TextEncoder();
-  const fh = Deno.openSync(ONET_DESC_CACHE, { create: true, append: true });
-  for (const [id, v] of Object.entries(map)) {
-    fh.writeSync(enc.encode(`${id}\t${v.replace(/[\t\n\r]/g, " ")}\n`));
-  }
-  fh.close();
-}
+const appendOnetDesc = (map: Record<string, string>) => appendTsvCache(ONET_DESC_CACHE, map);
 
-async function submitOnetDescBatch(chunk: { id: string; title: string }[]): Promise<{ batchId: string; idMap: Record<string, string> }> {
-  const idMap: Record<string, string> = {};
-  const requests = await Promise.all(chunk.map(async (t, i) => {
-    const cid = await shortId(t.id, i);
-    idMap[cid] = t.id;
-    return {
-      custom_id: cid,
-      params: {
-        model: CLAUDE_MODEL,
-        max_tokens: 80,
-        system: [{ type: "text", text: ONET_DESC_SYSTEM, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: `Task: ${t.title}` }],
-      },
-    };
-  }));
-  const body = JSON.stringify({ requests });
-  for (let attempt = 1; attempt <= 8; attempt++) {
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages/batches", {
-        method: "POST",
-        headers: ANTHROPIC_HEADERS,
-        body,
-      });
-      if (res.ok) { const j = await res.json(); return { batchId: j.id, idMap }; }
-      const txt = await res.text();
-      if (res.status === 429 || res.status >= 500) {
-        const delay = Math.min(60 * attempt, 300);
-        console.warn(`  [retry ${attempt}/8] ${res.status} — sleeping ${delay}s`);
-        await new Promise((r) => setTimeout(r, delay * 1000));
-        continue;
-      }
-      throw new Error(`onet-desc submit ${res.status}: ${txt}`);
-    } catch (err) {
-      const msg = (err as Error).message;
-      if (/onet-desc submit [1-4]\d\d/.test(msg)) throw err;
-      const delay = Math.min(30 * attempt, 300);
-      console.warn(`  [retry ${attempt}/8] network: ${msg.slice(0, 80)} — sleeping ${delay}s`);
-      await new Promise((r) => setTimeout(r, delay * 1000));
-    }
-  }
-  throw new Error("onet-desc submit: retries exhausted");
-}
+const submitOnetDescBatch = (chunk: { id: string; title: string }[]) =>
+  submitAnthropicBatch(
+    chunk.map((t) => ({ id: t.id, userContent: `Task: ${t.title}` })),
+    { system: ONET_DESC_SYSTEM, model: CLAUDE_MODEL, maxTokens: 80, label: "stage 1d" },
+  );
 
 async function stage1dOnetDesc() {
   if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_API_KEY not set");
@@ -980,53 +959,15 @@ const SUMMARIZE_SYSTEM = `You extract the core skill from a long workplace/curri
 "Prepare or present reports concerning activities, expenses, budgets, government statutes or rulings, or other items affecting businesses or program services." → Preparing business reports
 "Draw triangles (freehand, with ruler and protractor, and using technology) with given conditions from three measures of angles or sides." → Drawing triangles with given conditions`;
 
-function loadSummarizeCache(): Map<string, string> {
-  try {
-    const text = Deno.readTextFileSync(SUMMARIZE_CACHE);
-    const m = new Map<string, string>();
-    for (const line of text.split("\n")) {
-      if (!line) continue;
-      const [k, v] = line.split("\t");
-      m.set(k, v ?? "");
-    }
-    return m;
-  } catch { return new Map(); }
-}
+const loadSummarizeCache = () => loadTsvCache(SUMMARIZE_CACHE);
 
-function appendSummarize(map: Record<string, string>) {
-  const enc = new TextEncoder();
-  const fh = Deno.openSync(SUMMARIZE_CACHE, { create: true, append: true });
-  for (const [id, v] of Object.entries(map)) {
-    fh.writeSync(enc.encode(`${id}\t${v.replace(/[\t\n\r]/g, " ")}\n`));
-  }
-  fh.close();
-}
+const appendSummarize = (map: Record<string, string>) => appendTsvCache(SUMMARIZE_CACHE, map);
 
-async function submitSummarizeBatch(todo: { id: string; title: string }[]): Promise<{ batchId: string; idMap: Record<string, string> }> {
-  const idMap: Record<string, string> = {};
-  const requests = await Promise.all(todo.map(async (t, i) => {
-    const cid = await shortId(t.id, i);
-    idMap[cid] = t.id;
-    return {
-      custom_id: cid,
-      params: {
-        model: CLAUDE_MODEL,
-        max_tokens: 60,
-        system: [{ type: "text", text: SUMMARIZE_SYSTEM, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: t.title }],
-      },
-    };
-  }));
-  const res = await fetch("https://api.anthropic.com/v1/messages/batches", {
-    method: "POST",
-    headers: ANTHROPIC_HEADERS,
-    body: JSON.stringify({ requests }),
-  });
-  if (!res.ok) throw new Error(`summarize batch submit ${res.status}: ${await res.text()}`);
-  const j = await res.json();
-  console.log(`[stage 1c] batch submitted: ${j.id} (${requests.length} requests)`);
-  return { batchId: j.id, idMap };
-}
+const submitSummarizeBatch = (todo: { id: string; title: string }[]) =>
+  submitAnthropicBatch(
+    todo.map((t) => ({ id: t.id, userContent: t.title })),
+    { system: SUMMARIZE_SYSTEM, model: CLAUDE_MODEL, maxTokens: 60, label: "stage 1c" },
+  );
 
 async function stage1cSummarize() {
   if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_API_KEY not set");
@@ -1378,6 +1319,27 @@ function normalize(v: Float32Array): Float32Array {
   return r;
 }
 
+function loadRawEmbeddings(): { ids: string[]; emb: Float32Array; idToEmbIdx: Map<string, number> } {
+  const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
+  const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
+  const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
+  const idToEmbIdx = new Map<string, number>();
+  for (let i = 0; i < ids.length; i++) idToEmbIdx.set(ids[i], i);
+  return { ids, emb, idToEmbIdx };
+}
+
+// Normalized vecs packed in skillIds order. Throws if any id is missing.
+function normalizedEmbeddingsForSkills(skillIds: string[]): Float32Array {
+  const { emb, idToEmbIdx } = loadRawEmbeddings();
+  const vecs = new Float32Array(skillIds.length * EMBED_DIM);
+  for (let i = 0; i < skillIds.length; i++) {
+    const ei = idToEmbIdx.get(skillIds[i]);
+    if (ei === undefined) throw new Error(`no embedding for ${skillIds[i]}`);
+    vecs.set(normalize(emb.subarray(ei * EMBED_DIM, (ei + 1) * EMBED_DIM)), i * EMBED_DIM);
+  }
+  return vecs;
+}
+
 // Walk ESCO broader hierarchy: child → direct parent label (first broader).
 function parseEscoSkillTopics(): Map<string, string[]> {
   const rows = parseCsv(Deno.readTextFileSync("data/esco/broaderRelationsSkillPillar_en.csv"));
@@ -1500,19 +1462,8 @@ async function stage3Tag() {
   });
 
   // Load stage 2 embeddings
-  const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
-  const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
-  const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
-  if (ids.length !== skills.length) throw new Error(`ids (${ids.length}) vs skills (${skills.length}) mismatch`);
-
   const DIM = EMBED_DIM;
-  // Normalize skill embeddings in place
-  const skillVecs = new Float32Array(skills.length * DIM);
-  for (let i = 0; i < skills.length; i++) {
-    const v = emb.subarray(i * DIM, (i + 1) * DIM);
-    const n = normalize(v);
-    skillVecs.set(n, i * DIM);
-  }
+  const skillVecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
 
   // Build refs
   const occRefs = parseOccupationRefs();
@@ -1741,19 +1692,8 @@ function stage4Difficulty() {
     return { id: c[0], title: c[1], sources: c[iSources], tags: c[iTags], topics: c[iTopics] };
   });
 
-  const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
-  const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
-  const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
-  const idToEmbIdx = new Map<string, number>();
-  for (let i = 0; i < ids.length; i++) idToEmbIdx.set(ids[i], i);
-
   const DIM = EMBED_DIM;
-  const vecs = new Float32Array(skills.length * DIM);
-  for (let i = 0; i < skills.length; i++) {
-    const ei = idToEmbIdx.get(skills[i].id);
-    if (ei === undefined) throw new Error(`no embedding for ${skills[i].id}`);
-    vecs.set(normalize(emb.subarray(ei * DIM, (ei + 1) * DIM)), i * DIM);
-  }
+  const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
 
   // Anchor difficulty per skill: OpenSALT grade > Khan V-position > unset (NaN)
   const anchor = new Float32Array(skills.length);
@@ -2088,18 +2028,8 @@ function loadPrereqCandidates(): Map<string, number[]> {
 
 function computePrereqCandidates(): Map<string, number[]> {
   const { skills, raw } = parseSkillsWithDifficulty();
-  const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
-  const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
-  const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
-  const idToEmbIdx = new Map<string, number>();
-  for (let i = 0; i < ids.length; i++) idToEmbIdx.set(ids[i], i);
   const DIM = EMBED_DIM;
-  const vecs = new Float32Array(skills.length * DIM);
-  for (let i = 0; i < skills.length; i++) {
-    const ei = idToEmbIdx.get(skills[i].id);
-    if (ei === undefined) throw new Error(`no embedding for ${skills[i].id}`);
-    vecs.set(normalize(emb.subarray(ei * DIM, (ei + 1) * DIM)), i * DIM);
-  }
+  const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
 
   // topic → indexes (with difficulty)
   const topicIdx = new Map<string, number[]>();
@@ -2243,65 +2173,13 @@ function parsePrereqResponse(text: string, numCandidates: number): number[] {
   return out.slice(0, 5); // cap at 5 prereqs per skill
 }
 
-function loadPrereqCache(): Map<string, string> {
-  try {
-    const text = Deno.readTextFileSync(PREREQ_CACHE);
-    const m = new Map<string, string>();
-    for (const line of text.split("\n")) {
-      if (!line) continue;
-      const tab = line.indexOf("\t");
-      if (tab < 0) continue;
-      m.set(line.slice(0, tab), line.slice(tab + 1));
-    }
-    return m;
-  } catch { return new Map(); }
-}
+const loadPrereqCache = () => loadTsvCache(PREREQ_CACHE);
 
-async function submitPrereqBatch(batch: { id: string; title: string; description: string; candTitles: string[] }[]): Promise<{ batchId: string; idMap: Record<string, string> }> {
-  const idMap: Record<string, string> = {};
-  const requests = await Promise.all(batch.map(async (b, i) => {
-    const cid = await shortId(b.id, i);
-    idMap[cid] = b.id;
-    return {
-      custom_id: cid,
-      params: {
-        model: PREREQ_MODEL,
-        max_tokens: 40,
-        system: [{ type: "text", text: PREREQ_SYSTEM, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: formatPrereqPrompt(b, b.candTitles) }],
-      },
-    };
-  }));
-  const body = JSON.stringify({ requests });
-  for (let attempt = 1; attempt <= 8; attempt++) {
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages/batches", {
-        method: "POST",
-        headers: ANTHROPIC_HEADERS,
-        body,
-      });
-      if (res.ok) {
-        const j = await res.json();
-        return { batchId: j.id, idMap };
-      }
-      const txt = await res.text();
-      if (res.status === 429 || res.status >= 500) {
-        const delay = Math.min(60 * attempt, 300);
-        console.warn(`  [submit retry ${attempt}/8] ${res.status}: ${txt.slice(0, 150)} — sleeping ${delay}s`);
-        await new Promise((r) => setTimeout(r, delay * 1000));
-        continue;
-      }
-      throw new Error(`prereq batch submit ${res.status}: ${txt}`);
-    } catch (err) {
-      const msg = (err as Error).message;
-      if (/prereq batch submit [1-4]\d\d/.test(msg)) throw err; // non-5xx from above
-      const delay = Math.min(30 * attempt, 300);
-      console.warn(`  [submit retry ${attempt}/8] network err: ${msg} — sleeping ${delay}s`);
-      await new Promise((r) => setTimeout(r, delay * 1000));
-    }
-  }
-  throw new Error("prereq batch submit: exhausted retries");
-}
+const submitPrereqBatch = (batch: { id: string; title: string; description: string; candTitles: string[] }[]) =>
+  submitAnthropicBatch(
+    batch.map((b) => ({ id: b.id, userContent: formatPrereqPrompt(b, b.candTitles) })),
+    { system: PREREQ_SYSTEM, model: PREREQ_MODEL, maxTokens: 40, label: "stage 5" },
+  );
 
 async function stage5Prereq() {
   if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_API_KEY not set");
@@ -3537,13 +3415,10 @@ function stage7Finalize() {
 
   // Load alias map (dropped_id → canonical_id) for final-pass remap of any stale edges.
   const aliasMap = new Map<string, string>();
-  try {
-    const aliasLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
-    for (let i = 1; i < aliasLines.length; i++) {
-      const [drop, keep] = aliasLines[i].split("\t");
-      if (drop && keep) aliasMap.set(drop, keep);
-    }
-  } catch { /* none */ }
+  forEachLine(`${BUILD}/3b_aliases.tsv`, (line) => {
+    const [drop, keep] = line.split("\t");
+    if (drop && keep && drop !== "dropped_id") aliasMap.set(drop, keep);
+  });
   const remap = (id: string) => aliasMap.get(id) ?? id;
 
   const skillIdSet = new Set<string>(skills.map((s) => s.id));
@@ -3565,39 +3440,27 @@ function stage7Finalize() {
 
   // --- Description enrichment via Wikipedia REST summaries (for skills with thin descriptions) ---
   const wikiSummary = new Map<string, string>();
-  try {
-    for (const line of Deno.readTextFileSync(`${BUILD}/1h_wiki_summaries.tsv`).split("\n")) {
-      if (!line) continue;
-      const [id, ...rest] = line.split("\t");
-      const text = rest.join("\t");
-      if (id && text) wikiSummary.set(id, text);
-    }
-    console.log(`[stage 7] loaded ${wikiSummary.size} Wikipedia summaries`);
-  } catch { /* skip */ }
+  forEachLine(`${BUILD}/1h_wiki_summaries.tsv`, (line) => {
+    const [id, ...rest] = line.split("\t");
+    const text = rest.join("\t");
+    if (id && text) wikiSummary.set(id, text);
+  });
+  console.log(`[stage 7] loaded ${wikiSummary.size} Wikipedia summaries`);
 
   // --- Topic enrichment via Wikidata P279 parent labels, + framework stoplist ---
   const idToQid = new Map<string, string>();
-  try {
-    for (const line of Deno.readTextFileSync(`${BUILD}/1f_wiki.jsonl`).split("\n")) {
-      if (!line) continue;
-      try { const d: { id: string; qid?: string } = JSON.parse(line); if (d.qid) idToQid.set(d.id, d.qid); } catch { /* skip */ }
-    }
-  } catch { /* no wiki */ }
+  forEachLine(`${BUILD}/1f_wiki.jsonl`, (line) => {
+    try { const d: { id: string; qid?: string } = JSON.parse(line); if (d.qid) idToQid.set(d.id, d.qid); } catch { /* skip */ }
+  });
   const qidParents = new Map<string, string[]>();
-  try {
-    for (const line of Deno.readTextFileSync(`${BUILD}/1g_wd_parents.jsonl`).split("\n")) {
-      if (!line) continue;
-      try { const d: { qid: string; parents: string[] } = JSON.parse(line); qidParents.set(d.qid, d.parents); } catch { /* skip */ }
-    }
-  } catch { /* skip */ }
+  forEachLine(`${BUILD}/1g_wd_parents.jsonl`, (line) => {
+    try { const d: { qid: string; parents: string[] } = JSON.parse(line); qidParents.set(d.qid, d.parents); } catch { /* skip */ }
+  });
   const qidLabel = new Map<string, string>();
-  try {
-    for (const line of Deno.readTextFileSync(`${BUILD}/1i_qid_labels.tsv`).split("\n")) {
-      if (!line) continue;
-      const [qid, label] = line.split("\t");
-      if (qid && label) qidLabel.set(qid, label);
-    }
-  } catch { /* skip */ }
+  forEachLine(`${BUILD}/1i_qid_labels.tsv`, (line) => {
+    const [qid, label] = line.split("\t");
+    if (qid && label) qidLabel.set(qid, label);
+  });
 
   // Framework/standards stoplist — regex on topic slug
   const frameworkRe = /-standards|-20\d\d|^sced-|^content-khan|^ccss$|^ngss$|next-generation-science|k-5-mathematics|adult-basic-education|cte-standards|curriculum|course-codes|^skills$|^content$|^learning-stage-/;
@@ -3626,10 +3489,10 @@ function stage7Finalize() {
   // --- Cruft-orphan drop: skills with no prereqs, no descendants, no coherent content ---
   // Must not drop canonical ids that other skills alias to.
   const aliasCanonicals = new Set<string>();
-  try {
-    const aliasLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
-    for (let i = 1; i < aliasLines.length; i++) aliasCanonicals.add(aliasLines[i].split("\t")[1]);
-  } catch { /* none */ }
+  forEachLine(`${BUILD}/3b_aliases.tsv`, (line) => {
+    const keep = line.split("\t")[1];
+    if (keep && keep !== "canonical_id") aliasCanonicals.add(keep);
+  });
   const childCount = new Map<string, number>();
   for (const [, p] of prereqs) for (const pid of p) childCount.set(pid, (childCount.get(pid) ?? 0) + 1);
   const isOrphanLeaf = (id: string) => (prereqs.get(id) || []).length === 0 && (childCount.get(id) ?? 0) === 0;
@@ -3670,20 +3533,15 @@ function stage7Finalize() {
   let wikiEnriched = 0, frameworkFiltered = 0, descEnriched = 0, dropped = 0, p279Filtered = 0, lcshEnriched = 0;
   // B2/B3: LCSH + DBpedia ancestor chain caches (stages 1j, 1k). Merged into one lookup map.
   const lcshTree = new Map<string, string[]>();
-  const loadTree = (path: string) => {
-    try {
-      for (const line of Deno.readTextFileSync(path).split("\n")) {
-        if (!line) continue;
-        const tab = line.indexOf("\t");
-        const slug = line.slice(0, tab);
-        const anc = line.slice(tab + 1).split(",").filter(Boolean);
-        if (slug && anc.length) {
-          const existing = lcshTree.get(slug);
-          lcshTree.set(slug, existing ? [...new Set([...existing, ...anc])] : anc);
-        }
-      }
-    } catch { /* missing */ }
-  };
+  const loadTree = (path: string) => forEachLine(path, (line) => {
+    const tab = line.indexOf("\t");
+    const slug = line.slice(0, tab);
+    const anc = line.slice(tab + 1).split(",").filter(Boolean);
+    if (slug && anc.length) {
+      const existing = lcshTree.get(slug);
+      lcshTree.set(slug, existing ? [...new Set([...existing, ...anc])] : anc);
+    }
+  });
   loadTree(`${BUILD}/1j_lcsh_tree.tsv`);
   loadTree(`${BUILD}/1k_dbpedia_tree.tsv`);
   console.log(`[stage 7] loaded ${lcshTree.size} LCSH+DBpedia ancestor chains`);
@@ -3932,18 +3790,8 @@ function stage3bDedupe() {
   });
 
   // Load embeddings
-  const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
-  const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
-  const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
   const DIM = EMBED_DIM;
-  const idToIdx = new Map<string, number>();
-  for (let i = 0; i < ids.length; i++) idToIdx.set(ids[i], i);
-  const vecs = new Float32Array(rows.length * DIM);
-  for (let i = 0; i < rows.length; i++) {
-    const embIdx = idToIdx.get(rows[i].id);
-    if (embIdx === undefined) throw new Error(`no embedding for ${rows[i].id}`);
-    vecs.set(normalize(emb.subarray(embIdx * DIM, (embIdx + 1) * DIM)), i * DIM);
-  }
+  const vecs = normalizedEmbeddingsForSkills(rows.map((r) => r.id));
 
   const DEDUPE_COSINE = Number(Deno.env.get("DEDUPE_COSINE") ?? "0.96");
 
@@ -4481,30 +4329,11 @@ async function stage1eSeedEdges() {
     }
   }
   if (unresolved.size > 0) {
-    // Load skill embeddings
-    const embIds = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
-    const embBin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
-    const skillVecs = new Float32Array(embBin.buffer, embBin.byteOffset, embBin.byteLength / 4);
-    console.log(`[stage 1e] loaded ${embIds.length} skill embeddings for fallback`);
-    // Normalize skill vectors in-place copy
-    const nSkills = embIds.length;
-    const nvecs = new Float32Array(nSkills * EMBED_DIM);
-    for (let i = 0; i < nSkills; i++) {
-      nvecs.set(normalize(skillVecs.subarray(i * EMBED_DIM, (i + 1) * EMBED_DIM)), i * EMBED_DIM);
-    }
-    // Only consider embeddings for ids still in idx.idSet (stage 3b may have deduped)
-    const activeIds: string[] = [];
-    const activeVecs: Float32Array[] = [];
-    for (let i = 0; i < nSkills; i++) {
-      if (idx.idSet.has(embIds[i])) {
-        activeIds.push(embIds[i]);
-        activeVecs.push(nvecs.subarray(i * EMBED_DIM, (i + 1) * EMBED_DIM));
-      }
-    }
-    const matIds = activeIds;
-    const mat = new Float32Array(matIds.length * EMBED_DIM);
-    for (let i = 0; i < matIds.length; i++) mat.set(activeVecs[i], i * EMBED_DIM);
-    console.log(`[stage 1e] active skill vectors: ${matIds.length}`);
+    // Load skill embeddings; restrict to ids still live after stage 3b dedupe.
+    const { ids: embIds } = loadRawEmbeddings();
+    const matIds = embIds.filter((id) => idx.idSet.has(id));
+    const mat = normalizedEmbeddingsForSkills(matIds);
+    console.log(`[stage 1e] active skill vectors: ${matIds.length} of ${embIds.length}`);
 
     // Embed unresolved labels in parallel (Ollama is local, CPU-bound)
     const labels = [...unresolved];
