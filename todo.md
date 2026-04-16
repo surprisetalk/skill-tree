@@ -81,6 +81,7 @@ Pass 6 key wins: strict DAG enforcement via Kahn topo-sort per SCC (was 80k node
 - [x] Added topic blocklist for LCSH/DBpedia junk: `judaism-customs-and-practices`, `descriptive-cataloging`, `ibm-computers`, `wikiproject-countries-projects`, `wikiproject-africa-projects`, etc.
 - [x] Added eval sanity tests to pipeline_test.ts (kendall_tau > 0, DAG true, depth > 1, hub IDs aren't bare numbers).
 - [x] Fixed pre-existing test bug: `final_edges` ordering test crashed on edges referencing skills dropped in stage 7.
+- [x] Fixed per-topic hub cap: was only checking child's first topic (`[...childTopics][0]`), now checks all topics. Per-topic drops went from ~79k to ~18k — the cap now properly limits within-topic spam across all of a child's topics.
 
 ## Known limits (future work)
 - [ ] khan/moocx recall ~0 — seed labels don't resolve to skill ids. Fix: add Khan/Junyi as skill sources OR expand label-resolution fallback.
