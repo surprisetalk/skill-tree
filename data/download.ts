@@ -67,21 +67,6 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
     },
   },
   {
-    label: "assistments 2009-2010 (K-12 math interactions, ~110 knowledge components)",
-    fn: async () => {
-      const dir = DATA + "assistments";
-      await mkdir(dir);
-      const zip = dir + "/figshare.zip";
-      const csvs = await Array.fromAsync(
-        (async function* () { try { for await (const e of Deno.readDir(dir)) if (e.name.endsWith(".csv")) yield e; } catch {} })()
-      );
-      if (csvs.length > 0) { console.log("  skip: csv files already exist"); return; }
-      await get("https://figshare.com/ndownloader/articles/25309000/versions/1", zip);
-      await run(["unzip", "-o", zip, "-d", dir]);
-      try { await Deno.remove(zip); } catch { /* ok */ }
-    },
-  },
-  {
     label: "opensalt frameworks (CASE JSON — CCSS, NGSS, state standards)",
     fn: async () => {
       const dir = DATA + "opensalt";
@@ -126,133 +111,6 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
       if (fetched === 0) console.log("  skip: all frameworks already downloaded");
     },
   },
-  {
-    label: "ngss appendix E (DCI learning progressions, PDF)",
-    fn: async () => {
-      const dir = DATA + "ngss";
-      await mkdir(dir);
-      await get(
-        "https://www.nextgenscience.org/sites/default/files/resource/files/AppendixE-ProgressionswithinNGSS-061617.pdf",
-        dir + "/AppendixE-Progressions.pdf",
-      );
-    },
-  },
-  {
-    label: "ngss appendix F (science & engineering practices, PDF)",
-    fn: async () => {
-      const dir = DATA + "ngss";
-      await mkdir(dir);
-      await get(
-        "https://www.nextgenscience.org/sites/default/files/Appendix%20F%20%20Science%20and%20Engineering%20Practices%20in%20the%20NGSS%20-%20FINAL%20060513.pdf",
-        dir + "/AppendixF-Practices.pdf",
-      );
-    },
-  },
-  {
-    label: "hess math learning progressions framework (PDF)",
-    fn: async () => {
-      const dir = DATA + "hess-lpf";
-      await mkdir(dir);
-      await get(
-        "https://www.nciea.org/wp-content/uploads/2022/07/Math_LPF_KH11.pdf",
-        dir + "/Math_LPF_KH11.pdf",
-      );
-    },
-  },
-  {
-    label: "hess ELA learning progressions framework (PDF)",
-    fn: async () => {
-      const dir = DATA + "hess-lpf";
-      await mkdir(dir);
-      await get(
-        "https://cde.videossc.com/archives/032114/LPF-for-CCSS-ELA.pdf",
-        dir + "/LPF-for-CCSS-ELA.pdf",
-      );
-    },
-  },
-  {
-    label: "asn NGSS standards (JSON-LD)",
-    fn: async () => {
-      const dir = DATA + "asn";
-      await mkdir(dir);
-      await get(
-        "http://asn.desire2learn.com/resources/D2601214_full.json",
-        dir + "/ngss.json",
-      );
-    },
-  },
-  {
-    label: "asn CCSS math (JSON-LD)",
-    fn: async () => {
-      const dir = DATA + "asn";
-      await mkdir(dir);
-      await get(
-        "http://asn.desire2learn.com/resources/D10003FB_full.json",
-        dir + "/ccss-math.json",
-      );
-    },
-  },
-  {
-    label: "asn CCSS ELA (JSON-LD)",
-    fn: async () => {
-      const dir = DATA + "asn";
-      await mkdir(dir);
-      await get(
-        "http://asn.desire2learn.com/resources/D10003FC_full.json",
-        dir + "/ccss-ela.json",
-      );
-    },
-  },
-  {
-    label: "common standards project (all US state standards, unified JSON)",
-    fn: async () => {
-      const dir = DATA + "common-standards-project";
-      await mkdir(dir);
-      const indexFile = dir + "/jurisdictions.json";
-      const API = "http://api.commonstandardsproject.com/api/v1";
-      const headers = { "api-key": "s5mUcUq5X97vwBzgFBpeKcPW" };
-
-      // fetch jurisdiction list
-      type Jurisdiction = { id: string; title: string; type: string };
-      let jurisdictions: Jurisdiction[];
-      if (await exists(indexFile)) {
-        jurisdictions = JSON.parse(await Deno.readTextFile(indexFile));
-        console.log(`  ${jurisdictions.length} jurisdictions in cached index`);
-      } else {
-        console.log(`  GET ${API}/jurisdictions`);
-        const r = await fetch(`${API}/jurisdictions`, { headers });
-        if (!r.ok) throw new Error(`${r.status}: jurisdictions`);
-        const body = await r.json();
-        jurisdictions = body.data.map((j: Jurisdiction) => ({ id: j.id, title: j.title, type: j.type }));
-        await Deno.writeTextFile(indexFile, JSON.stringify(jurisdictions, null, 2));
-        console.log(`  indexed ${jurisdictions.length} jurisdictions`);
-      }
-
-      // fetch each jurisdiction's standard sets (states + CCSS)
-      const targets = jurisdictions.filter(j => j.type === "state" || j.type === "nation");
-      let fetched = 0;
-      for (const j of targets) {
-        const dest = `${dir}/${j.id}.json`;
-        if (await exists(dest)) continue;
-        console.log(`  [${++fetched}] ${j.title}`);
-        const r = await fetch(`${API}/jurisdictions/${j.id}`, { headers });
-        if (!r.ok) { console.log(`  WARN: ${r.status} for ${j.title}`); continue; }
-        const data = await r.json();
-
-        // fetch full standard sets for this jurisdiction
-        const sets = data.data?.standardSets ?? [];
-        const fullSets: Record<string, unknown>[] = [];
-        for (const s of sets) {
-          const sr = await fetch(`${API}/standard_sets/${s.id}`, { headers });
-          if (!sr.ok) { console.log(`    WARN: ${sr.status} for ${s.title}`); continue; }
-          fullSets.push((await sr.json()).data);
-        }
-
-        await Deno.writeTextFile(dest, JSON.stringify({ jurisdiction: data.data, standardSets: fullSets }, null, 2));
-      }
-      if (fetched === 0) console.log("  skip: all jurisdictions already downloaded");
-    },
-  },
 ];
 
 console.log(`Downloading ${steps.length} datasets to ${DATA}\n`);
@@ -266,14 +124,3 @@ for (const [i, step] of steps.entries()) {
     console.error(`  ERROR: ${e instanceof Error ? e.message : e}`);
   }
 }
-
-console.log(`
-\n========================================
-Datasets requiring accounts (manual download):
-========================================
-- Junyi Academy (Kaggle): kaggle datasets download junyiacademy/learning-activity-public-dataset-by-junyi-academy
-- PSLC DataShop: https://pslcdatashop.web.cmu.edu (free account)
-- CASE Network 2 API: email casenetwork@1edtech.org
-- DLM prerequisite graph: email dlm@ku.edu
-- ASN bulk corpus: https://asn.desire2learn.com/content/asn-batch-service
-`);

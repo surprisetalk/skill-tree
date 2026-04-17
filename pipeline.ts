@@ -106,8 +106,20 @@ const slugify = (s: string) => {
   return out ? `${out}-${hash}` : base.slice(0, 73) + "-" + hash;
 };
 
-const parseTsv = (text: string): string[][] =>
-  text.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l.length).map((l) => l.split("\t"));
+const parseTsv = (text: string, tag?: string): string[][] => {
+  const rows = text.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l.length).map((l) => l.split("\t"));
+  if (rows.length < 2) return rows;
+  const expected = rows[0].length;
+  let mismatched = 0;
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].length !== expected) {
+      if (mismatched < 3) console.warn(`[parseTsv${tag ? ` ${tag}` : ""}] row ${i} has ${rows[i].length} cols, header has ${expected} — embedded newline/tab?`);
+      mismatched++;
+    }
+  }
+  if (mismatched > 0) console.warn(`[parseTsv${tag ? ` ${tag}` : ""}] ${mismatched}/${rows.length - 1} rows have mismatched column count`);
+  return rows;
+};
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -1932,12 +1944,15 @@ function stageDedupe() {
       const arr = tokToCanons.get(tok) ?? []; arr.push(k); tokToCanons.set(tok, arr);
     }
   }
-  let bfTopics = 0, bfOccs = 0;
-  const BF_SIM = 0.6;
+  let bfTopics = 0, bfOccs = 0, bfLcsh = 0;
+  const BF_SIM = Number(Deno.env.get("BF_SIM") ?? "0.6");
+  const BF_SIM_ZZ = Number(Deno.env.get("BF_SIM_ZERO_ZERO") ?? "0.55");
   for (let k = 0; k < canons.length; k++) {
     const c = canons[k];
     const needTopics = c.topics.length === 0, needOccs = c.occs.length === 0;
     if (!needTopics && !needOccs) continue;
+    const zeroZero = needTopics && needOccs;
+    const threshold = zeroZero ? BF_SIM_ZZ : BF_SIM;
     const qTit = rows[c.idx].title;
     const qToks = titleToks(qTit);
     if (!qToks.length) continue;
@@ -1957,7 +1972,7 @@ function stageDedupe() {
       let sc = 0;
       const oOff = other.idx * DIM;
       for (let d = 0; d < DIM; d++) sc += vecs[qOff + d] * vecs[oOff + d];
-      if (sc >= BF_SIM) scored.push([i, sc]);
+      if (sc >= threshold) scored.push([i, sc]);
     }
     if (scored.length < 3) continue;
     scored.sort((a, b) => b[1] - a[1]);
@@ -1969,7 +1984,7 @@ function stageDedupe() {
     }
     const pickTop = (m: Map<string, number>, minV: number, cap: number): string[] =>
       [...m.entries()].filter(([, v]) => v >= minV).sort((a, b) => b[1] - a[1]).slice(0, cap).map(([k]) => k);
-    const minW = 3 * BF_SIM;
+    const minW = 3 * threshold;
     if (needTopics) {
       const nt = pickTop(topicVotes, minW, 3);
       if (nt.length) { c.topics = nt; bfTopics++; }
@@ -1979,7 +1994,35 @@ function stageDedupe() {
       if (no.length) { c.occs = no; bfOccs++; }
     }
   }
-  console.log(`[dedupe] backfill: topics+=${bfTopics}, occs+=${bfOccs}`);
+
+  // Last-resort topic seed from LCSH / DBpedia ancestor trees
+  const lcshTree = new Map<string, string[]>();
+  for (const path of [`${BUILD}/1j_lcsh_tree.tsv`, `${BUILD}/1k_dbpedia_tree.tsv`]) {
+    try {
+      forEachLine(path, (line) => {
+        const tab = line.indexOf("\t");
+        if (tab < 0) return;
+        const slug = line.slice(0, tab);
+        const anc = line.slice(tab + 1).split(",").filter(Boolean);
+        if (slug && anc.length && !lcshTree.has(slug)) lcshTree.set(slug, anc);
+      });
+    } catch { /* tree not cached; skip */ }
+  }
+  if (lcshTree.size > 0) {
+    for (const c of canons) {
+      if (c.topics.length > 0) continue;
+      const r = rows[c.idx];
+      for (const cand of [r.id, slugify(r.title)]) {
+        const anc = lcshTree.get(cand);
+        if (anc && anc.length) {
+          c.topics = anc.slice(0, 3);
+          bfLcsh++;
+          break;
+        }
+      }
+    }
+  }
+  console.log(`[dedupe] backfill: topics+=${bfTopics}, occs+=${bfOccs}, lcsh-topics+=${bfLcsh}`);
 
   const outLines = [hdr];
   for (const c of canons) {
@@ -2000,6 +2043,7 @@ function stageDedupe() {
     cosine_merges: merged,
     backfilled_topics: bfTopics,
     backfilled_occs: bfOccs,
+    backfilled_topics_lcsh: bfLcsh,
   });
 }
 
@@ -2395,13 +2439,13 @@ function stageDifficulty() {
 const PREREQ_CANDIDATES_CACHE = `${BUILD}/5_candidates.tsv`;
 const PREREQ_CACHE = `${BUILD}/5_prereqs.tsv`;
 
-function parseSkillsWithDifficulty(): { skills: { id: string; title: string; description: string; topics: string }[]; diff: Int32Array; raw: Float32Array } {
+function parseSkillsWithDifficulty(): { skills: { id: string; title: string; description: string; topics: string; occupations: string }[]; diff: Int32Array; raw: Float32Array } {
   const tagged = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
   const h = tagged[0].split("\t");
-  const iT = h.indexOf("title"), iD = h.indexOf("description"), iTp = h.indexOf("topics");
+  const iT = h.indexOf("title"), iD = h.indexOf("description"), iTp = h.indexOf("topics"), iOc = h.indexOf("occupations");
   const skills = tagged.slice(1).map((l) => {
     const c = l.split("\t");
-    return { id: c[0], title: c[iT], description: c[iD], topics: c[iTp] };
+    return { id: c[0], title: c[iT], description: c[iD], topics: c[iTp], occupations: iOc >= 0 ? (c[iOc] || "") : "" };
   });
   const dLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length).slice(1);
   const dm = new Map<string, { band: number; raw: number }>();
@@ -2485,9 +2529,10 @@ function computePrereqCandidates(): Map<string, number[]> {
     }
     top.sort((a, b) => b.score - a.score);
     const picked = new Set<number>([...ancestorSet, ...top.map((t) => t.idx), i]);
-    if (GLOBAL_K > 0 && topics.length > 0) {
+    if (GLOBAL_K > 0 && (topics.length > 0 || skills[i].occupations)) {
       const myToks = new Set<string>();
       for (const t of topics) for (const tok of t.split("-")) if (tok.length >= 5) myToks.add(tok);
+      const myOccs = new Set<string>(skills[i].occupations.split(",").filter(Boolean));
       const crossPool = new Set<number>();
       for (const [ot, oi] of topicIdx) {
         let shared = false;
@@ -2497,6 +2542,33 @@ function computePrereqCandidates(): Map<string, number[]> {
       }
       for (const j of crossPool) {
         if (picked.has(j) || raw[j] + MIN_DIFF > raw[i]) continue;
+        // Require shared occupation OR ≥2 shared topic tokens.
+        // Single-token topic overlap was letting cross-domain pairs through
+        // (e.g. "behavior" joining personality-disorders to rule-following).
+        if (myOccs.size) {
+          let occShared = false;
+          for (const o of skills[j].occupations.split(",")) if (o && myOccs.has(o)) { occShared = true; break; }
+          if (!occShared) {
+            let tokShared = 0;
+            for (const t of skills[j].topics.split(",")) {
+              for (const tok of t.split("-")) {
+                if (tok.length >= 5 && myToks.has(tok)) { tokShared++; break; }
+              }
+              if (tokShared >= 2) break;
+            }
+            if (tokShared < 2) continue;
+          }
+        } else {
+          // Skill has no occupations: fall back to ≥2 shared topic tokens.
+          let tokShared = 0;
+          for (const t of skills[j].topics.split(",")) {
+            for (const tok of t.split("-")) {
+              if (tok.length >= 5 && myToks.has(tok)) { tokShared++; break; }
+            }
+            if (tokShared >= 2) break;
+          }
+          if (tokShared < 2) continue;
+        }
         let sc = 0;
         const aOff = j * DIM;
         for (let d = 0; d < DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];

@@ -1,34 +1,5 @@
 const DATA = "./data"
 
-function parseCsvRows(text: string): Record<string, string>[] {
-  const rows: string[][] = []
-  let row: string[] = []
-  let field = ""
-  let inQ = false
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]
-    if (inQ) {
-      if (c === '"' && text[i + 1] === '"') { field += '"'; i++ }
-      else if (c === '"') inQ = false
-      else field += c
-    } else {
-      if (c === '"') inQ = true
-      else if (c === ",") { row.push(field); field = "" }
-      else if (c === "\n") { row.push(field); field = ""; rows.push(row); row = [] }
-      else if (c === "\r") { /* skip */ }
-      else field += c
-    }
-  }
-  if (field || row.length) { row.push(field); rows.push(row) }
-  if (!rows.length) return []
-  const hdr = rows[0]
-  return rows.slice(1).filter(r => r.length >= hdr.length).map(r => {
-    const obj: Record<string, string> = {}
-    for (let i = 0; i < hdr.length; i++) obj[hdr[i]] = r[i] ?? ""
-    return obj
-  })
-}
-
 async function extractMooccubexLabels(): Promise<Set<string>> {
   const domains = ["cs", "math", "psy"]
   const labels = new Set<string>()
@@ -50,17 +21,6 @@ async function extractMooccubexLabels(): Promise<Set<string>> {
         if (obj.c2) labels.add(obj.c2)
       } catch { /* skip */ }
     }
-  }
-  return labels
-}
-
-async function extractJunyiLabels(): Promise<Set<string>> {
-  const text = await Deno.readTextFile(`${DATA}/junyi/Info_Content.csv`)
-  const rows = parseCsvRows(text)
-  const labels = new Set<string>()
-  for (const r of rows) {
-    const name = r["content_pretty_name"]
-    if (name) labels.add(name)
   }
   return labels
 }
@@ -185,12 +145,7 @@ async function main() {
   const moocLabels = await extractMooccubexLabels()
   console.log(`  ${moocLabels.size} unique labels`)
 
-  console.log("Extracting Junyi labels...")
-  const junyiLabels = await extractJunyiLabels()
-  console.log(`  ${junyiLabels.size} unique labels`)
-
   await translateAndWrite(moocLabels, `${DATA}/mooccubex/translations.json`, apiKey)
-  await translateAndWrite(junyiLabels, `${DATA}/junyi/translations.json`, apiKey)
 
   console.log("Done.")
 }
