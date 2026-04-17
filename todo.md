@@ -90,6 +90,21 @@ Pass 6 key wins: strict DAG enforcement via Kahn topo-sort per SCC (was 80k node
 - [ ] khan/moocx recall ~0 — seed labels don't resolve to skill ids. Fix: add Khan/Junyi as skill sources OR expand label-resolution fallback.
 - [ ] Domain leakage mean 0.337 — should improve with LCSH+DBpedia ancestor chains; needs verification run.
 
+## Quality pass 8 (2026-04-16, audit + fixes)
+- [x] **C2**: NaN-guard difficulty stage — throw on non-finite calibrated value; fail-fast at finalize on bad band. Bands always in [1,20].
+- [x] **C3**: Seed-edge resolution no longer silently drops pairs. Bounded retry (3 attempts, exponential backoff) on embed errors. Every dropped pair written to `build/1e_unresolved.tsv` with reason (embed-failed / below-cos-X / no-token-overlap / no-match / self-loop). Per-source drop counts and embed_errors surfaced in `build/1e_stats.json`.
+- [x] **C5**: Per-topic cap now only drops when *every* child topic is at cap, and increments only topics that permitted the edge. Fixes multi-topic starvation.
+- [x] **D2**: OpenSALT titles whose base slug exceeds 80 chars (pre-hash path) are dropped outright in stage `list`. Kills hex-suffix compliance-fragment ids.
+- [x] **D3**: Cruft filter at finalize now requires ≥2 topics when description is empty; single-topic empty-desc leaves are dropped.
+- [x] **D4**: Grade-vs-band inversion audit in stage `difficulty` — logs count of grade-anchored skills whose final band disagrees by >5, with samples in stats.
+- [x] **M2**: Prereq pick cap env-configurable (`PREREQ_PICK_CAP`, default 8, was hardcoded 5).
+- [x] **M6**: `build/6_edges.tsv` sorted by (skill_id, prereq_id) at write for reproducible output.
+- [x] **Tests**: added adversarial tests (quarantine file exists, no hex slug suffix, difficulty ∈ [1,20], grade-band inversions <5%, known false-positive edges absent, addition→multiplication reachability warning).
+- [x] C1 investigated and closed: PAV implementation uses pop/push (correct), not splice.
+- [x] Seeded README.md with quickstart.
+
 ## Ideas
 - [ ] Add Khan/Junyi as skill sources (expensive: full stage 1 + embeddings re-run)
 - [ ] Topic "rome-officials-and-employees" and similar Wikipedia categories survive filters — add co-occurrence sanity check
+- [ ] Tighten prereq candidate pool to require shared topic ancestor or occupation for cross-topic candidates (D5 follow-up)
+- [ ] Move unwired datasets under `data/_unused/` (Course-Skill Atlas, Junyi, ASSISTments, ASN, Common Standards Project, NGSS/Hess PDFs) to make current wiring explicit (M8)

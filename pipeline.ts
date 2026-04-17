@@ -691,8 +691,9 @@ function stageList() {
   }
   console.log(`[list] applied ${summarized} summaries, ${onetEnriched} onet descs`);
 
-  // Long-title drop
-  let longTitleDropped = 0;
+  // Long-title drop: anything that would overflow an 80-char slug and
+  // require a hex-suffix hash is a compliance statement, not a skill.
+  let longTitleDropped = 0, slugOverflowDropped = 0;
   const survivors: Skill[] = [];
   for (const s of raw) {
     if (/^DEPRECATED\b/i.test(s.title)) { longTitleDropped++; continue; }
@@ -703,11 +704,20 @@ function stageList() {
       longTitleDropped++;
       continue;
     }
+    if (fromOpensalt) {
+      const slugBase = decodeEntities(s.title).toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, " ").trim().replace(/\s+/g, "-").replace(/-+/g, "-");
+      if (slugBase.length > 80) {
+        // Still overflows post-summarize: summarization didn't fire or didn't help.
+        slugOverflowDropped++;
+        continue;
+      }
+    }
     survivors.push(s);
   }
   raw.length = 0;
   raw.push(...survivors);
-  console.log(`[list] long_title_dropped=${longTitleDropped}`);
+  console.log(`[list] long_title_dropped=${longTitleDropped}, slug_overflow=${slugOverflowDropped}`);
 
   // Fuzzy dedupe
   const fuzzyKey = (s: string): string =>
@@ -1151,7 +1161,7 @@ async function stageSeedEdges() {
   console.log(`[seed-edges] pass 1: ${labelToId.size - unresolved.size}/${labelToId.size} resolved exactly`);
 
   // Pass 2: embedding fallback
-  const FALLBACK = 0.90;
+  const FALLBACK = Number(Deno.env.get("SEED_FALLBACK_COS") ?? "0.90");
   const STOP = new Set(["the","a","an","of","in","on","for","to","and","or","is","at","by","with","from","as","be","that","this"]);
   const sigTokens = (s: string): Set<string> => {
     const out = new Set<string>();
@@ -1168,6 +1178,8 @@ async function stageSeedEdges() {
       if (id) titleById.set(id, title || "");
     }
   }
+  const dropReason = new Map<string, string>();
+  let embedErrors = 0;
   if (unresolved.size > 0) {
     const { ids: embIds } = loadRawEmbeddings();
     const matIds = embIds.filter((id) => idx.idSet.has(id));
@@ -1175,17 +1187,32 @@ async function stageSeedEdges() {
     console.log(`[seed-edges] active vectors: ${matIds.length}/${embIds.length}`);
     const labels = [...unresolved];
     const labelVecs = new Float32Array(labels.length * EMBED_DIM);
+    const embedOk = new Uint8Array(labels.length);
     const CONC = 16;
+    const embedWithRetry = async (lbl: string): Promise<Float32Array | null> => {
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { return await embedOne(lbl); }
+        catch (e) {
+          lastErr = e;
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+        }
+      }
+      embedErrors++;
+      if (embedErrors <= 5) console.warn(`[seed-edges] embed failed after 3 tries: ${lbl.slice(0, 60)} — ${(lastErr as Error).message}`);
+      return null;
+    };
     let done = 0;
     const t0 = performance.now();
     for (let s = 0; s < labels.length; s += CONC) {
       const batch = labels.slice(s, s + CONC);
-      const results = await Promise.all(batch.map(async (lbl) => {
-        try { return await embedOne(lbl); } catch { return null; }
-      }));
+      const results = await Promise.all(batch.map(embedWithRetry));
       for (let j = 0; j < results.length; j++) {
         const v = results[j];
-        if (v) labelVecs.set(normalize(v), (s + j) * EMBED_DIM);
+        if (v) {
+          labelVecs.set(normalize(v), (s + j) * EMBED_DIM);
+          embedOk[s + j] = 1;
+        }
       }
       done += batch.length;
       if (done % 500 === 0 || done === labels.length) {
@@ -1195,8 +1222,8 @@ async function stageSeedEdges() {
     }
     let matched = 0;
     for (let li = 0; li < labels.length; li++) {
+      if (!embedOk[li]) { dropReason.set(labels[li], "embed-failed"); continue; }
       const lv = labelVecs.subarray(li * EMBED_DIM, (li + 1) * EMBED_DIM);
-      if (lv[0] === 0 && lv[1] === 0) continue;
       let best = -1, bestScore = FALLBACK;
       for (let si = 0; si < matIds.length; si++) {
         const sv = mat.subarray(si * EMBED_DIM, (si + 1) * EMBED_DIM);
@@ -1204,26 +1231,41 @@ async function stageSeedEdges() {
         for (let k = 0; k < EMBED_DIM; k++) dot += lv[k] * sv[k];
         if (dot > bestScore) { bestScore = dot; best = si; }
       }
-      if (best >= 0) {
-        const lt = sigTokens(labels[li]);
-        const tt = sigTokens(titleById.get(matIds[best]) || matIds[best]);
-        let overlap = 0;
-        for (const t of lt) if (tt.has(t)) overlap++;
-        if (overlap === 0 || lt.size === 0) continue;
-        labelToId.set(labels[li], matIds[best]);
-        matched++;
+      if (best < 0) { dropReason.set(labels[li], `below-cos-${FALLBACK}`); continue; }
+      const lt = sigTokens(labels[li]);
+      const tt = sigTokens(titleById.get(matIds[best]) || matIds[best]);
+      let overlap = 0;
+      for (const t of lt) if (tt.has(t)) overlap++;
+      if (overlap === 0 || lt.size === 0) {
+        dropReason.set(labels[li], "no-token-overlap");
+        continue;
       }
+      labelToId.set(labels[li], matIds[best]);
+      matched++;
     }
-    console.log(`[seed-edges] fallback matched ${matched}/${labels.length} @ cos≥${FALLBACK}`);
+    console.log(`[seed-edges] fallback matched ${matched}/${labels.length} @ cos≥${FALLBACK}${embedErrors ? `, ${embedErrors} embed errors` : ""}`);
   }
 
-  // Pass 3: emit
+  // Pass 3: emit (and quarantine unresolved)
   type Edge = { src: string; dst: string; source: string; confidence: number; holdout: boolean; fallback: boolean };
   const edges: Edge[] = [];
+  const quarantine: string[] = ["rawSrc\trawDst\tsource\traw\tsrc_reason\tdst_reason"];
+  const dropPerSource: Record<string, number> = {};
+  const labelReason = (lbl: string): string => {
+    if (labelToId.get(lbl)) return "ok";
+    if (dropReason.has(lbl)) return dropReason.get(lbl)!;
+    if (unresolved.has(lbl)) return "no-match";
+    return "unknown";
+  };
   for (const p of rawPairs) {
     const src = labelToId.get(p.rawSrc);
     const dst = labelToId.get(p.rawDst);
-    if (!src || !dst || src === dst) continue;
+    if (!src || !dst || src === dst) {
+      const reason = src === dst && src ? "self-loop" : "unresolved";
+      dropPerSource[p.source] = (dropPerSource[p.source] ?? 0) + 1;
+      quarantine.push(`${p.rawSrc}\t${p.rawDst}\t${p.source}\t${p.raw}\t${src ? "ok" : labelReason(p.rawSrc)}\t${dst ? "ok" : labelReason(p.rawDst)}${reason === "self-loop" ? " (self-loop)" : ""}`);
+      continue;
+    }
     const srcExact = resolveConcept(p.rawSrc, idx) === src;
     const dstExact = resolveConcept(p.rawDst, idx) === dst;
     const fallback = !(srcExact && dstExact);
@@ -1234,6 +1276,8 @@ async function stageSeedEdges() {
     if (holdout) s.holdout++;
     if (fallback) s.fallback++;
   }
+  Deno.writeTextFileSync(`${BUILD}/1e_unresolved.tsv`, quarantine.join("\n") + "\n");
+  console.log(`[seed-edges] quarantine: ${quarantine.length - 1} pairs dropped, written to build/1e_unresolved.tsv`);
   const seen = new Map<string, Edge>();
   for (const e of edges) {
     const k = `${e.src}\t${e.dst}\t${e.source}`;
@@ -1252,6 +1296,10 @@ async function stageSeedEdges() {
     fallback: uniq.filter((e) => e.fallback).length,
     holdout: uniq.filter((e) => e.holdout).length,
     per_source: perSource,
+    dropped_total: quarantine.length - 1,
+    dropped_per_source: dropPerSource,
+    embed_errors: embedErrors,
+    fallback_threshold: FALLBACK,
   });
 }
 
@@ -2263,12 +2311,21 @@ function stageDifficulty() {
     return pavY[lo] + t * (pavY[hi] - pavY[lo]);
   };
   const calibrated = new Float32Array(skills.length);
-  for (let i = 0; i < skills.length; i++) calibrated[i] = calibrate(jittered[i]);
+  for (let i = 0; i < skills.length; i++) {
+    const c = calibrate(jittered[i]);
+    if (!Number.isFinite(c)) {
+      throw new Error(`[difficulty] non-finite calibrated value for ${skills[i].id} (raw=${out[i]}, smoothed=${smoothed[i]}, jittered=${jittered[i]})`);
+    }
+    calibrated[i] = c;
+  }
 
   const band = new Int32Array(skills.length);
   const bandCounts = new Array(20).fill(0);
   for (let i = 0; i < skills.length; i++) {
     const b = Math.max(1, Math.min(20, Math.round(calibrated[i]) + 1));
+    if (!Number.isInteger(b) || b < 1 || b > 20) {
+      throw new Error(`[difficulty] bad band for ${skills[i].id}: ${b} (calibrated=${calibrated[i]})`);
+    }
     band[i] = b;
     bandCounts[b - 1]++;
   }
@@ -2292,6 +2349,32 @@ function stageDifficulty() {
     }
   }
   const tau = concordant + discordant ? (concordant - discordant) / (concordant + discordant) : 0;
+
+  // Grade-vs-band inversion audit: direct grade-anchored skills should have
+  // a band close to the grade anchor. >5 bands off signals calibration
+  // pathology (e.g. grade-1 skill landing at band 17).
+  let gradeAnchoredSkills = 0, inversions = 0, worstInversion = 0;
+  const invSamples: string[] = [];
+  for (let i = 0; i < skills.length; i++) {
+    const grades: number[] = [];
+    for (const m of skills[i].tags.matchAll(/grade:([^,]+)/g)) {
+      for (const part of m[1].split(".")) {
+        const d = gradeToDifficulty(part);
+        if (d !== null) grades.push(d);
+      }
+    }
+    if (!grades.length) continue;
+    gradeAnchoredSkills++;
+    const anchorBand = Math.round(Math.max(...grades)) + 1;
+    const gap = Math.abs(band[i] - anchorBand);
+    if (gap > 5) {
+      inversions++;
+      worstInversion = Math.max(worstInversion, gap);
+      if (invSamples.length < 10) invSamples.push(`${skills[i].id}: grade→${anchorBand}, band=${band[i]}`);
+    }
+  }
+  if (inversions > 0) console.warn(`[difficulty] ${inversions} grade-vs-band inversions (>5 gap) out of ${gradeAnchoredSkills}; worst gap=${worstInversion}`);
+
   writeStats(4, {
     skills: skills.length,
     anchors: { grade: gradeAnchored, khan: khanAnchored, zone: zoneAnchored, total: anchorIdxs.length },
@@ -2299,6 +2382,10 @@ function stageDifficulty() {
     global_fallbacks: globalFallback,
     band_distribution: bandCounts,
     kendall_tau_vs_anchor: tau,
+    grade_anchored_skills: gradeAnchoredSkills,
+    grade_band_inversions: inversions,
+    grade_band_worst_gap: worstInversion,
+    grade_band_inversion_samples: invSamples,
     total_seconds: (performance.now() - t0) / 1000,
   });
 }
@@ -2453,6 +2540,8 @@ function loadPrereqCandidates(): Map<string, number[]> {
 
 const PREREQ_PROMPT = `You identify true prerequisites for a skill. Given a skill and a numbered list of candidate prerequisites (all from easier/earlier material), return the numbers of candidates that MUST be understood first before learning the skill. Be strict — only include genuinely foundational dependencies, not merely related or adjacent topics. Return ONLY a comma-separated list of numbers (e.g. "2,5,9") or the word "none". No explanation.`;
 
+const PREREQ_PICK_CAP = Number(Deno.env.get("PREREQ_PICK_CAP") ?? "8");
+
 function parsePrereqResponse(text: string, n: number): number[] {
   const t = text.trim().toLowerCase();
   if (t === "none" || t === "" || t === "n/a") return [];
@@ -2465,7 +2554,7 @@ function parsePrereqResponse(text: string, n: number): number[] {
       out.push(k - 1);
     }
   }
-  return out.slice(0, 5);
+  return out.slice(0, PREREQ_PICK_CAP);
 }
 
 async function stagePrereq() {
@@ -2766,10 +2855,11 @@ function stagePostproc() {
       if (isSeed(s, p)) { keep.add(`${s}\t${p}`); kept++; continue; }
       const ct = skill.get(s)?.topics;
       const topics = ct && ct.size ? [...ct] : ["_notopic"];
-      if (topics.some((t) => (perTopic.get(t) ?? 0) >= PER_TOPIC_CAP)) { droppedPerTopic++; continue; }
+      const allowed = topics.filter((t) => (perTopic.get(t) ?? 0) < PER_TOPIC_CAP);
+      if (allowed.length === 0) { droppedPerTopic++; continue; }
       if (kept >= GLOBAL_CAP) { droppedHub++; continue; }
       keep.add(`${s}\t${p}`);
-      for (const t of topics) perTopic.set(t, (perTopic.get(t) ?? 0) + 1);
+      for (const t of allowed) perTopic.set(t, (perTopic.get(t) ?? 0) + 1);
       kept++;
     }
   }
@@ -3038,7 +3128,8 @@ function stagePostproc() {
     }
   }
 
-  // Write
+  // Write (sorted for deterministic output across runs)
+  final.sort((a, b) => a[0] === b[0] ? (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0) : (a[0] < b[0] ? -1 : 1));
   const fh = Deno.openSync(`${BUILD}/6_edges.tsv`, { create: true, write: true, truncate: true });
   const enc = new TextEncoder();
   fh.writeSync(enc.encode("skill_id\tprereq_id\n"));
@@ -3078,7 +3169,11 @@ function stageFinalize() {
   const diff = new Map<string, number>();
   for (let i = 1; i < dLines.length; i++) {
     const c = dLines[i].split("\t");
-    diff.set(c[0], Number(c[1]));
+    const b = Number(c[1]);
+    if (!Number.isInteger(b) || b < 1 || b > 20) {
+      throw new Error(`[finalize] bad difficulty for ${c[0]}: ${c[1]}`);
+    }
+    diff.set(c[0], b);
   }
 
   const aliasMap = new Map<string, string>();
@@ -3121,8 +3216,12 @@ function stageFinalize() {
   const isOrphanLeaf = (id: string) => (prereqs.get(id) || []).length === 0 && (childCount.get(id) ?? 0) === 0;
   const isCruft = (s: { id: string; title: string; description: string; topics: string }) => {
     if (aliasCanonicals.has(s.id)) return false;
-    if (!(s.description || "").trim() && !(s.topics || "").trim()) return true;
-    if (s.id.split("-").length >= 5 && (s.description || "").length < 60) return true;
+    const desc = (s.description || "").trim();
+    const topics = (s.topics || "").split(",").filter(Boolean);
+    if (!desc && !topics.length) return true;
+    // Empty description AND only 1 topic: not enough signal for a skill node.
+    if (!desc && topics.length < 2) return true;
+    if (s.id.split("-").length >= 5 && desc.length < 60) return true;
     if (/^review-records|^prepare-inserts|^seal-containers/.test(s.id)) return true;
     return false;
   };

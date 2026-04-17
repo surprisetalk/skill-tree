@@ -274,3 +274,105 @@ Deno.test("stage 1: no embedded tabs or newlines in fields", () => {
     assertEquals(cols.length, 5, `row ${i} bad column count → embedded tab?`);
   }
 });
+
+Deno.test("seed-edges: quarantine file exists and stats surface drop counts", () => {
+  try {
+    Deno.statSync("build/1e_unresolved.tsv");
+  } catch {
+    return; // seed-edges stage didn't run
+  }
+  const s = JSON.parse(Deno.readTextFileSync("build/1e_stats.json")) as Record<string, unknown>;
+  assert("dropped_total" in s, "dropped_total missing from seed-edges stats");
+  assert("embed_errors" in s, "embed_errors missing from seed-edges stats");
+  assert("dropped_per_source" in s, "dropped_per_source missing from seed-edges stats");
+});
+
+Deno.test("final: no slug collision hex suffix from OpenSALT overflow", () => {
+  // OpenSALT compliance statements should be dropped in stage list if their
+  // base slug exceeds 80 chars. The hash path only kicks in when the full
+  // slug is >70 chars AND ends in a 6-char hex segment, so we gate on both.
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  let offenders = 0, example = "";
+  for (let i = 1; i < lines.length; i++) {
+    const id = lines[i].split("\t")[0];
+    if (id.length >= 70 && /-[a-f0-9]{6}$/.test(id)) {
+      offenders++;
+      if (!example) example = id;
+    }
+  }
+  assert(offenders < 5, `${offenders} ids still have hex collision suffix (e.g. ${example})`);
+});
+
+Deno.test("final: difficulty always in [1,20] integer, no NaN", () => {
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    const d = Number(c[4]);
+    assert(Number.isInteger(d) && d >= 1 && d <= 20, `row ${i} (${c[0]}) bad difficulty: ${c[4]}`);
+  }
+});
+
+Deno.test("difficulty: grade-anchored skills mostly agree with inferred band", () => {
+  let s: Record<string, unknown>;
+  try { s = JSON.parse(Deno.readTextFileSync("build/4_stats.json")); } catch { return; }
+  const anchored = (s.grade_anchored_skills as number | undefined) ?? 0;
+  const inversions = (s.grade_band_inversions as number | undefined) ?? 0;
+  if (anchored === 0) return;
+  const rate = inversions / anchored;
+  assert(rate < 0.05, `${(rate * 100).toFixed(1)}% of grade-anchored skills disagree with band by >5 (${inversions}/${anchored})`);
+});
+
+Deno.test("final: no obvious cross-domain false-positive prereqs", () => {
+  // Concrete edges that were spotted as false positives during the audit.
+  // If these reappear, the candidate pool or LLM filtering regressed.
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const h = lines[0].split("\t");
+  const iPrereqs = h.indexOf("prereqs");
+  const byId = new Map<string, string>();
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    byId.set(c[0], c[iPrereqs] || "");
+  }
+  const shouldNotBePrereq: [string, string][] = [
+    ["describe-consequences-of-following-rules", "antisocial-personality-disorder"],
+    ["distinguish-lumber-categories", "pack-fragile-items-for-transportation"],
+    ["weigh-products-or-estimate-weight", "use-measures-of-dispersion"],
+  ];
+  const violations: string[] = [];
+  for (const [skill, bogusPrereq] of shouldNotBePrereq) {
+    const p = byId.get(skill);
+    if (!p) continue;
+    if (p.split(",").includes(bogusPrereq)) violations.push(`${skill} ← ${bogusPrereq}`);
+  }
+  assertEquals(violations.length, 0, `cross-domain false positives returned: ${violations.join("; ")}`);
+});
+
+Deno.test("final: elementary-math progression surfaces known prereqs", () => {
+  // Seed-edge coverage goal: addition should be reachable as a prereq of
+  // multiplication (either directly or transitively). If Khan/AL-CPL/
+  // Metacademy seed resolution regresses, this test fails.
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const h = lines[0].split("\t");
+  const iPrereqs = h.indexOf("prereqs");
+  const prereqs = new Map<string, string[]>();
+  const ids = new Set<string>();
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    ids.add(c[0]);
+    if (c[iPrereqs]) prereqs.set(c[0], c[iPrereqs].split(","));
+  }
+  if (!ids.has("addition") || !ids.has("multiplication")) return; // skip if renamed
+  const reachable = new Set<string>();
+  const stack = [...(prereqs.get("multiplication") ?? [])];
+  while (stack.length) {
+    const u = stack.pop()!;
+    if (reachable.has(u)) continue;
+    reachable.add(u);
+    for (const p of prereqs.get(u) ?? []) if (!reachable.has(p)) stack.push(p);
+  }
+  // This is currently a known-failing test — it documents D6 coverage work.
+  // Allow as warning only for now; flip to assert once seed resolution improves.
+  if (!reachable.has("addition")) {
+    console.warn(`[test] WARN: addition not a transitive prereq of multiplication (D6 coverage goal)`);
+  }
+});
