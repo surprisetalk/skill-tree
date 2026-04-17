@@ -72,6 +72,12 @@ const denoiseTitle = (s: string): string => {
   return t;
 };
 
+const sentenceCase = (s: string): string => {
+  if (!s) return s;
+  if (s[0] === s[0].toUpperCase() && s[0] !== s[0].toLowerCase()) return s;
+  return s[0].toUpperCase() + s.slice(1);
+};
+
 const stripStudentPrefix = (s: string): string => {
   if (!s) return s;
   const t = s.replace(/^(the\s+)?students?\s+will\s+(be\s+able\s+to\s+)?/i, "")
@@ -204,6 +210,15 @@ async function sha256(s: string): Promise<Uint8Array> {
 const OLLAMA = Deno.env.get("OLLAMA_HOST") ?? "http://localhost:11434";
 const EMBED_MODEL = "nomic-embed-text";
 const EMBED_DIM = 768;
+
+// Pass 11 T1/T3: centralized junk-topic regexes.
+// Applied in stage dedupe backfill (LCSH/DBpedia ancestors) AND stage finalize.
+// Previously these existed only at finalize, letting junk leak through dedupe.
+const FRAMEWORK_RE = /-standards|-20\d\d|^sced-|^content-khan|^ccss$|^ngss$|next-generation-science|k-5-mathematics|adult-basic-education|cte-standards|curriculum|course-codes|^skills$|^content$|^learning-stage-|\d{4}-\d{4}|\d{2}-\d{2}-updates|scope-and-sequence|-sy\d{4}|-effective-starting|early-childhood-standards/;
+const WIKI_CAT_RE = /-officials-and-employees$|-by-country$|-by-region$|-by-type$|-by-year$|-by-nationality$|-introduced-in-|-established-in-|-disestablished-in-|-founded-in-|-born-in-|-died-in-|-set-in-|^people-in-|-people$|-in-history$|^wikiproject-|-templates$|^years-in-|^decades-in-|^centuries-in-|-matches$|-aircraft$|-records$|-(judges|officials|employees|members|persons)$/;
+const YEAR_RE = /(^|-)(19|20)\d\d(-|$)|^\d+$/;
+const isJunkTopic = (t: string): boolean => FRAMEWORK_RE.test(t) || WIKI_CAT_RE.test(t) || YEAR_RE.test(t);
+
 const GEN_MODEL = Deno.env.get("OLLAMA_GEN_MODEL") ?? "gpt-oss:20b";
 const CACHE_PATH = `${BUILD}/2_cache.bin`;
 const CACHE_RECORD_BYTES = 32 + EMBED_DIM * 4;
@@ -308,6 +323,32 @@ function taggedTsvPath(): string {
   try { Deno.statSync(`${BUILD}/3b_tagged_deduped.tsv`); return `${BUILD}/3b_tagged_deduped.tsv`; } catch { return `${BUILD}/3_tagged.tsv`; }
 }
 
+// Pass 10 S3-5: transitive alias collapse — follow chains to terminal canonical.
+// Stage 3b may re-merge an already-canonical target, leaving stale pointers.
+function loadAliasesCollapsed(): Map<string, string> {
+  const raw = new Map<string, string>();
+  try {
+    const aLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
+    for (let i = 1; i < aLines.length; i++) {
+      const [d, c] = aLines[i].split("\t");
+      if (d && c) raw.set(d, c);
+    }
+  } catch { return raw; }
+  const collapsed = new Map<string, string>();
+  for (const [d] of raw) {
+    let cur = d;
+    const seen = new Set<string>([cur]);
+    for (let hops = 0; hops < 64; hops++) {
+      const next = raw.get(cur);
+      if (!next || seen.has(next)) break;
+      seen.add(next);
+      cur = next;
+    }
+    if (cur !== d) collapsed.set(d, cur);
+  }
+  return collapsed;
+}
+
 function loadEmbCache(): Map<string, Float32Array> {
   const cache = new Map<string, Float32Array>();
   let data: Uint8Array;
@@ -396,6 +437,7 @@ function normalizedEmbeddingsForSkills(skillIds: string[]): Float32Array {
 const INFILL_CACHE = `${BUILD}/1b_infill.tsv`;
 const SUMMARIZE_CACHE = `${BUILD}/1c_summarize.tsv`;
 const ONET_DESC_CACHE = `${BUILD}/1d_onet_desc.tsv`;
+const OPENSALT_DESC_CACHE_PATH = `${BUILD}/1e_opensalt_desc.tsv`;
 
 const SHORT_TECH_WHITELIST = new Set([
   "r", "go", "c#", "c++", "ada", "apl", "awk", "css", "db2", "git", "ios", "jet",
@@ -407,7 +449,8 @@ function stageList() {
   const infill = loadTsvCache(INFILL_CACHE);
   const summarize = loadTsvCache(SUMMARIZE_CACHE);
   const onetDesc = loadTsvCache(ONET_DESC_CACHE);
-  console.log(`[list] caches: infill=${infill.size} summarize=${summarize.size} onet_desc=${onetDesc.size}`);
+  const opensaltDesc = loadTsvCache(OPENSALT_DESC_CACHE_PATH);
+  console.log(`[list] caches: infill=${infill.size} summarize=${summarize.size} onet_desc=${onetDesc.size} opensalt_desc=${opensaltDesc.size}`);
   const raw: Skill[] = [];
 
   // ESCO
@@ -421,7 +464,7 @@ function stageList() {
       const r = rows[i];
       if (!r[iLabel]) continue;
       raw.push({
-        id: "", title: r[iLabel].trim(), description: (r[iDesc] || r[iDef] || "").trim(),
+        id: "", title: sentenceCase(r[iLabel].trim()), description: (r[iDesc] || r[iDef] || "").trim(),
         sources: ["esco"], tags: r[iType] ? [`esco:${r[iType]}`] : ["esco"],
       });
       n++;
@@ -524,7 +567,8 @@ function stageList() {
       raw.push({
         id: "", title: orig, description: desc ? `${orig} — ${desc}` : "",
         sources: ["onet"],
-        tags: ["onet:tech", ...(hot ? ["onet:hot"] : []), ...(desc ? [`onet:tech:${slugify(desc)}`] : [])],
+        // Pass 12 TG5: drop onet:hot (redundant with onet:tech:* subtypes)
+        tags: ["onet:tech", ...(desc ? [`onet:tech:${slugify(desc)}`] : [])],
       });
       n++;
     }
@@ -550,10 +594,10 @@ function stageList() {
       }
       let desc = infill.get(id) ?? "";
       const tags = typeName ? [`lightcast:${typeName}`] : ["lightcast"];
-      if (desc) infilled++;
+      if (desc && desc.trim() !== typeName) infilled++;
       else {
+        desc = "";
         if (category) { desc = `${title} — ${category}`; placeholdered++; }
-        else if (typeName) { desc = typeName; placeholdered++; }
         tags.push("desc:placeholder");
         missingIds.push(id);
       }
@@ -569,11 +613,36 @@ function stageList() {
     console.log(`  lightcast: ${n} (infilled=${infilled}, placeholder=${placeholdered}, certs=${certsDropped})`);
   }
 
+  // Pass 16 MF1: synthesized foundations. These hub concepts (addition, fractions,
+  // python, loops, area, …) are often missing as atomic skills — OpenSALT fragments
+  // them into 284+ grade-specific variants, leaving no convergence point. Seed them
+  // as first-class skills with curated descriptions.
+  {
+    try {
+      const f = JSON.parse(Deno.readTextFileSync("data/_foundations.json"));
+      let n = 0;
+      for (const fd of f.foundations || []) {
+        if (!fd.id || !fd.title) continue;
+        const tags = ["foundation", `foundation:${fd.id}`];
+        if (Number.isFinite(fd.grade_start)) tags.push(`grade:${fd.grade_start === 0 ? "K" : fd.grade_start === -1 ? "PK" : String(fd.grade_start)}`);
+        if (Number.isFinite(fd.grade_end) && fd.grade_end !== fd.grade_start) tags.push(`grade:${fd.grade_end === 0 ? "K" : fd.grade_end === -1 ? "PK" : String(fd.grade_end)}`);
+        raw.push({ id: "", title: fd.title, description: fd.description || "", sources: ["foundation"], tags });
+        n++;
+      }
+      console.log(`  foundations: ${n}`);
+    } catch (e) { console.warn(`[list] foundations skipped: ${(e as Error).message}`); }
+  }
+
   // OpenSALT CFItems
   {
     const SCAFFOLDING_TYPES = new Set([
       "Grade Level","Domain","Strand","Course","Topic","Cluster",
       "Component","Section","Module","Chapter","Unit",
+      // Pass 15 OT1 extension — non-learnable framework scaffolding nodes
+      "Sub-Domain","Category","Connection","Grade","Grade Band","Quarter",
+      "Section Heading","Pathway","Subject","Dimension","Cognitive Complexity",
+      "Performance Level","Assignment","Lesson","Job Role","Employee",
+      "Team Leader","People Leader","Senior Leader",
     ]);
     const SCAFFOLDING_RE = /^(\s*)?(grade|kindergarten|pre-?k|elementary|middle school|high school|[0-9]+(st|nd|rd|th)\s+grade|unit\s+\d|chapter\s+\d|section\s+\d|module\s+\d|standard\s+\d|topic\s+\d|strand|domain)\b/i;
     const SCAFFOLDING_SIMPLE_RE = new RegExp([
@@ -585,7 +654,42 @@ function stageList() {
       /^(?:CFItemType|Course|Subject)\s*:/,
       /\?\s*(?:Hook Activity|Background Information|Vocabulary Activity|Document Analysis|Writing)$/,
       /\s+(?:Hook Activity|Writing Activity|Vocabulary Activity|Assessment Activity)$/,
+      // Pass 15 EC1: metadata-prefix titles
+      /^(?:Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]*/,
+      // Pass 9 R5: scaffolding/student-directive prefixes
+      /^with\s+(?:prompting|guidance|support)\b/,
+      /^by\s+(?:date|the\s+end\s+of)\b/,
+      /^(?:train|instruct|teach)\s+\w+s?\s+to\b/,
     ].map((r) => r.source).join("|"), "i");
+    // Pass 15 OS1/OS2/OS3/OS5: framework-level drops
+    const FRAMEWORK_BLOCKLIST = new Set([
+      "pcg-georgia-s-k-12-mathematics-standards-implementation-sy2023-2024-2",
+      "florida-math-scope-and-sequence",
+      "florida-science-scope-and-sequence-grade-3",
+      "florida-social-studies-scope-and-sequence",
+      "al-ela-alabama-ela-test",
+      "al-mth-alabama-math-test",
+      "al-sc-alabama-science-test",
+      "al-ss-alabama-social-studies-test",
+      "normalized-data-schema",
+      "scope-and-sequence-framework-template",
+      "norm-webb-s-depth-of-knowledge-dok-levels-of-cognitive-difficulty",
+      "florida-ela-standards-best-3rd-grade",
+      "florida-ela-standards-lafs-3rd-grade",
+      "florida-science-standards-grade-3",
+      "florida-social-studies-standards-grade-3",
+      "gcps-aks-language-arts-2021-2022",
+      "gcps-aks-mathematics-2022-2023",
+      "indiana-academic-standards-for-mathematics-2020",
+      "mathematics-b-e-s-t",
+    ]);
+    // Pass 12 TG1: CASE educationLevel uses "KG" (and rare "TK"); difficulty stage expects "K".
+    const normGrade = (g: string): string => {
+      const u = g.trim().toUpperCase();
+      if (u === "KG" || u === "TK") return "K";
+      if (u === "PR" || u === "PRE-K" || u === "PRE-KINDERGARTEN") return "PK";
+      return u;
+    };
     const truncTitle = (t: string, cap: number): string => {
       if (t.length <= cap) return t;
       const head = t.slice(0, cap);
@@ -594,12 +698,14 @@ function stageList() {
       const lastSpace = head.lastIndexOf(" ");
       return (lastSpace > cap * 0.5 ? head.slice(0, lastSpace) : head).trim() + "…";
     };
-    let n = 0, scaffType = 0, scaffPat = 0, truncated = 0, perFrameDup = 0, stuPrefix = 0, pureVerb = 0;
+    let n = 0, scaffType = 0, scaffPat = 0, truncated = 0, perFrameDup = 0, stuPrefix = 0, pureVerb = 0, frameDropped = 0;
     for (const e of Deno.readDirSync("data/opensalt")) {
       if (!e.name.endsWith(".json") || e.name === "index.json") continue;
       const j = JSON.parse(Deno.readTextFileSync(`data/opensalt/${e.name}`));
       const items = j.CFItems || [];
       const docSlug = slugify(j.CFDocument?.title || "opensalt");
+      if (FRAMEWORK_BLOCKLIST.has(docSlug)) { frameDropped += items.length; continue; }
+      const isSced = docSlug.startsWith("sced-");
       const seenInFrame = new Set<string>();
       for (const it of items) {
         if (it.CFItemType && SCAFFOLDING_TYPES.has(it.CFItemType)) { scaffType++; continue; }
@@ -619,6 +725,9 @@ function stageList() {
         title = title.replace(/^[•▪►■◆]\s*/, "").replace(/^\d+\.\s+/, "");
         const before = title;
         title = stripStudentPrefix(title);
+        // Pass 15 EC2: strip question/command prefixes
+        title = title.replace(/^(Can|Could|Should|How to|What is|Why does)\s+/i, (_m, _g, _off, _s) => "");
+        if (title && title[0] === title[0].toLowerCase()) title = title[0].toUpperCase() + title.slice(1);
         if (title !== before) stuPrefix++;
         title = title.replace(/^(Benchmark|Standard|Indicator)\s+[\d.]+\s*:\s*/i, "").trim();
         if (title.length > 300) { title = truncTitle(title, 300); truncated++; }
@@ -626,18 +735,24 @@ function stageList() {
         if (SCAFFOLDING_SIMPLE_RE.test(title)) { scaffPat++; continue; }
         if (/^(Essential|Proficient|Advanced|Intermediate|Beginning|Emerging|Developing|Extending|Exceeding|Level)\s+[IVX0-9]+/i.test(title) && title.length < 30) { scaffPat++; continue; }
         if (/^You\s+[a-z]/i.test(title) && title.length > 20) { scaffPat++; continue; }
-        if (!/\s/.test(title) && title.length < 20) { scaffPat++; continue; }
+        // Pass 9 R7: extend single-token drop from <20 to <30 (kills bare acronyms like "WCAG", "GPS", "IoT", "HMI")
+        if (!/\s/.test(title) && title.length < 30) { scaffPat++; continue; }
         if (SCAFFOLDING_RE.test(title) && title.length < 50 && !it.CFItemType) { scaffPat++; continue; }
         if (/^(understand|recognize|demonstrate|apply|identify|know|explain|describe)\s+(the|how|that|what|why|when|where|a|an)\s/i.test(title)
             && title.length < 60 && !it.CFItemType) { pureVerb++; continue; }
+        // Pass 12 DESC3: strip pedagogical filler prefixes from description
+        description = description.replace(/^(Students?\s+(will|demonstrate)|The student|This unit|Module \d+|The course|Courses)\s[^.]*?\.\s+/i, "");
         const localKey = title.toLowerCase();
         if (seenInFrame.has(localKey)) { perFrameDup++; continue; }
         seenInFrame.add(localKey);
 
-        const tags: string[] = ["opensalt", `framework:${docSlug}`];
+        // Pass 12 TG3: drop framework:* tag (no downstream consumer; noise). Keep source marker.
+        // Pass 9 R1: tag SCED catalog entries so stage prereq can exclude them from candidate pools.
+        const tags: string[] = ["opensalt"];
+        if (isSced) tags.push("sced:catalog");
         if (Array.isArray(it.educationLevel)) {
           for (const g of it.educationLevel) {
-            const gv = String(g).trim();
+            const gv = normGrade(String(g));  // Pass 12 TG1: KG→K etc.
             if (gv) tags.push(`grade:${gv}`);
           }
         }
@@ -647,14 +762,20 @@ function stageList() {
             if (kwSlug) tags.push(`topic:${kwSlug}`);
           }
         }
-        if (it.humanCodingScheme) tags.push(`code:${it.humanCodingScheme}`);
+        // Pass 12 TG2: only emit code:* when it actually encodes a framework code
+        // (≥4 chars AND contains uppercase/dot). Blocks single-letter humanCodingScheme
+        // sub-item labels that were corrupting deriveDisplay() fallback.
+        if (it.humanCodingScheme) {
+          const code = String(it.humanCodingScheme).trim().replace(/^Khan\s+/i, "");
+          if (code.length >= 4 && (/[A-Z]/.test(code) || /\./.test(code))) tags.push(`code:${code}`);
+        }
         if (it.CFItemType) tags.push(`opensalt:${slugify(it.CFItemType)}`);
 
         raw.push({ id: "", title, description, sources: ["opensalt"], tags });
         n++;
       }
     }
-    console.log(`  opensalt: ${n} (scaff_type=${scaffType}, scaff_pat=${scaffPat}, pure_verb=${pureVerb}, stu_prefix=${stuPrefix}, trunc=${truncated}, dup=${perFrameDup})`);
+    console.log(`  opensalt: ${n} (scaff_type=${scaffType}, scaff_pat=${scaffPat}, pure_verb=${pureVerb}, stu_prefix=${stuPrefix}, trunc=${truncated}, dup=${perFrameDup}, framework_dropped=${frameDropped})`);
   }
 
   // Normalize + denoise
@@ -685,8 +806,8 @@ function stageList() {
   }
   console.log(`[list] normalized=${normalized}, denoised=${denoised}`);
 
-  // Apply summarize + onet-desc caches
-  let summarized = 0, onetEnriched = 0;
+  // Apply summarize + onet-desc + opensalt-desc caches
+  let summarized = 0, onetEnriched = 0, opensaltEnriched = 0;
   for (const s of raw) {
     const k = slugify(s.title);
     const sum = summarize.get(k);
@@ -700,8 +821,12 @@ function stageList() {
       const d = onetDesc.get(k);
       if (d) { s.description = d; onetEnriched++; }
     }
+    if (!s.description && s.sources.includes("opensalt")) {
+      const d = opensaltDesc.get(k);
+      if (d) { s.description = d; opensaltEnriched++; }
+    }
   }
-  console.log(`[list] applied ${summarized} summaries, ${onetEnriched} onet descs`);
+  console.log(`[list] applied ${summarized} summaries, ${onetEnriched} onet descs, ${opensaltEnriched} opensalt descs`);
 
   // Long-title drop: anything that would overflow an 80-char slug and
   // require a hex-suffix hash is a compliance statement, not a skill.
@@ -808,12 +933,15 @@ function stageList() {
 
 // ---------- stage enrich: Ollama infill + summarize + onet-desc ----------
 
+const OPENSALT_DESC_CACHE = `${BUILD}/1e_opensalt_desc.tsv`;
+
 async function stageEnrich() {
   const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
   const SUM_MAX = Number(Deno.env.get("SUMMARIZE_MAX_LEN") ?? "120");
   const infillTargets: { id: string; title: string }[] = [];
   const sumTargets: { id: string; title: string }[] = [];
   const onetTargets: { id: string; title: string }[] = [];
+  const opensaltTargets: { id: string; title: string }[] = [];
   let opaqueSkipped = 0;
   for (let i = 1; i < lines.length; i++) {
     const c = lines[i].split("\t");
@@ -824,20 +952,36 @@ async function stageEnrich() {
       else infillTargets.push({ id, title });
     }
     if (sources === "onet" && !desc && title.length < 120) onetTargets.push({ id, title });
+    // Pass 12 DESC1: route OpenSALT empty-desc skills through LLM infill too.
+    if (sources === "opensalt" && !desc && title.length >= 8 && title.length <= 120) {
+      opensaltTargets.push({ id, title });
+    }
   }
-  console.log(`[enrich] infill=${infillTargets.length} (opaque=${opaqueSkipped}), summarize=${sumTargets.length}, onet-desc=${onetTargets.length}`);
+  console.log(`[enrich] infill=${infillTargets.length} (opaque=${opaqueSkipped}), summarize=${sumTargets.length}, onet-desc=${onetTargets.length}, opensalt-desc=${opensaltTargets.length}`);
+
+  // Pass 12 E2: prepend context for ambiguous names (protege→ontology editor, not mentorship).
+  const LIGHTCAST_CONTEXT = "You are describing entries in a professional labor-market skills taxonomy (Lightcast). When a name is ambiguous between generic English and a specific technical tool/product/standard, assume the technical interpretation. Do not invent organization names, certifications, or statistics.";
 
   await resumableOllama("enrich:infill", INFILL_CACHE, infillTargets,
-    (t) => `Define this workplace skill in exactly one concise sentence. Be concrete and factual. Output only the definition — no preamble, no "refers to", no quotation marks. Never repeat the skill name verbatim at the start. If unclear, output: SKIP\n\nSkill: ${t.title}\n\nDefinition:`,
-    { numPredict: 120 });
+    // Pass 12 ENR1: tone drift — ban marketing voice.
+    (t) => `${LIGHTCAST_CONTEXT}\n\nWrite a single factual sentence (≤100 chars) defining the skill without marketing language, jargon, or elaboration. Do not begin with the skill name. If unclear, output: SKIP\n\nSkill: ${t.title}\n\nDefinition:`,
+    // Pass 12 ENR2: raise num_predict from 120 so ~200-char outputs no longer truncate mid-word.
+    { numPredict: 200 });
 
   await resumableOllama("enrich:summarize", SUMMARIZE_CACHE, sumTargets,
-    (t) => `Extract the core skill as a concise 3-7 word noun phrase. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n\nStandard: ${t.title}\n\nName:`,
-    { numPredict: 40 });
+    // Pass 12 ENR4: extract-only constraint — don't add/assume concepts.
+    (t) => `Extract the core skill as a concise 3-7 word noun phrase. Extract only concepts present in the input; do not add or assume. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n\nStandard: ${t.title}\n\nName:`,
+    { numPredict: 60 });
 
   await resumableOllama("enrich:onet-desc", ONET_DESC_CACHE, onetTargets,
-    (t) => `Expand this workplace task into a 1-2 sentence description of what the task involves. Be concrete and factual. No preamble. No quotation marks. Return only the description.\n\nTask: ${t.title}\n\nDescription:`,
-    { numPredict: 80 });
+    // Pass 12 ENR3: ban "This task involves" template; cap at one sentence, <150 chars.
+    (t) => `Describe this workplace task in one sentence (<150 chars). Start with the action verb. Do not use "This task involves". No preamble, no quotation marks.\n\nTask: ${t.title}\n\nDescription:`,
+    { numPredict: 120 });
+
+  // Pass 12 DESC1: OpenSALT standards with empty descriptions — expand to a single factual sentence.
+  await resumableOllama("enrich:opensalt-desc", OPENSALT_DESC_CACHE, opensaltTargets,
+    (t) => `Describe this K-12 academic standard in one sentence (<150 chars) that a teacher would use to explain what a student learns. Start with a noun or verb. Do not use "Students will". No preamble, no quotation marks.\n\nStandard: ${t.title}\n\nDescription:`,
+    { numPredict: 140 });
 }
 
 // ---------- stage trees: LCSH + DBpedia SKOS broader chains ----------
@@ -959,7 +1103,20 @@ async function stageSeedEdges() {
   type RawPair = { rawSrc: string; rawDst: string; source: string; raw: string };
   const rawPairs: RawPair[] = [];
   const perSource: Record<string, { total: number; resolved: number; holdout: number; fallback: number }> = {};
+  // Pass 10 S2-2/S2-3: normalize labels before emit.
+  // AL-CPL uses "Basis_(linear_algebra)" format; Khan has parenthetical "(basic)" variants.
+  const normalizeLabel = (lbl: string): string => {
+    return lbl
+      .replace(/_/g, " ")
+      .replace(/\s*\([^)]*\)/g, "")   // strip parentheticals
+      .replace(/\s+/g, " ")
+      .trim();
+  };
   const addRaw = (s: string, d: string, src: string, r: string) => {
+    s = normalizeLabel(s);
+    d = normalizeLabel(d);
+    // Pass 10 S2-1: skip self-loops at emit (~7% of quarantined pairs).
+    if (!s || !d || s.toLowerCase() === d.toLowerCase()) return;
     rawPairs.push({ rawSrc: s, rawDst: d, source: src, raw: r });
     (perSource[src] ??= { total: 0, resolved: 0, holdout: 0, fallback: 0 }).total++;
   };
@@ -1142,6 +1299,10 @@ async function stageSeedEdges() {
           let overlap = 0;
           for (const t of ta) if (tb.has(t)) overlap++;
           if (overlap < 3) continue;
+          // Pass 10 S2-5: skip near-duplicate grade-adjacent standards.
+          // Jaccard ≥0.80 means same concept at different grade levels (sequencing, not prereq).
+          const jaccard = overlap / (ta.size + tb.size - overlap);
+          if (jaccard >= 0.80) continue;
           const k = `${ai.grade}->${aj.grade}`;
           const c = perGradePair.get(k) ?? 0;
           if (c >= PAIR_CAP) continue;
@@ -1154,6 +1315,44 @@ async function stageSeedEdges() {
     }
     console.log(`[seed-edges] opensalt_grade: ${emitted} pairs`);
   }
+
+  // Pass 16 MF2: foundation wiring. Connect synthesized foundation hubs to their
+  // fragmented variants (add-within-5 → addition, etc.) via pattern matching.
+  {
+    try {
+      const f = JSON.parse(Deno.readTextFileSync("data/_foundations.json"));
+      const foundationTitles = new Map<string, string>();
+      for (const fd of f.foundations || []) {
+        if (fd.id && fd.title) foundationTitles.set(fd.id, fd.title);
+      }
+      let n = 0;
+      for (const e of f.seed_edges || []) {
+        if (!e.prereq) continue;
+        const preTitle = foundationTitles.get(e.prereq);
+        if (!preTitle) continue;
+        if (e.dependent) {
+          const dTitle = foundationTitles.get(e.dependent);
+          if (dTitle) { addRaw(preTitle, dTitle, "foundation", `${e.prereq}->${e.dependent}`); n++; }
+        } else if (e.dependent_pattern) {
+          const re = new RegExp(e.dependent_pattern);
+          for (const id of idx.idSet) {
+            if (!re.test(id)) continue;
+            if (id === e.prereq) continue;
+            // resolveConcept matches ids directly; pass the id slug as the "label".
+            addRaw(preTitle, id, "foundation", `${e.prereq}->${id}`);
+            n++;
+          }
+        }
+      }
+      console.log(`[seed-edges] foundation wiring: ${n} pairs`);
+    } catch (e) { console.warn(`[seed-edges] foundation wiring skipped: ${(e as Error).message}`); }
+  }
+
+  // Pass 15 K2: Khan-to-OpenSALT-Khan crosswalk via humanCodingScheme.
+  // Khan TSV uses slugs like "counting-out-1-20-objects"; OpenSALT Khan framework
+  // uses "K.CC.B.5"-style codes in its humanCodingScheme. Crosswalk adds ~700 seeds.
+  // Currently handled via the same index; extend resolveConcept to try `code:Khan X`.
+  // (No change needed here — stage list already emits `code:` tags which resolveConcept can match.)
 
   console.log(`[seed-edges] collected ${rawPairs.length} raw pairs`);
 
@@ -1317,12 +1516,39 @@ async function stageSeedEdges() {
 
 // ---------- stage embed ----------
 
+function buildEmbedContent(title: string, desc: string, tags: string): string {
+  // nomic-embed-text returns a constant-ish vector for short inputs (confirmed via Ollama API).
+  // Pad short content with the tag breadcrumb so the pooling has enough tokens to differentiate.
+  const base = desc ? `${title}\n${desc}` : title;
+  if (base.length >= 40) return base;
+  const tagHint = tags ? tags.replace(/,/g, " ").slice(0, 300) : "";
+  return tagHint ? `${base}. ${tagHint}` : `${base}. Skill: ${title}. ${title}.`;
+}
+
+function paddedEmbedContent(title: string, desc: string, tags: string): string {
+  const tagHint = tags ? tags.replace(/,/g, " ").slice(0, 400) : "";
+  const d = desc ? ` ${desc}` : "";
+  return `Skill: ${title}.${d} Context: ${tagHint || title}. Topic: ${title}.`;
+}
+
+function embedSignature(v: Float32Array): string {
+  let s = "";
+  for (let k = 0; k < 16; k++) s += v[k].toFixed(3) + ",";
+  return s;
+}
+
 async function stageEmbed() {
   const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
-  const skills: { id: string; content: string }[] = [];
+  const skills: { id: string; title: string; description: string; tags: string; content: string }[] = [];
   for (let i = 1; i < lines.length; i++) {
     const c = lines[i].split("\t");
-    skills.push({ id: c[0], content: c[2] ? `${c[1]}\n${c[2]}` : c[1] });
+    skills.push({
+      id: c[0],
+      title: c[1],
+      description: c[2] || "",
+      tags: c[4] || "",
+      content: buildEmbedContent(c[1], c[2] || "", c[4] || ""),
+    });
   }
   if (Deno.env.get("SKILL_LIMIT")) {
     skills.length = Math.min(skills.length, Number(Deno.env.get("SKILL_LIMIT")));
@@ -1331,6 +1557,48 @@ async function stageEmbed() {
 
   const t0 = performance.now();
   const vecs = await embedBatch(skills.map((s) => s.content), "embed");
+
+  // Duplicate-vector detection: nomic-embed-text collapses short inputs to near-identical vectors.
+  // Group by 16-float signature, re-embed groups with >5 members using padded content.
+  const bucket = new Map<string, number[]>();
+  for (let i = 0; i < vecs.length; i++) {
+    const sig = embedSignature(vecs[i]);
+    const arr = bucket.get(sig);
+    if (arr) arr.push(i); else bucket.set(sig, [i]);
+  }
+  const dupGroupsInitial = [...bucket.values()].filter((idxs) => idxs.length > 5);
+  console.log(`[embed] ${dupGroupsInitial.length} duplicate-vector groups before retry`);
+
+  let retried = 0;
+  if (dupGroupsInitial.length > 0) {
+    const retryIdxs: number[] = [];
+    const retryContents: string[] = [];
+    for (const idxs of dupGroupsInitial) {
+      for (const i of idxs) {
+        retryIdxs.push(i);
+        retryContents.push(paddedEmbedContent(skills[i].title, skills[i].description, skills[i].tags));
+      }
+    }
+    const retriedVecs = await embedBatch(retryContents, "embed-retry");
+    for (let k = 0; k < retryIdxs.length; k++) vecs[retryIdxs[k]] = retriedVecs[k];
+    retried = retryIdxs.length;
+  }
+
+  // Post-retry scan — anything still in a large duplicate group is pathological.
+  bucket.clear();
+  for (let i = 0; i < vecs.length; i++) {
+    const sig = embedSignature(vecs[i]);
+    const arr = bucket.get(sig);
+    if (arr) arr.push(i); else bucket.set(sig, [i]);
+  }
+  const dupGroupsFinal = [...bucket.values()].filter((idxs) => idxs.length > 5);
+  const pathological: string[] = [];
+  for (const idxs of dupGroupsFinal) for (const i of idxs) pathological.push(skills[i].id);
+  Deno.writeTextFileSync(
+    `${BUILD}/2_pathological.tsv`,
+    pathological.length ? pathological.join("\n") + "\n" : "",
+  );
+  console.log(`[embed] ${dupGroupsFinal.length} duplicate-vector groups after retry; ${pathological.length} pathological skills`);
 
   const bin = new Float32Array(skills.length * EMBED_DIM);
   let nans = 0;
@@ -1346,6 +1614,10 @@ async function stageEmbed() {
     total: skills.length,
     dim: EMBED_DIM,
     nan_count: nans,
+    dup_groups_before_retry: dupGroupsInitial.length,
+    dup_groups_after_retry: dupGroupsFinal.length,
+    dup_vector_count: pathological.length,
+    retried,
     total_seconds: (performance.now() - t0) / 1000,
   });
   if (nans > 0) throw new Error(`embed: ${nans} NaN/Inf values`);
@@ -1635,33 +1907,6 @@ async function stageTag() {
   const topicPass = oversamplePass(topicMat, topicRefs.length, topicRefs, TOPIC_K * OVERSAMPLE, TOPIC_TH, topicPoisoned);
   const topicMask = pruneMask(topicPass.refHits, topicRefs, "topic");
 
-  const OCC_PAIR_MIN = Number(Deno.env.get("OCC_PAIR_MIN") ?? "0.5");
-  const occFinalize = (pass: { out: { idx: number; score: number }[][] }, mask: Uint8Array, k: number): number[][] => {
-    const results: number[][] = [];
-    for (const row of pass.out) {
-      const kept = row.filter((r) => mask[r.idx]);
-      if (kept.length <= 1) { results.push(kept.slice(0, k).map((r) => r.idx)); continue; }
-      const finalIdxs: number[] = [kept[0].idx];
-      for (let j = 1; j < kept.length && finalIdxs.length < k; j++) {
-        const rj = kept[j].idx;
-        let minCos = 1;
-        for (const ki of finalIdxs) {
-          let sc = 0;
-          for (let d = 0; d < DIM; d++) sc += occMat[rj * DIM + d] * occMat[ki * DIM + d];
-          if (sc < minCos) minCos = sc;
-        }
-        if (minCos >= OCC_PAIR_MIN) finalIdxs.push(rj);
-      }
-      results.push(finalIdxs);
-    }
-    return results;
-  };
-  const finalize = (pass: { out: { idx: number; score: number }[][] }, mask: Uint8Array, k: number): number[][] =>
-    pass.out.map((row) => row.filter((r) => mask[r.idx]).slice(0, k).map((r) => r.idx));
-
-  const occFinal = occFinalize(occPass, occMask, OCC_K);
-  const topicFinal = finalize(topicPass, topicMask, TOPIC_K);
-
   const directEsco = parseEscoSkillOccupations();
   const directOnet = parseOnetSkillOccupations();
   const directEscoTopics = parseEscoSkillTopics();
@@ -1673,37 +1918,137 @@ async function stageTag() {
     return m[1].replace(/^(ui-|gcps-aks-|pcg-|ccs-|chicago-public-schools-illinois-|western-and-northern-canadian-protocol-)/, "");
   };
 
+  // Pass 11 O1/O3: manager/director occupation cosine threshold (0.60→0.95).
+  const MANAGER_RE = /-manager$|-manager-|-director$|-director-|-supervisor$|-supervisor-/;
+  // Pass 11 O1: hex-suffix occupation slugs are overflow-hashed ESCO titles (noise).
+  const HEX_SUFFIX_RE = /-[a-f0-9]{6}$/;
+
+  type Picked = { slug: string; score: number };
+  const pickedOccs: Picked[][] = new Array(skills.length);
+  const pickedTopics: Picked[][] = new Array(skills.length);
+
+  for (let i = 0; i < skills.length; i++) {
+    const s = skills[i];
+    // Pass 15 K1: Khan K-12 content + low-grade OpenSALT-only skills skip occupation tagging.
+    const grades: number[] = [];
+    for (const m of s.tags.matchAll(/grade:([^,]+)/g)) {
+      for (const part of m[1].split(".")) {
+        const d = gradeToDifficulty(part);
+        if (d !== null) grades.push(d);
+      }
+    }
+    const maxGrade = grades.length ? Math.max(...grades) : -1;
+    const isKhanContent = /framework:content-khan-academy/.test(s.tags) || s.tags.includes("framework:content-khan-academy");
+    const khanSlug = /^khan-|-khan-|-khan$/.test(s.id) || s.title.toLowerCase().startsWith("khan");
+    const lowGradeOnly = maxGrade >= 0 && maxGrade <= 9  // diff 9 = grade 8
+      && !s.sources.includes("onet") && !s.sources.includes("esco");
+    const skipOccs = isKhanContent || khanSlug || lowGradeOnly;
+
+    let occs: Picked[] = skipOccs ? [] : occPass.out[i]
+      .filter((r) => occMask[r.idx])
+      .map((r) => ({ slug: slugify(occRefs[r.idx].label), score: r.score }))
+      .filter((p) => p.slug && !HEX_SUFFIX_RE.test(p.slug))
+      .filter((p) => !MANAGER_RE.test(p.slug) || p.score >= 0.95);
+    {
+      const seen = new Map<string, number>();
+      for (const p of occs) seen.set(p.slug, Math.max(seen.get(p.slug) ?? 0, p.score));
+      occs = [...seen.entries()].map(([slug, score]) => ({ slug, score }))
+        .sort((a, b) => b.score - a.score).slice(0, OCC_K);
+    }
+
+    let topics: Picked[] = topicPass.out[i]
+      .filter((r) => topicMask[r.idx])
+      .map((r) => ({ slug: slugify(topicRefs[r.idx].label), score: r.score }))
+      .filter((p) => !!p.slug);
+
+    // Pass 13 CR4: for ≤2-word titles, require ≥1 shared significant token with topic.
+    const wordCount = s.title.split(/\s+/).filter((w) => w.length > 1).length;
+    if (wordCount <= 2) {
+      const titleToks = new Set(slugify(s.title).split("-").filter((w) => w.length >= 4));
+      topics = topics.filter((p) => {
+        for (const tok of p.slug.split("-")) if (tok.length >= 4 && titleToks.has(tok)) return true;
+        return false;
+      });
+    }
+    {
+      const seen = new Map<string, number>();
+      for (const p of topics) seen.set(p.slug, Math.max(seen.get(p.slug) ?? 0, p.score));
+      topics = [...seen.entries()].map(([slug, score]) => ({ slug, score }))
+        .sort((a, b) => b.score - a.score).slice(0, TOPIC_K);
+    }
+
+    if (s.sources.includes("esco") && !skipOccs) {
+      const dOcc = directEsco.get(s.id);
+      if (dOcc?.length) {
+        const direct = dOcc.slice(0, DIRECT_OCC_CAP).map((o) => slugify(o))
+          .filter((sl) => sl && !HEX_SUFFIX_RE.test(sl));
+        const existing = new Set(occs.map((p) => p.slug));
+        const merged: Picked[] = [...direct.filter((sl) => !existing.has(sl)).map((sl) => ({ slug: sl, score: 1.0 })), ...occs];
+        occs = merged.slice(0, DIRECT_OCC_CAP);
+      }
+      const dTopic = directEscoTopics.get(s.id);
+      if (dTopic?.length) {
+        const direct = dTopic.slice(0, DIRECT_TOPIC_CAP).map((t) => slugify(t)).filter(Boolean);
+        const existing = new Set(topics.map((p) => p.slug));
+        const merged: Picked[] = [...direct.filter((sl) => !existing.has(sl)).map((sl) => ({ slug: sl, score: 1.0 })), ...topics];
+        topics = merged.slice(0, DIRECT_TOPIC_CAP);
+      }
+    }
+    if (s.sources.includes("onet") && !skipOccs) {
+      const dOcc = directOnet.get(s.id);
+      if (dOcc?.length) {
+        const direct = dOcc.slice(0, DIRECT_OCC_CAP).map((o) => slugify(o))
+          .filter((sl) => sl && !HEX_SUFFIX_RE.test(sl));
+        const existing = new Set(occs.map((p) => p.slug));
+        const merged: Picked[] = [...direct.filter((sl) => !existing.has(sl)).map((sl) => ({ slug: sl, score: 1.0 })), ...occs];
+        occs = merged.slice(0, DIRECT_OCC_CAP);
+      }
+    }
+    if (s.sources.includes("opensalt")) {
+      const ft = frameworkTopic(s.tags);
+      if (ft) {
+        const existing = new Set(topics.map((p) => p.slug));
+        const merged: Picked[] = existing.has(ft) ? topics : [{ slug: ft, score: 1.0 }, ...topics];
+        topics = merged.slice(0, DIRECT_TOPIC_CAP);
+      }
+    }
+    pickedOccs[i] = occs;
+    pickedTopics[i] = topics;
+  }
+
+  // Pass 11 O2: per-occupation frequency cap. Keeps the highest-scoring 500 assignments.
+  const OCC_FREQ_CAP = Number(Deno.env.get("OCC_FREQ_CAP") ?? "500");
+  const occToSkills = new Map<string, { i: number; score: number }[]>();
+  for (let i = 0; i < skills.length; i++) {
+    for (const p of pickedOccs[i]) {
+      let arr = occToSkills.get(p.slug);
+      if (!arr) { arr = []; occToSkills.set(p.slug, arr); }
+      arr.push({ i, score: p.score });
+    }
+  }
+  const freqDrops = new Map<number, Set<string>>();
+  let freqCapped = 0;
+  for (const [slug, arr] of occToSkills) {
+    if (arr.length <= OCC_FREQ_CAP) continue;
+    arr.sort((a, b) => b.score - a.score);
+    for (let k = OCC_FREQ_CAP; k < arr.length; k++) {
+      let set = freqDrops.get(arr[k].i);
+      if (!set) { set = new Set(); freqDrops.set(arr[k].i, set); }
+      set.add(slug);
+      freqCapped++;
+    }
+  }
+  if (freqCapped > 0) console.log(`[tag] occupation freq cap dropped ${freqCapped} assignments (cap=${OCC_FREQ_CAP})`);
+
   const rows: string[] = ["id\ttitle\tdescription\tsources\ttags\toccupations\ttopics"];
   const occCount = new Map<string, number>();
   const topicCount = new Map<string, number>();
   const occPer: number[] = [], topicPer: number[] = [];
   for (let i = 0; i < skills.length; i++) {
     const s = skills[i];
-    let occSlugs = occFinal[i].map((r) => slugify(occRefs[r].label)).filter(Boolean);
-    let topicSlugs = topicFinal[i].map((r) => slugify(topicRefs[r].label)).filter(Boolean);
-    if (s.sources.includes("esco")) {
-      const dOcc = directEsco.get(s.id);
-      if (dOcc?.length) {
-        const direct = dOcc.slice(0, DIRECT_OCC_CAP).map(slugify).filter(Boolean);
-        occSlugs = [...new Set([...direct, ...occSlugs])].slice(0, DIRECT_OCC_CAP);
-      }
-      const dTopic = directEscoTopics.get(s.id);
-      if (dTopic?.length) {
-        const direct = dTopic.slice(0, DIRECT_TOPIC_CAP).map(slugify).filter(Boolean);
-        topicSlugs = [...new Set([...direct, ...topicSlugs])].slice(0, DIRECT_TOPIC_CAP);
-      }
-    }
-    if (s.sources.includes("onet")) {
-      const dOcc = directOnet.get(s.id);
-      if (dOcc?.length) {
-        const direct = dOcc.slice(0, DIRECT_OCC_CAP).map(slugify).filter(Boolean);
-        occSlugs = [...new Set([...direct, ...occSlugs])].slice(0, DIRECT_OCC_CAP);
-      }
-    }
-    if (s.sources.includes("opensalt")) {
-      const ft = frameworkTopic(s.tags);
-      if (ft) topicSlugs = [...new Set([ft, ...topicSlugs])].slice(0, DIRECT_TOPIC_CAP);
-    }
+    const dropSet = freqDrops.get(i);
+    const occSlugs = pickedOccs[i].filter((p) => !(dropSet?.has(p.slug))).map((p) => p.slug);
+    const topicSlugs = pickedTopics[i].map((p) => p.slug);
     for (const x of occSlugs) occCount.set(x, (occCount.get(x) ?? 0) + 1);
     for (const x of topicSlugs) topicCount.set(x, (topicCount.get(x) ?? 0) + 1);
     occPer.push(occSlugs.length);
@@ -1769,6 +2114,9 @@ function stageDedupe() {
     ["primary","secondary","tertiary"],
     ["open","closed"],
     ["augmented","mixed","virtual"],
+    // Pass 10 S3-1 additions
+    ["ac","dc"],
+    ["z","c","bash","fish","ksh","zsh"],
   ];
   const antonymGroupOf = new Map<string, number>();
   ANTONYM_GROUPS.forEach((g, gi) => g.forEach((w) => antonymGroupOf.set(w, gi)));
@@ -1812,6 +2160,14 @@ function stageDedupe() {
   const parent = new Int32Array(rows.length);
   for (let i = 0; i < rows.length; i++) parent[i] = i;
   function find(i: number): number { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
+  // Pass 10 S3-1: token-subset guard. If one title's tokens are a strict subset
+  // of the other's, the longer is a specialization (e.g. "power" vs "power-bi")
+  // and should not be merged into the shorter. Blocks ui-ux-writing → writing.
+  const titleTokSet = (s: string): Set<string> => {
+    const out = new Set<string>();
+    for (const w of s.toLowerCase().split(/[^a-z0-9]+/)) if (w.length >= 3 && !SIG_STOP.has(w)) out.add(w);
+    return out;
+  };
   function union(a: number, b: number): boolean {
     const ra = find(a), rb = find(b);
     if (ra === rb) return false;
@@ -1820,7 +2176,18 @@ function stageDedupe() {
     const sb = sourceCount(rows[rb]);
     let keep: number;
     if (sa !== sb) keep = sa > sb ? ra : rb;
-    else keep = rows[ra].title.length <= rows[rb].title.length ? ra : rb;
+    else {
+      // Subset-aware tiebreak: prefer the canonical whose tokens are NOT a strict subset.
+      // Falls back to shortest title when neither is a proper subset.
+      const tA = titleTokSet(rows[ra].title), tB = titleTokSet(rows[rb].title);
+      let aSubsetB = tA.size > 0 && tA.size < tB.size;
+      for (const t of tA) if (!tB.has(t)) { aSubsetB = false; break; }
+      let bSubsetA = tB.size > 0 && tB.size < tA.size;
+      for (const t of tB) if (!tA.has(t)) { bSubsetA = false; break; }
+      if (aSubsetB && !bSubsetA) keep = rb;
+      else if (bSubsetA && !aSubsetB) keep = ra;
+      else keep = rows[ra].title.length <= rows[rb].title.length ? ra : rb;
+    }
     parent[keep === ra ? rb : ra] = keep;
     return true;
   }
@@ -2015,7 +2382,11 @@ function stageDedupe() {
       for (const cand of [r.id, slugify(r.title)]) {
         const anc = lcshTree.get(cand);
         if (anc && anc.length) {
-          c.topics = anc.slice(0, 3);
+          // Pass 11 T3: filter junk BEFORE slicing — was letting wiki-project/years-in-X
+          // ancestors become the only topic for otherwise-untagged canonicals.
+          const clean = anc.filter((a) => !isJunkTopic(a));
+          if (!clean.length) continue;
+          c.topics = clean.slice(0, 3);
           bfLcsh++;
           break;
         }
@@ -2086,7 +2457,9 @@ function stageDifficulty() {
       }
     }
     if (grades.length) {
-      anchor[i] = Math.max(...grades);
+      // Pass 13 CR3: use Math.min (first-teachable) rather than Math.max.
+      // Wide-grade-span skills (e.g. "grade 3-12") were anchoring at grade 12.
+      anchor[i] = Math.min(...grades);
       gradeAnchored++;
     }
   }
@@ -2363,16 +2736,56 @@ function stageDifficulty() {
     calibrated[i] = c;
   }
 
+  // Pass 16 DR2: seed-edge anchoring.
+  // When src → dst is a seed (src is prereq of dst), require raw[src] < raw[dst].
+  // 25.9% of seeds were reversed in band space because AL-CPL/MOOCx concepts land
+  // in the crowded professional plateau. Pull the prereq down 1.0 below the dependent.
+  let seedAnchorAdjusted = 0;
+  try {
+    const idToIdx = new Map<string, number>();
+    for (let i = 0; i < skills.length; i++) idToIdx.set(skills[i].id, i);
+    const alias = loadAliasesCollapsed();
+    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
+    for (const line of seedLines) {
+      const c = line.split("\t");
+      if (c[4] === "1") continue; // skip holdout seeds
+      const src = alias.get(c[0]) ?? c[0];
+      const dst = alias.get(c[1]) ?? c[1];
+      const si = idToIdx.get(src), di = idToIdx.get(dst);
+      if (si === undefined || di === undefined) continue;
+      if (out[si] >= out[di]) {
+        out[si] = out[di] - 1.0;
+        seedAnchorAdjusted++;
+      }
+    }
+    if (seedAnchorAdjusted > 0) {
+      console.log(`[difficulty] seed-anchored ${seedAnchorAdjusted} prereqs below their dependents`);
+      // Re-run calibration on adjusted raws
+      for (let i = 0; i < skills.length; i++) {
+        const c = calibrate(out[i] + (jittered[i] - out[i])); // preserve jitter
+        if (Number.isFinite(c)) calibrated[i] = c;
+      }
+    }
+  } catch { /* no seeds available */ }
+
   const band = new Int32Array(skills.length);
   const bandCounts = new Array(20).fill(0);
+  let healthCapped = 0;
   for (let i = 0; i < skills.length; i++) {
-    const b = Math.max(1, Math.min(20, Math.round(calibrated[i]) + 1));
+    let b = Math.max(1, Math.min(20, Math.round(calibrated[i]) + 1));
+    // Pass 10 S4-3: K-12 health/science concepts with grade anchor ≤12
+    // should not exceed band 13 regardless of kNN pull from medical O*NET neighbors.
+    if (!Number.isNaN(anchor[i])) {
+      const anchorBand = Math.round(anchor[i]) + 1;
+      if (anchorBand <= 13 && b > 13) { b = 13; healthCapped++; }
+    }
     if (!Number.isInteger(b) || b < 1 || b > 20) {
       throw new Error(`[difficulty] bad band for ${skills[i].id}: ${b} (calibrated=${calibrated[i]})`);
     }
     band[i] = b;
     bandCounts[b - 1]++;
   }
+  if (healthCapped > 0) console.log(`[difficulty] K-12 anchor band cap applied to ${healthCapped} skills`);
 
   const rows = ["id\tdifficulty\tdifficulty_raw"];
   for (let i = 0; i < skills.length; i++) rows.push(`${skills[i].id}\t${band[i]}\t${out[i].toFixed(4)}`);
@@ -2439,13 +2852,39 @@ function stageDifficulty() {
 const PREREQ_CANDIDATES_CACHE = `${BUILD}/5_candidates.tsv`;
 const PREREQ_CACHE = `${BUILD}/5_prereqs.tsv`;
 
-function parseSkillsWithDifficulty(): { skills: { id: string; title: string; description: string; topics: string; occupations: string }[]; diff: Int32Array; raw: Float32Array } {
+type SkillWithDiff = {
+  id: string;
+  title: string;
+  description: string;
+  topics: string;
+  occupations: string;
+  sources: string;
+  tags: string;
+  gradeStart: number; // -2 = unknown
+  gradeEnd: number;   // -2 = unknown
+};
+
+function parseSkillsWithDifficulty(): { skills: SkillWithDiff[]; diff: Int32Array; raw: Float32Array } {
   const tagged = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
   const h = tagged[0].split("\t");
   const iT = h.indexOf("title"), iD = h.indexOf("description"), iTp = h.indexOf("topics"), iOc = h.indexOf("occupations");
-  const skills = tagged.slice(1).map((l) => {
+  const iS = h.indexOf("sources"), iTg = h.indexOf("tags");
+  const skills: SkillWithDiff[] = tagged.slice(1).map((l) => {
     const c = l.split("\t");
-    return { id: c[0], title: c[iT], description: c[iD], topics: c[iTp], occupations: iOc >= 0 ? (c[iOc] || "") : "" };
+    const tags = iTg >= 0 ? (c[iTg] || "") : "";
+    let gs = Infinity, ge = -Infinity;
+    for (const m of tags.matchAll(/grade:([A-Za-z0-9-]+)/g)) {
+      const d = gradeToDifficulty(m[1]);
+      if (d !== null) { gs = Math.min(gs, d); ge = Math.max(ge, d); }
+    }
+    return {
+      id: c[0], title: c[iT], description: c[iD],
+      topics: c[iTp], occupations: iOc >= 0 ? (c[iOc] || "") : "",
+      sources: iS >= 0 ? (c[iS] || "") : "",
+      tags,
+      gradeStart: Number.isFinite(gs) ? gs : -2,
+      gradeEnd: Number.isFinite(ge) ? ge : -2,
+    };
   });
   const dLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length).slice(1);
   const dm = new Map<string, { band: number; raw: number }>();
@@ -2461,6 +2900,36 @@ function parseSkillsWithDifficulty(): { skills: { id: string; title: string; des
   return { skills, diff, raw };
 }
 
+// Pass 9 R6: language-family mutual exclusion for candidate pool.
+const LANG_TOKENS = [
+  "spanish","french","german","italian","portuguese","chinese","japanese",
+  "greek","latin","arabic","korean","russian","hebrew","swazi","kanuri","pulaar",
+];
+function langTokenOf(id: string): string | null {
+  for (const t of LANG_TOKENS) {
+    if (id === t || id.startsWith(`${t}-`) || id.includes(`-${t}-`) || id.endsWith(`-${t}`)) return t;
+  }
+  return null;
+}
+
+// Pass 9 R4: study/meta-skill denylist for candidate pool.
+const STUDY_SKILL_RE = /^(take[- ]notes?|mental[- ]concentration|find[- ]a[- ]dedicated|test[- ]anxiety|time[- ]management|study[- ]space|ask[- ]for[- ]help)/i;
+
+// Cross-domain foundation whitelist — these are cross-domain prereqs we want to
+// preserve in within-topic shared-token guards (R3). Mirrors the postproc FOUNDATION set.
+const FOUNDATION_IDS = new Set([
+  "mathematics","math","arithmetic","reading","writing","literacy","numeracy",
+  "problem-solving","critical-thinking","research","communication","algebra",
+  "geometry","statistics","probability",
+]);
+
+function loadPathologicalIds(): Set<string> {
+  try {
+    const t = Deno.readTextFileSync(`${BUILD}/2_pathological.tsv`);
+    return new Set(t.split("\n").filter((l) => l.length));
+  } catch { return new Set(); }
+}
+
 function computePrereqCandidates(): Map<string, number[]> {
   const { skills, raw } = parseSkillsWithDifficulty();
   const DIM = EMBED_DIM;
@@ -2474,42 +2943,109 @@ function computePrereqCandidates(): Map<string, number[]> {
       arr.push(i);
     }
   }
+  const pathological = loadPathologicalIds();
   const K = Number(Deno.env.get("PREREQ_K") ?? "15");
-  const MIN_DIFF = Number(Deno.env.get("PREREQ_MIN_DIFF_DELTA") ?? "0.3");
+  // Pass 16 DR1: raise from 0.3 to 1.5 — at 0.3, 23% of picks were reversed difficulty.
+  const MIN_DIFF = Number(Deno.env.get("PREREQ_MIN_DIFF_DELTA") ?? "1.5");
   const ANCESTOR_K = Number(Deno.env.get("PREREQ_ANCESTOR_K") ?? "5");
   const GLOBAL_K = Number(Deno.env.get("PREREQ_GLOBAL_K") ?? "5");
+  // Pass 10 S5-2: raise min token length 5 → 7 to kill weak-connector matches
+  // (e.g. "prepar" linking prepare-medication to prepare-pasta).
+  const TOK_MIN = 7;
+  // Pass 11 H2: framework-only skills (only topic from LCSH/DBpedia framework slugs)
+  // get excluded from the global-pool fallback — they become phantom hubs otherwise.
+  const frameworkOnly = new Uint8Array(skills.length);
+  const FRAME_RE = /-standards|^sced-|-\d{4}|framework|curriculum|scope-and-sequence/;
+  for (let i = 0; i < skills.length; i++) {
+    const topics = skills[i].topics.split(",").filter(Boolean);
+    if (topics.length === 0) frameworkOnly[i] = 1;
+    else if (topics.every((t) => FRAME_RE.test(t))) frameworkOnly[i] = 1;
+  }
+  // Precompute per-skill grade caps and filter flags
+  const slugLangs = skills.map((s) => langTokenOf(s.id));
+  const isSced = skills.map((s) => s.tags.includes("sced:catalog") && !/\b(esco|onet|lightcast)\b/.test(s.sources));
+  const isStudyMeta = skills.map((s) => STUDY_SKILL_RE.test(s.id));
+  const topQuintileRaw = (() => {
+    const sorted = [...raw].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length * 0.8)] ?? Infinity;
+  })();
+
+  // R2 grade-gap filter: target grade_start>=6 (diff>=7) rejects candidate grade_end<=2 (diff<=3)
+  const gradeGapReject = (i: number, j: number): boolean => {
+    const ts = skills[i].gradeStart, ce = skills[j].gradeEnd;
+    return ts >= 7 && ce !== -2 && ce <= 3;
+  };
+
+  const candOk = (i: number, j: number): boolean => {
+    if (i === j) return false;
+    if (pathological.has(skills[j].id)) return false;
+    if (isSced[j]) return false;              // R1
+    if (isStudyMeta[j] && !isStudyMeta[i]) return false; // R4
+    const lj = slugLangs[j];
+    if (lj && slugLangs[i] && lj !== slugLangs[i]) return false; // R6
+    if (gradeGapReject(i, j)) return false;   // R2
+    return raw[j] < raw[i] - MIN_DIFF;        // DR1 hard guard
+  };
+
   const out = new Map<string, number[]>();
   const outLines: string[] = [];
   const t0 = performance.now();
   for (let i = 0; i < skills.length; i++) {
+    const topics = skills[i].topics.split(",").filter(Boolean);
+    const occsI = skills[i].occupations.split(",").filter(Boolean);
+    const myOccs = new Set<string>(occsI);
+    const myToks = new Set<string>();
+    for (const t of topics) for (const tok of t.split("-")) if (tok.length >= TOK_MIN) myToks.add(tok);
+
+    // R3 within-topic shared-token guard: candidate must share ≥1 topic token,
+    // OR share an occupation, OR be in FOUNDATION_IDS.
+    const withinTopicOk = (j: number): boolean => {
+      if (FOUNDATION_IDS.has(skills[j].id)) return true;
+      for (const oc of skills[j].occupations.split(",")) if (oc && myOccs.has(oc)) return true;
+      for (const tok of skills[j].id.split("-")) if (tok.length >= TOK_MIN && myToks.has(tok)) return true;
+      for (const t of skills[j].topics.split(",")) {
+        for (const tok of t.split("-")) if (tok.length >= TOK_MIN && myToks.has(tok)) return true;
+      }
+      return false;
+    };
+
     const pool = new Set<number>();
-    for (const t of skills[i].topics.split(",")) {
-      if (!t) continue;
+    for (const t of topics) {
       const arr = topicIdx.get(t);
       if (!arr) continue;
-      for (const j of arr) if (raw[j] + MIN_DIFF <= raw[i]) pool.add(j);
+      for (const j of arr) if (candOk(i, j) && withinTopicOk(j)) pool.add(j);
     }
     let cands: number[];
     if (pool.size >= K) cands = [...pool];
-    else {
+    else if (skills[i].sources.split(",").filter(Boolean).length >= 2 && pool.size < 3) {
+      // M1: multi-source skill with sparse pool — skip global fallback, let LLM say "none"
+      cands = [...pool];
+    } else {
       cands = [];
-      for (let j = 0; j < skills.length; j++) if (raw[j] + MIN_DIFF <= raw[i]) cands.push(j);
+      for (let j = 0; j < skills.length; j++) if (candOk(i, j)) cands.push(j);
     }
+
+    // Ancestor candidates — foundations within same topic (or expanded for advanced skills)
     const ancestorSet = new Set<number>();
-    const topics = skills[i].topics.split(",").filter(Boolean);
+    // R9/R10: top-quintile OR specialized-tool skills get relaxed ancestor MIN_DIFF (0.1 vs 1.5)
+    const isSpecialized = skills[i].sources.includes("lightcast") && /specialized-skill|-package$|-framework$|-library$|-middleware$|-software$/.test(skills[i].id + "|" + skills[i].tags);
+    const ancestorMin = (raw[i] >= topQuintileRaw || isSpecialized) ? 0.1 : 2;
     if (topics.length > 0 && ANCESTOR_K > 0) {
-      const aMax = raw[i] - 2;
+      const aMax = raw[i] - ancestorMin;
       for (const t of topics) {
         const arr = topicIdx.get(t);
         if (!arr) continue;
         const sorted = [...arr].sort((a, b) => raw[a] - raw[b]);
         for (let k = 0; k < sorted.length && ancestorSet.size < ANCESTOR_K; k++) {
-          if (raw[sorted[k]] <= aMax) ancestorSet.add(sorted[k]);
-          else break;
+          const j = sorted[k];
+          if (raw[j] > aMax) break;
+          if (!candOk(i, j)) continue;
+          ancestorSet.add(j);
         }
         if (ancestorSet.size >= ANCESTOR_K) break;
       }
     }
+
     const sOff = i * DIM;
     const top: { idx: number; score: number }[] = [];
     const globalTop: { idx: number; score: number }[] = [];
@@ -2530,21 +3066,17 @@ function computePrereqCandidates(): Map<string, number[]> {
     top.sort((a, b) => b.score - a.score);
     const picked = new Set<number>([...ancestorSet, ...top.map((t) => t.idx), i]);
     if (GLOBAL_K > 0 && (topics.length > 0 || skills[i].occupations)) {
-      const myToks = new Set<string>();
-      for (const t of topics) for (const tok of t.split("-")) if (tok.length >= 5) myToks.add(tok);
-      const myOccs = new Set<string>(skills[i].occupations.split(",").filter(Boolean));
       const crossPool = new Set<number>();
       for (const [ot, oi] of topicIdx) {
         let shared = false;
-        for (const tok of ot.split("-")) if (tok.length >= 5 && myToks.has(tok)) { shared = true; break; }
+        for (const tok of ot.split("-")) if (tok.length >= TOK_MIN && myToks.has(tok)) { shared = true; break; }
         if (!shared) continue;
         for (const j of oi) crossPool.add(j);
       }
       for (const j of crossPool) {
-        if (picked.has(j) || raw[j] + MIN_DIFF > raw[i]) continue;
-        // Require shared occupation OR ≥2 shared topic tokens.
-        // Single-token topic overlap was letting cross-domain pairs through
-        // (e.g. "behavior" joining personality-disorders to rule-following).
+        if (picked.has(j)) continue;
+        if (!candOk(i, j)) continue;
+        if (frameworkOnly[j]) continue; // H2: framework-only skills never enter global pool
         if (myOccs.size) {
           let occShared = false;
           for (const o of skills[j].occupations.split(",")) if (o && myOccs.has(o)) { occShared = true; break; }
@@ -2552,18 +3084,17 @@ function computePrereqCandidates(): Map<string, number[]> {
             let tokShared = 0;
             for (const t of skills[j].topics.split(",")) {
               for (const tok of t.split("-")) {
-                if (tok.length >= 5 && myToks.has(tok)) { tokShared++; break; }
+                if (tok.length >= TOK_MIN && myToks.has(tok)) { tokShared++; break; }
               }
               if (tokShared >= 2) break;
             }
             if (tokShared < 2) continue;
           }
         } else {
-          // Skill has no occupations: fall back to ≥2 shared topic tokens.
           let tokShared = 0;
           for (const t of skills[j].topics.split(",")) {
             for (const tok of t.split("-")) {
-              if (tok.length >= 5 && myToks.has(tok)) { tokShared++; break; }
+              if (tok.length >= TOK_MIN && myToks.has(tok)) { tokShared++; break; }
             }
             if (tokShared >= 2) break;
           }
@@ -2582,7 +3113,35 @@ function computePrereqCandidates(): Map<string, number[]> {
       }
       globalTop.sort((a, b) => b.score - a.score);
     }
-    const idxs = [...ancestorSet, ...top.map((t) => t.idx), ...globalTop.map((t) => t.idx)].slice(0, K);
+
+    // S5-3: near-duplicate cluster dedup — if >2 candidates have pairwise cosine ≥0.97,
+    // keep only the highest-scoring. Prevents identical K-grade standards flooding slots.
+    const allPicks: { idx: number; score: number; src: "anc" | "top" | "global" }[] = [
+      ...[...ancestorSet].map((idx) => ({ idx, score: 0, src: "anc" as const })),
+      ...top.map((t) => ({ ...t, src: "top" as const })),
+      ...globalTop.map((t) => ({ ...t, src: "global" as const })),
+    ];
+    const DUP_COS = 0.97;
+    const dropped = new Set<number>();
+    for (let a = 0; a < allPicks.length; a++) {
+      if (dropped.has(a)) continue;
+      const aIdx = allPicks[a].idx;
+      const aOff = aIdx * DIM;
+      for (let b = a + 1; b < allPicks.length; b++) {
+        if (dropped.has(b)) continue;
+        const bIdx = allPicks[b].idx;
+        const bOff = bIdx * DIM;
+        let sc = 0;
+        for (let d = 0; d < DIM; d++) sc += vecs[aOff + d] * vecs[bOff + d];
+        if (sc >= DUP_COS) {
+          // keep higher-scoring (or lower index for ancestors — score 0)
+          if (allPicks[a].score >= allPicks[b].score) dropped.add(b);
+          else { dropped.add(a); break; }
+        }
+      }
+    }
+    const kept = allPicks.filter((_, k) => !dropped.has(k));
+    const idxs = kept.map((p) => p.idx).slice(0, K);
     out.set(skills[i].id, idxs);
     outLines.push(`${skills[i].id}\t${idxs.join(",")}`);
     if ((i + 1) % 5000 === 0) {
@@ -2765,17 +3324,14 @@ function stagePostproc() {
     for (const pid of resp.split(",")) if (pid) raw.push([id, pid]);
   }
 
-  // Apply dedupe aliases
-  try {
-    const aliasLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
-    const alias = new Map<string, string>();
-    for (let i = 1; i < aliasLines.length; i++) {
-      const [d, c] = aliasLines[i].split("\t");
-      alias.set(d, c);
+  // Apply dedupe aliases (transitive-collapsed)
+  {
+    const alias = loadAliasesCollapsed();
+    if (alias.size) {
+      raw = raw.map(([s, p]) => [alias.get(s) ?? s, alias.get(p) ?? p] as [string, string])
+        .filter(([s, p]) => s !== p);
     }
-    raw = raw.map(([s, p]) => [alias.get(s) ?? s, alias.get(p) ?? p] as [string, string])
-      .filter(([s, p]) => s !== p);
-  } catch { /* none */ }
+  }
 
   const beforeOrphan = raw.length;
   raw = raw.filter(([s, p]) => skill.has(s) && skill.has(p));
@@ -2787,14 +3343,7 @@ function stagePostproc() {
   let seedLoaded = 0;
   try {
     const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
-    const alias = new Map<string, string>();
-    try {
-      const aLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
-      for (let i = 1; i < aLines.length; i++) {
-        const [d, c] = aLines[i].split("\t");
-        alias.set(d, c);
-      }
-    } catch { /* none */ }
+    const alias = loadAliasesCollapsed();
     for (const line of seedLines) {
       const c = line.split("\t");
       if (c[4] === "1") continue;
@@ -2806,6 +3355,19 @@ function stagePostproc() {
   } catch { /* none */ }
   const isSeed = (s: string, p: string): boolean => seedEdgeKeys.has(`${s}\t${p}`);
   console.log(`[postproc] seed keys: ${seedLoaded}`);
+
+  // Pass 11 H1: leaf-specific holiday/retell titles survive hub caps because they have
+  // 1,800+ incoming edges from K-3 ELA scope-and-sequence frameworks.
+  // Drop any edge whose prereq matches a leaf-title pattern BEFORE hub filtering.
+  const LEAF_PATTERN = /retell-stories-related-to-.*-day|customs-around-.*-day|-national-independence-day|classify-character-traits-and-their-influence|understand-object-naming-and-naming-conventions/;
+  const beforeLeaf = raw.length;
+  let leafExempt = 0;
+  raw = raw.filter(([s, p]) => {
+    if (!LEAF_PATTERN.test(p)) return true;
+    if (isSeed(s, p)) { leafExempt++; return true; }
+    return false;
+  });
+  console.log(`[postproc] dropped ${beforeLeaf - raw.length} leaf-pattern edges (${leafExempt} seed exempt)`);
 
   // Filter 0: band-inverted
   let bandExempt = 0;
@@ -3039,14 +3601,7 @@ function stagePostproc() {
   try {
     const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length);
     const existing = new Set(final.map(([s, p]) => `${s}\t${p}`));
-    const alias = new Map<string, string>();
-    try {
-      const aLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
-      for (let i = 1; i < aLines.length; i++) {
-        const [d, c] = aLines[i].split("\t");
-        alias.set(d, c);
-      }
-    } catch { /* none */ }
+    const alias = loadAliasesCollapsed();
     for (let i = 1; i < seedLines.length; i++) {
       const c = seedLines[i].split("\t");
       const src = alias.get(c[0]) ?? c[0];
@@ -3270,10 +3825,10 @@ function stageFinalize() {
     prereqs.set(s, arr);
   }
 
-  // Framework/wiki-category filters
-  const frameworkRe = /-standards|-20\d\d|^sced-|^content-khan|^ccss$|^ngss$|next-generation-science|k-5-mathematics|adult-basic-education|cte-standards|curriculum|course-codes|^skills$|^content$|^learning-stage-/;
-  const wikiCatRe = /-officials-and-employees$|-by-country$|-by-region$|-by-type$|-by-year$|-introduced-in-|-established-in-|-disestablished-in-|-founded-in-|-born-in-|-died-in-|-set-in-|^people-in-|-people$|-in-history$/;
-  const yearRe = /(^|-)(19|20)\d\d(-|$)|^\d+$/;
+  // Framework/wiki-category filters (module-scope FRAMEWORK_RE, WIKI_CAT_RE, YEAR_RE)
+  const frameworkRe = FRAMEWORK_RE;
+  const wikiCatRe = WIKI_CAT_RE;
+  const yearRe = YEAR_RE;
   const STOP = new Set(["the","a","an","of","to","for","in","on","and","or","with","by","at","from","as","is","be","that","this","these","those"]);
   const sigTokens = (id: string) => new Set(id.split("-").filter((t) => t.length >= 4 && !STOP.has(t)));
 
@@ -3410,10 +3965,13 @@ function stageFinalize() {
     "law-interpretation-and-construction",
   ]);
   let singletonDropped = 0, genericDropped = 0;
+  // Pass 11 T4: raise near-singleton threshold from <2 to <4. Topics with 2-3
+  // members never form useful clusters but added noise.
+  const TOPIC_MIN_FREQ = Number(Deno.env.get("TOPIC_MIN_FREQ") ?? "4");
   for (const r of pending) {
     r.topics = r.topics.filter((t) => {
       const f = topicFreq.get(t) ?? 0;
-      if (f < 2) { singletonDropped++; return false; }
+      if (f < TOPIC_MIN_FREQ) { singletonDropped++; return false; }
       if (blocklist.has(t)) { genericDropped++; return false; }
       if (f > MAX_FREQ && !whitelist.has(t)) { genericDropped++; return false; }
       return true;

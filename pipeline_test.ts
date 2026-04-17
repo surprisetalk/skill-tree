@@ -57,6 +57,29 @@ Deno.test("stage 2 stats: dim=768 and no NaNs", () => {
   assertGreater(s.total, 0);
 });
 
+// REG-CR1: nomic-embed-text returned constant-ish vectors for short inputs,
+// creating 271 duplicate-vector groups (453+ skills in the worst group).
+// Stage embed pads short content and re-embeds detected duplicates.
+Deno.test("stage 2: no more than 5 skills share a 3-float embedding signature", () => {
+  const ids = Deno.readTextFileSync("build/2_ids.tsv").split("\n").filter((l) => l.length);
+  const bin = Deno.readFileSync("build/2_embeddings.bin");
+  const DIM = 768;
+  const f32 = new Float32Array(bin.buffer);
+  const sig = new Map<string, number>();
+  for (let i = 0; i < ids.length; i++) {
+    const k = `${f32[i * DIM].toFixed(4)}_${f32[i * DIM + 1].toFixed(4)}_${f32[i * DIM + 2].toFixed(4)}`;
+    sig.set(k, (sig.get(k) ?? 0) + 1);
+  }
+  const worst = Math.max(...sig.values());
+  assert(worst <= 5, `${worst} skills share a 3-float embedding signature — embed quality collapsed (CR1 regression)`);
+});
+
+Deno.test("stage 2 stats: dup_vector_count below threshold", () => {
+  const s = JSON.parse(Deno.readTextFileSync("build/2_stats.json"));
+  const c = (s.dup_vector_count as number | undefined) ?? 0;
+  assert(c < 50, `${c} pathological embeddings remain after retry (was 271 pre-fix)`);
+});
+
 Deno.test("stage 3: tagged.tsv has 7 columns and tags are reasonable", () => {
   const lines = Deno.readTextFileSync("build/3_tagged.tsv").split("\n").filter((l) => l.length);
   assertEquals(lines[0], "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics");
@@ -345,6 +368,166 @@ Deno.test("final: no obvious cross-domain false-positive prereqs", () => {
     if (p.split(",").includes(bogusPrereq)) violations.push(`${skill} ← ${bogusPrereq}`);
   }
   assertEquals(violations.length, 0, `cross-domain false positives returned: ${violations.join("; ")}`);
+});
+
+// ---------- Tranche F regression/eval tests codified from todo.md passes 8-16 ----------
+
+// REG-EC1: OpenSALT "Unit/Lesson/Chapter/Benchmark/Standard" metadata prefixes
+Deno.test("stage 1 REG-EC1: no Unit/Lesson/Chapter/Benchmark/Standard metadata-prefix titles", () => {
+  const text = Deno.readTextFileSync("build/1_skills.tsv");
+  const lines = text.split("\n").filter((l) => l.length).slice(1);
+  const bad: string[] = [];
+  for (const l of lines) {
+    const title = l.split("\t")[1];
+    if (/^(Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]+/.test(title)) {
+      if (bad.length < 5) bad.push(title);
+    }
+  }
+  assertEquals(bad.length, 0, `metadata-prefix titles: ${bad.join("; ")}`);
+});
+
+// REG-EC2: question/command prefixes
+Deno.test("stage 1 REG-EC2: no Can/Could/Should/How-to/What-is prefixes", () => {
+  const text = Deno.readTextFileSync("build/1_skills.tsv");
+  const lines = text.split("\n").filter((l) => l.length).slice(1);
+  let bad = 0;
+  for (const l of lines) {
+    const title = l.split("\t")[1];
+    if (/^(Can|Could|Should|How to|What is|Why does)\s+/i.test(title)) bad++;
+  }
+  assert(bad < 10, `${bad} student-directive prefix titles escaped stage-list filter`);
+});
+
+// REG-R5: scaffolding prefixes
+Deno.test("stage 1 REG-R5: no scaffolding 'With prompting and support' prefixes", () => {
+  const text = Deno.readTextFileSync("build/1_skills.tsv");
+  const lines = text.split("\n").filter((l) => l.length).slice(1);
+  let bad = 0;
+  for (const l of lines) {
+    const title = l.split("\t")[1];
+    if (/^With\s+(prompting|guidance|support)/i.test(title)) bad++;
+  }
+  assertEquals(bad, 0, `${bad} scaffolding-prefix titles survived`);
+});
+
+// REG-TG2: no single-char or short code:* tags
+Deno.test("stage 1 REG-TG2: no code:* tag shorter than 4 chars", () => {
+  const text = Deno.readTextFileSync("build/1_skills.tsv");
+  const lines = text.split("\n").filter((l) => l.length).slice(1);
+  let bad = 0;
+  for (const l of lines) {
+    const tags = l.split("\t")[4] || "";
+    for (const t of tags.split(",")) {
+      if (t.startsWith("code:") && t.slice(5).length < 4) bad++;
+    }
+  }
+  assert(bad < 50, `${bad} short code:* tags — deriveDisplay will fall back to them (bug)`);
+});
+
+// REG-O1: no hex-suffix occupation slugs
+Deno.test("stage 3 REG-O1: no hex-suffix occupation slugs", () => {
+  const lines = Deno.readTextFileSync("build/3_tagged.tsv").split("\n").filter((l) => l.length).slice(1);
+  let bad = 0;
+  for (const l of lines) {
+    const occ = l.split("\t")[5] || "";
+    for (const o of occ.split(",")) if (/-[a-f0-9]{6}$/.test(o)) bad++;
+  }
+  assertEquals(bad, 0, `${bad} occupation slugs with hex-overflow suffix`);
+});
+
+// REG-T2: no wiki-project or years-in-X topic junk
+Deno.test("stage 3 REG-T2: no wiki-category junk topics", () => {
+  try {
+    Deno.statSync("build/3b_tagged_deduped.tsv");
+  } catch { return; }
+  const lines = Deno.readTextFileSync("build/3b_tagged_deduped.tsv").split("\n").filter((l) => l.length).slice(1);
+  const bad: string[] = [];
+  const junkRe = /^wikiproject-|-templates$|^years-in-|^decades-in-|-matches$|-aircraft$|-records$|-officials-and-employees$/;
+  for (const l of lines) {
+    const topics = l.split("\t")[6] || "";
+    for (const t of topics.split(",")) if (junkRe.test(t) && bad.length < 5) bad.push(t);
+  }
+  assertEquals(bad.length, 0, `wiki-category junk topics: ${bad.join("; ")}`);
+});
+
+// REG-DR1: reversed-difficulty rate in LLM picks
+Deno.test("stage 5 REG-DR1: reversed-difficulty rate below target", () => {
+  try {
+    Deno.statSync("build/5_prereqs.tsv");
+    Deno.statSync("build/4_difficulty.tsv");
+  } catch { return; }
+  const dLines = Deno.readTextFileSync("build/4_difficulty.tsv").split("\n").filter((l) => l.length).slice(1);
+  const raw = new Map<string, number>();
+  for (const l of dLines) { const c = l.split("\t"); raw.set(c[0], Number(c[2])); }
+
+  const pLines = Deno.readTextFileSync("build/5_prereqs.tsv").split("\n").filter((l) => l.length);
+  let picks = 0, reversed = 0;
+  for (const line of pLines) {
+    const tab = line.indexOf("\t");
+    if (tab < 0) continue;
+    const s = line.slice(0, tab);
+    const rest = line.slice(tab + 1);
+    if (!rest || rest === "none") continue;
+    for (const p of rest.split(",")) {
+      if (!p) continue;
+      picks++;
+      const rs = raw.get(s), rp = raw.get(p);
+      if (rs !== undefined && rp !== undefined && rp >= rs) reversed++;
+    }
+  }
+  if (picks === 0) return;
+  const rate = reversed / picks;
+  assert(rate < 0.08, `reversed-difficulty rate ${(rate * 100).toFixed(1)}% — MIN_DIFF_DELTA guard regressed (was 23% pre-fix, target <8%)`);
+});
+
+// REG-H1/H4: top hubs don't match anomalous-leaf patterns
+Deno.test("stage 6 REG-H1: no anomalous holiday-retell hubs with >200 in-degree", () => {
+  let s: Record<string, unknown>;
+  try { s = JSON.parse(Deno.readTextFileSync("build/6_stats.json")); } catch { return; }
+  const branching = s.branching as { top_in_degree?: [string, number][] } | undefined;
+  const top = branching?.top_in_degree ?? [];
+  const bad = /retell-stories-related-to.*-day|sced-|language-immersion-prior|understand-object-naming-and-naming-conventions/;
+  for (const [id, count] of top.slice(0, 20)) {
+    assert(!bad.test(id) || count <= 200, `anomalous hub "${id}" with in-degree ${count}`);
+  }
+});
+
+// REG-R6: language-family separation
+Deno.test("final REG-R6: language-family skills don't cross-depend", () => {
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const h = lines[0].split("\t");
+  const iPre = h.indexOf("prereqs");
+  const LANGS = ["spanish", "french", "german", "italian", "portuguese", "japanese", "greek", "latin"];
+  const containsLang = (id: string) => LANGS.find((l) => id === l || id.includes(`-${l}-`) || id.startsWith(`${l}-`) || id.endsWith(`-${l}`));
+  const bad: string[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    const skill = c[0];
+    const sLang = containsLang(skill);
+    if (!sLang || !c[iPre]) continue;
+    for (const p of c[iPre].split(",")) {
+      const pLang = containsLang(p);
+      if (pLang && pLang !== sLang && bad.length < 5) bad.push(`${skill} ← ${p}`);
+    }
+  }
+  assertEquals(bad.length, 0, `cross-language prereqs: ${bad.join("; ")}`);
+});
+
+// REG-R1: SCED phantom-hub cap
+Deno.test("final REG-R1: SCED phantom hubs capped at 200 in-degree", () => {
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const h = lines[0].split("\t");
+  const iPre = h.indexOf("prereqs");
+  const count = new Map<string, number>();
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split("\t");
+    if (!c[iPre]) continue;
+    for (const p of c[iPre].split(",")) count.set(p, (count.get(p) ?? 0) + 1);
+  }
+  const phantomRe = /^(leadership|american-(sign|indian)-language-immersion|assisted-reading|corrective-reading|study-hall)$/;
+  for (const [id, n] of count) {
+    if (phantomRe.test(id)) assert(n <= 200, `SCED phantom hub "${id}" has in-degree ${n}`);
+  }
 });
 
 Deno.test("final: elementary-math progression surfaces known prereqs", () => {
