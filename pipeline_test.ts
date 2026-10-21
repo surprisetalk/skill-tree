@@ -115,7 +115,8 @@ const goodBuild = (): Fixture => {
       grade_anchored_skills: 10,
       grade_band_inversions: 0,
     }),
-    "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\taddition\n",
+    "build/5_prereqs.tsv":
+      "addition\tcounting\nmultiplication\taddition\nbiology\tnone\n",
     "build/1f_translate.tsv":
       "函数\tfunction\n欧拉函数\tEuler's totient function\n",
     "data/mooccubex/cs.json.gz": MOOC_GZ,
