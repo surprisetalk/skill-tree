@@ -53,6 +53,29 @@
 
 ## Backlog
 
+- [ ] Fixes that change `skills.tsv`. Do them after the golden diff of the
+      refactor passes, one commit each, and judge each by `deno task status` on
+      a full build.
+  1. DWA job-zone anchors (stage `difficulty`, `graph.ts` `dwaTitle`): the map
+     reads columns 0 and 1 of `DWA Reference.txt` (Element ID, IWA ID) but is
+     looked up by DWA ID, so it never hits. Key it by `col(rows, "DWA ID")` to
+     `col(rows, "DWA Title")`.
+  2. Seed anchoring (stage `difficulty`):
+     `calibrate(out[i] + (jittered[i] -
+     out[i]))` is
+     `calibrate(jittered[i])`, so the adjusted raw never moves a band. Recompute
+     the smoothed and jittered values from the adjusted `out`, then calibrate.
+  3. `Deno.readDirSync` order is the filesystem's (`sources.ts`: OpenSALT in
+     list, precedes, and grade ordering; Metacademy concepts). It decides the
+     dedupe winner, the `-N` id suffixes, and which frameworks fit under the
+     50000 grade-pair cap. Sort entries by name. Log when the cap cuts.
+  4. Stage `seed-edges` quarantines a whole source without a word. Throw when a
+     source resolves under a floor; pick the floor from the first full build's
+     resolved/total counts.
+  5. Multi-file outputs are not crash-safe: `embed` writes the bin then the ids,
+     `dedupe` writes `3b_tagged_deduped.tsv` then `3b_aliases.tsv`. Write each
+     to `path.tmp`, then rename, dependent file last.
+
 - [ ] OpenSALT titles and descriptions lose their HTML markup, and Lightcast
       descriptions keep the tags they quote.
   1. Today `normalizeText` deletes every `<…>` with a regex, for every source.
