@@ -5,13 +5,19 @@
 import { stageDedupe, stageDifficulty, stageEmbed, stageTag } from "./graph.ts";
 import {
   BUILD,
+  EMBED_DIM,
   HAN_RE,
   isJunkTopic,
   isTranslation,
-  loadAliasesCollapsed,
+  LIST_HEADER,
+  loadRawEmbeddings,
   loadTsvCache,
   need,
+  readDifficulty,
   readMoocPairs,
+  readPrereqPicks,
+  readRows,
+  readSeeds,
   rerun,
   SKILLS_HEADER,
   TRANSLATE_CACHE,
@@ -31,8 +37,6 @@ import {
 
 // ---------- status ----------
 
-const DIFFICULTY_HEADER = "id\tdifficulty\tdifficulty_raw";
-
 // snitch convention: 1.0 at the passing threshold, 0.0 at total failure.
 function grade(value: number, pass: number, fail: number): number {
   const score = (value - fail) / (pass - fail);
@@ -42,31 +46,6 @@ function grade(value: number, pass: number, fail: number): number {
     );
   }
   return Math.max(0, score);
-}
-
-function readRows(path: string, header: string): string[][] {
-  const lines = Deno.readTextFileSync(need(path)).split("\n").filter((l) =>
-    l.length
-  );
-  if (lines[0] !== header) {
-    throw new Error(
-      `${path}: unexpected header.\n  expected: ${header}\n  received: ${
-        lines[0]
-      }\n  ${rerun(path)}`,
-    );
-  }
-  const n = header.split("\t").length;
-  return lines.slice(1).map((l, i) => {
-    const c = l.split("\t");
-    if (c.length !== n) {
-      throw new Error(
-        `${path}:${i + 2}: expected ${n} columns, received ${c.length}. ${
-          rerun(path)
-        }`,
-      );
-    }
-    return c;
-  });
 }
 
 type StatusSkill = {
@@ -109,41 +88,8 @@ function readSkillsTsv(): StatusSkill[] {
   });
 }
 
-function readDifficultyRaw(): Map<string, number> {
-  const path = `${BUILD}/4_difficulty.tsv`;
-  return new Map(
-    readRows(path, DIFFICULTY_HEADER).map((c, i) => {
-      const raw = Number(c[2]);
-      if (c[2] === "" || !Number.isFinite(raw)) {
-        throw new Error(
-          `${path}:${i + 2}: expected a finite difficulty_raw, received "${
-            c[2]
-          }". ${rerun(path)}`,
-        );
-      }
-      return [c[0], raw];
-    }),
-  );
-}
-
-// 5_prereqs.tsv has no header: `skill\tp1,p2` or `skill\tnone`.
-function readPrereqPicks(): { skill: string; picks: string[] }[] {
-  const path = `${BUILD}/5_prereqs.tsv`;
-  return Deno.readTextFileSync(need(path)).split("\n").filter((l) => l.length)
-    .map((l, i) => {
-      const c = l.split("\t");
-      if (c.length !== 2 || !c[0] || !c[1]) {
-        throw new Error(
-          `${path}:${
-            i + 1
-          }: expected "skill<TAB>p1,p2" or "skill<TAB>none", received "${l}". ${
-            rerun(path)
-          }`,
-        );
-      }
-      return { skill: c[0], picks: c[1] === "none" ? [] : c[1].split(",") };
-    });
-}
+const readDifficultyRaw = () =>
+  new Map([...readDifficulty()].map(([id, d]) => [id, d.raw]));
 
 // Kahn order, prereqs first. Nodes on a cycle never enter the order.
 function topoOrder(skills: StatusSkill[]): string[] {
@@ -175,17 +121,7 @@ async function stageStatus() {
   const byId = () => new Map(skills().map((s) => [s.id, s]));
   const edgeCount = () => skills().reduce((n, s) => n + s.prereqs.length, 0);
   const usedAsPrereq = () => new Set(skills().flatMap((s) => s.prereqs));
-  const seeds = () => {
-    need(`${BUILD}/3b_aliases.tsv`);
-    const alias = loadAliasesCollapsed();
-    return readRows(
-      `${BUILD}/1e_seed_edges.tsv`,
-      "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback",
-    ).filter((c) => c[4] === "0").map((c) => ({
-      pre: alias.get(c[0]) ?? c[0],
-      dep: alias.get(c[1]) ?? c[1],
-    }));
-  };
+  const seeds = readSeeds;
   const stat = (key: string): number => {
     const path = `${BUILD}/4_stats.json`;
     const v = JSON.parse(Deno.readTextFileSync(need(path)))[key];
@@ -213,23 +149,11 @@ async function stageStatus() {
       return grade(bad / edgeCount(), 0, 1);
     }],
     ["At most 5 skills share an embedding.", () => {
-      const DIM = 768;
-      const ids = Deno.readTextFileSync(need(`${BUILD}/2_ids.tsv`)).split("\n")
-        .filter((l) => l.length);
-      const bin = Deno.readFileSync(need(`${BUILD}/2_embeddings.bin`));
-      if (bin.byteLength !== ids.length * DIM * 4) {
-        throw new Error(
-          `${BUILD}/2_embeddings.bin: expected ${
-            ids.length * DIM * 4
-          } bytes (${ids.length} ids × ${DIM} × 4), received ${bin.byteLength}. ${
-            rerun(`${BUILD}/2_embeddings.bin`)
-          }`,
-        );
-      }
-      const f32 = new Float32Array(bin.buffer);
+      const { ids, emb } = loadRawEmbeddings();
       const groups = new Map<string, number>();
       for (let i = 0; i < ids.length; i++) {
-        const k = [0, 1, 2].map((j) => f32[i * DIM + j].toFixed(4)).join("_");
+        const k = [0, 1, 2].map((j) => emb[i * EMBED_DIM + j].toFixed(4))
+          .join("_");
         groups.set(k, (groups.get(k) ?? 0) + 1);
       }
       return grade(Math.max(...groups.values()), 5, Math.max(ids.length, 6));
@@ -339,7 +263,7 @@ async function stageStatus() {
     ["At least 95% of OpenSALT skills carry a grade tag.", () => {
       const rows = readRows(
         `${BUILD}/1_skills.tsv`,
-        "id\ttitle\tdescription\tsources\ttags",
+        LIST_HEADER,
       ).filter((c) => c[3].split(",").includes("opensalt"));
       const tagged = rows.filter((c) => /(^|,)grade:/.test(c[4]));
       return grade(tagged.length / rows.length, 0.95, 0);
@@ -484,13 +408,13 @@ const stages: Record<string, () => void | Promise<void>> = {
 await Deno.mkdir(BUILD, { recursive: true });
 const arg = Deno.args[0];
 if (arg) {
-  const fn = stages[arg];
-  if (!fn) {
+  // hasOwn: "constructor" and "toString" are inherited, not stages.
+  if (!Object.hasOwn(stages, arg)) {
     throw new Error(
       `unknown stage: ${arg}. known: ${Object.keys(stages).join(", ")}`,
     );
   }
-  await fn();
+  await stages[arg]();
 } else {
   for (const [name, fn] of Object.entries(stages)) {
     console.log(`\n=== ${name} ===`);

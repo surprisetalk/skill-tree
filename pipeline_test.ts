@@ -270,6 +270,76 @@ Deno.test("list: a malformed data/_foundations.json stops the stage", async () =
   }));
 });
 
+// The repo's data/ as symlinks, with the given data/ and build/ files written
+// in place of the originals.
+const farm = (files: Record<string, string>): string => {
+  const dir = Deno.makeTempDirSync();
+  const link = (rel: string) => {
+    for (const e of Deno.readDirSync(`data/${rel}`)) {
+      const path = `data/${rel}${e.name}`;
+      const hit = Object.keys(files).filter((f) =>
+        f === path || f.startsWith(`${path}/`)
+      );
+      if (!hit.length) {
+        Deno.symlinkSync(Deno.realPathSync(path), `${dir}/${path}`);
+      } else if (e.isDirectory) {
+        Deno.mkdirSync(`${dir}/${path}`);
+        link(`${rel}${e.name}/`);
+      }
+    }
+  };
+  Deno.mkdirSync(`${dir}/data`);
+  Deno.mkdirSync(`${dir}/build`);
+  link("");
+  for (const [path, body] of Object.entries(files)) {
+    Deno.writeTextFileSync(`${dir}/${path}`, body);
+  }
+  return dir;
+};
+
+// Each of these exited 0, or crashed without naming the file.
+Deno.test("a bad input file or stage name stops the run and names the cause", async () => {
+  const esco = Deno.readTextFileSync("data/esco/skills_en.csv");
+  const cases: [string, Record<string, string>, string][] = [
+    ["constructor", {}, "unknown stage: constructor"],
+    [
+      "list",
+      {
+        "data/esco/skills_en.csv": esco.replace(
+          "preferredLabel",
+          "preferredLabe1",
+        ),
+      },
+      'data/esco/skills_en.csv: expected a column "preferredLabel"',
+    ],
+    [
+      "list",
+      { "data/onet/Task Statements.txt": "" },
+      "data/onet/Task Statements.txt: expected a header row",
+    ],
+    [
+      "list",
+      { "data/lightcast/skills.json": '{"attributions":[]}' },
+      "data/lightcast/skills.json: expected",
+    ],
+    [
+      "list",
+      { "build/1b_infill.tsv": "a\tdone\nb\thal" },
+      "build/1b_infill.tsv: expected a newline after the last row",
+    ],
+  ];
+  await Promise.all(cases.map(async ([stage, files, expected]) => {
+    const dir = farm(files);
+    const out = await run([stage], dir, 10_000);
+    Deno.removeSync(dir, { recursive: true });
+    const stderr = new TextDecoder().decode(out.stderr);
+    assert(
+      out.code !== 0 && stderr.includes(expected),
+      `${expected}: ${stderr}`,
+    );
+  }));
+});
+
 // REG-MF1: OpenSALT splits these concepts into hundreds of grade variants and
 // emits no hub, so data/_foundations.json supplies them. A foundation may merge
 // into an existing skill, so the check follows its foundation:<id> tag.

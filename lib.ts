@@ -18,61 +18,6 @@ export type Skill = {
 
 export const decodeEntities = (s: string) => unescape(s, { entityList });
 
-export const normalizeText = (s: string): string => {
-  if (!s) return "";
-  let t = decodeEntities(s);
-  t = t.replace(/<\/?[a-z][^>]*>/gi, "");
-  t = t.replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(
-    /[\u201C\u201D\u201E\u201F]/g,
-    '"',
-  );
-  t = t.replace(/[\u2010\u2011\u2012\u2013\u2014]/g, "-");
-  t = t.replace(/\*\*([^*]+)\*\*/g, "$1");
-  t = t.replace(/\s+/g, " ").trim();
-  return t;
-};
-
-export const denoiseTitle = (s: string): string => {
-  if (!s) return "";
-  let t = s;
-  t = t.replace(/\s*\((?:e\.g\.|i\.e\.)[^)]*\)/gi, "");
-  t = t.replace(/\s*\([^)]{60,}\)/g, "");
-  t = t.replace(/,?\s+such as\b[^.]*\.?$/i, ".");
-  t = t.replace(
-    /^(perform|conduct|provide|ensure|coordinate)\s+(the|an?|of)\s+/i,
-    "$1 ",
-  );
-  t = t.replace(/[\s:;\-–—]+$/g, "");
-  t = t.replace(/^[•▪►■◆]\s*/, "");
-  t = t.replace(/^\d+\.\s+/, "");
-  t = t.replace(/\s+\([A-Z]\)$/g, "");
-  t = t.replace(/\s+\(Supplemental\)$/gi, "");
-  t = t.replace(/\.$/g, "");
-  t = t.replace(/;?\s+and$/i, "");
-  t = t.replace(/\$([^$]+)\$/g, "$1");
-  t = t.replace(/\\bmod\b/g, "mod").replace(/\\small\b\s*/g, "");
-  t = t.replace(/\s+/g, " ").trim();
-  return t;
-};
-
-export const sentenceCase = (s: string): string => {
-  if (!s) return s;
-  if (s[0] === s[0].toUpperCase() && s[0] !== s[0].toLowerCase()) return s;
-  return s[0].toUpperCase() + s.slice(1);
-};
-
-export const stripStudentPrefix = (s: string): string => {
-  if (!s) return s;
-  const t = s.replace(/^(the\s+)?students?\s+will\s+(be\s+able\s+to\s+)?/i, "")
-    .replace(/^students?\s+can\s+/i, "")
-    .replace(/^by\s+the\s+end\s+of[^,.]+,\s*/i, "")
-    .replace(/^upon\s+completion[^,.]+,\s*/i, "")
-    .replace(/^(tswbat|swbat)[:\s]+/i, "")
-    .trim();
-  if (!t) return s;
-  return t[0].toUpperCase() + t.slice(1);
-};
-
 export function h32(s: string): number {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < s.length; i++) {
@@ -137,25 +82,38 @@ export function need(path: string): string {
 
 export const TAGGED = `${BUILD}/3b_tagged_deduped.tsv`;
 
+// Rows of a header-first table. The header is rows[0].
+function headed(path: string, rows: string[][]): string[][] {
+  if (!rows.length || rows[0].every((c) => !c)) {
+    throw new Error(
+      `${path}: expected a header row, received an empty file. Re-download the file.`,
+    );
+  }
+  return rows;
+}
+
 export function readTsv(path: string): string[][] {
-  const rows = Deno.readTextFileSync(path).split("\n").map((l) =>
-    l.replace(/\r$/, "")
-  ).filter((l) => l.length).map((l) => l.split("\t"));
-  rows.forEach((r, i) => {
-    if (r.length !== rows[0].length) {
+  const rows: string[][] = [];
+  Deno.readTextFileSync(path).split("\n").forEach((l, i) => {
+    l = l.replace(/\r$/, "");
+    if (!l) return;
+    const r = l.split("\t");
+    if (rows.length && r.length !== rows[0].length) {
       throw new Error(
         `${path}:${i + 1}: expected ${
           rows[0].length
         } tab-separated fields like the header, received ${r.length}. Re-download the file.`,
       );
     }
+    rows.push(r);
   });
-  return rows;
+  return headed(path, rows);
 }
 
 export function readCsv(path: string): string[][] {
+  const text = Deno.readTextFileSync(path);
   try {
-    return parseCsvText(Deno.readTextFileSync(path), { fieldsPerRecord: 0 });
+    return headed(path, parseCsvText(text, { fieldsPerRecord: 0 }));
   } catch (e) {
     throw new Error(
       `${path}: expected RFC 4180 CSV with a constant field count, received ${
@@ -165,10 +123,17 @@ export function readCsv(path: string): string[][] {
   }
 }
 
-export function pct(arr: number[], p: number): number {
-  if (!arr.length) return 0;
-  const s = [...arr].sort((a, b) => a - b);
-  return s[Math.min(s.length - 1, Math.floor(s.length * p))];
+// The index of a header column, or a throw that names the file.
+export function col(rows: string[][], name: string, path: string): number {
+  const i = rows[0].indexOf(name);
+  if (i < 0) {
+    throw new Error(
+      `${path}: expected a column "${name}" in the header, received ${
+        JSON.stringify(rows[0])
+      }. The source changed its schema; update the reader or re-download the file.`,
+    );
+  }
+  return i;
 }
 
 export function writeStats(
@@ -180,19 +145,24 @@ export function writeStats(
   console.log(`[stage ${stage}] stats → ${path}`);
 }
 
-// The text of a cache file, or "" before its first write.
-function readCache(path: string): string {
-  try {
-    return Deno.readTextFileSync(path);
-  } catch (e) {
-    if (e instanceof Deno.errors.NotFound) return "";
-    throw e;
-  }
-}
-
+// A missing cache reads as empty: it has no rows before its first write.
 export function loadTsvCache(path: string): Map<string, string> {
+  let text = "";
+  try {
+    text = Deno.readTextFileSync(path);
+  } catch (e) {
+    if (!(e instanceof Deno.errors.NotFound)) throw e;
+  }
+  // Writers end every row with a newline, so a missing one is a torn append.
+  if (text && !text.endsWith("\n")) {
+    throw new Error(
+      `${path}: expected a newline after the last row, received "${
+        text.slice(text.lastIndexOf("\n") + 1).slice(0, 80)
+      }". A run stopped mid-write; delete that last row.`,
+    );
+  }
   const m = new Map<string, string>();
-  readCache(path).split("\n").forEach((line, i) => {
+  text.split("\n").forEach((line, i) => {
     if (!line) return;
     const tab = line.indexOf("\t");
     if (tab < 0) {
@@ -211,14 +181,6 @@ export function loadTsvCache(path: string): Map<string, string> {
 
 export function forEachLine(path: string, fn: (line: string) => void) {
   for (const l of Deno.readTextFileSync(need(path)).split("\n")) if (l) fn(l);
-}
-
-async function sha256(s: string): Promise<Uint8Array> {
-  const buf = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(s),
-  );
-  return new Uint8Array(buf);
 }
 
 export const STOPWORDS = new Set([
@@ -290,10 +252,21 @@ async function ollama(
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
       });
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const j = await res.json();
+        if (typeof j !== "object" || j === null || "error" in j) {
+          throw new Error(
+            `ollama ${path}: expected a JSON object without "error", received ${
+              JSON.stringify(j).slice(0, 200)
+            }`,
+          );
+        }
+        return j;
+      }
       status = res.status;
       received = `HTTP ${status}: ${(await res.text()).slice(0, 200)}`;
     } catch (e) {
+      if ((e as Error).message.startsWith(`ollama ${path}:`)) throw e;
       received = (e as Error).message;
     }
     if (status && status !== 429 && status < 500) break;
@@ -379,29 +352,39 @@ export async function resumableOllama<T extends { id: string }>(
   const enc = new TextEncoder();
   const cleanFn = opts.clean ?? cleanDef;
   const t0 = performance.now();
-  let done = 0, rejected = 0;
+  let done = 0, rejected = 0, firstRejected = "";
   let failure: Error | undefined;
   const worker = async () => {
     while (queue.length && !failure) {
       const item = queue.shift()!;
       try {
-        const cleaned = cleanFn(
-          await generateOne(promptFn(item), opts.numPredict),
-          item,
-        );
+        const raw = await generateOne(promptFn(item), opts.numPredict);
+        const cleaned = cleanFn(raw, item);
         if (cleaned) fh.writeSync(enc.encode(`${item.id}\t${cleaned}\n`));
-        else rejected++;
+        else {
+          rejected++;
+          firstRejected ||= raw;
+        }
       } catch (e) {
         // Stop every worker; in-flight successes still reach the cache.
         failure ??= new Error(
           `[${label}] Ollama failed on "${item.id}" after ${done} items: ${
             (e as Error).message
-          }. Check that ${OLLAMA} serves ${GEN_MODEL}, then rerun; the cache keeps finished items.`,
+          }. Rerun once it is fixed; the cache keeps finished items.`,
           { cause: e },
         );
         return;
       }
       done++;
+      // A healthy model answers most prompts; mostly rejects means it is broken.
+      if (done >= 200 && rejected / done > 0.5) {
+        failure ??= new Error(
+          `[${label}] expected under 50% rejected answers, received ${rejected}/${done}. First rejected answer: "${
+            firstRejected.slice(0, 200)
+          }". Check the prompt and ${GEN_MODEL}, then rerun.`,
+        );
+        return;
+      }
       if (done % 200 === 0) {
         const rate = done / ((performance.now() - t0) / 1000);
         console.log(
@@ -455,6 +438,9 @@ export function loadAliasesCollapsed(): Map<string, string> {
   return collapsed;
 }
 
+const hex = (bytes: Uint8Array) =>
+  Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+
 function loadEmbCache(): Map<string, Float32Array> {
   const cache = new Map<string, Float32Array>();
   let data: Uint8Array;
@@ -465,16 +451,15 @@ function loadEmbCache(): Map<string, Float32Array> {
     throw e;
   }
   if (data.byteLength % CACHE_RECORD_BYTES !== 0) {
+    const whole = data.byteLength - data.byteLength % CACHE_RECORD_BYTES;
     throw new Error(
-      `cache ${CACHE_PATH} size ${data.byteLength} not multiple of ${CACHE_RECORD_BYTES}; delete to rebuild`,
+      `${CACHE_PATH}: expected a multiple of ${CACHE_RECORD_BYTES} bytes, received ${data.byteLength}. A run stopped mid-write; keep the whole records: truncate -s ${whole} ${CACHE_PATH}`,
     );
   }
   const n = data.byteLength / CACHE_RECORD_BYTES;
   for (let i = 0; i < n; i++) {
     const off = i * CACHE_RECORD_BYTES;
-    const hash = Array.from(data.slice(off, off + 32)).map((b) =>
-      b.toString(16).padStart(2, "0")
-    ).join("");
+    const hash = hex(data.subarray(off, off + 32));
     const vec = new Float32Array(
       data.buffer.slice(
         data.byteOffset + off + 32,
@@ -486,27 +471,18 @@ function loadEmbCache(): Map<string, Float32Array> {
   return cache;
 }
 
-function appendEmbCache(
-  fh: Deno.FsFile,
-  hashBytes: Uint8Array,
-  vec: Float32Array,
-) {
-  const rec = new Uint8Array(CACHE_RECORD_BYTES);
-  rec.set(hashBytes, 0);
-  rec.set(new Uint8Array(vec.buffer, vec.byteOffset, vec.byteLength), 32);
-  fh.writeSync(rec);
-}
-
 export async function embedBatch(
   contents: string[],
   label: string,
 ): Promise<Float32Array[]> {
   const cache = loadEmbCache();
   const fh = Deno.openSync(CACHE_PATH, { create: true, append: true });
-  const hashes = await Promise.all(contents.map((c) => sha256(c)));
-  const hashHex = hashes.map((h) =>
-    Array.from(h).map((b) => b.toString(16).padStart(2, "0")).join("")
-  );
+  const hashes = await Promise.all(contents.map(async (c) =>
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(c)),
+    )
+  ));
+  const hashHex = hashes.map(hex);
   const missing: number[] = [];
   for (let i = 0; i < contents.length; i++) {
     if (!cache.has(hashHex[i])) missing.push(i);
@@ -522,7 +498,10 @@ export async function embedBatch(
       const i = queue.shift()!;
       const vec = await embedOne(contents[i]);
       cache.set(hashHex[i], vec);
-      appendEmbCache(fh, hashes[i], vec);
+      const rec = new Uint8Array(CACHE_RECORD_BYTES);
+      rec.set(hashes[i], 0);
+      rec.set(new Uint8Array(vec.buffer, vec.byteOffset, vec.byteLength), 32);
+      fh.writeSync(rec);
       done++;
       if (done % 500 === 0) {
         const el = (performance.now() - t0) / 1000;
@@ -537,10 +516,15 @@ export async function embedBatch(
   return contents.map((_, i) => cache.get(hashHex[i])!);
 }
 
-export function normalize(v: Float32Array): Float32Array {
+export function normalize(v: Float32Array, what: string): Float32Array {
   let sq = 0;
   for (let i = 0; i < v.length; i++) sq += v[i] * v[i];
-  const inv = 1 / Math.sqrt(sq || 1);
+  if (!(sq > 0)) {
+    throw new Error(
+      `embedding of ${what}: expected a nonzero, finite vector, received squared norm ${sq}. Rerun: deno run -A pipeline.ts embed`,
+    );
+  }
+  const inv = 1 / Math.sqrt(sq);
   const r = new Float32Array(v.length);
   for (let i = 0; i < v.length; i++) r[i] = v[i] * inv;
   return r;
@@ -552,13 +536,30 @@ export function loadRawEmbeddings(): {
   idToEmbIdx: Map<string, number>;
 } {
   const ids = Deno.readTextFileSync(need(`${BUILD}/2_ids.tsv`)).split("\n")
-    .filter((
-      l,
-    ) => l.length);
-  const bin = Deno.readFileSync(need(`${BUILD}/2_embeddings.bin`));
+    .filter((l) => l.length);
+  const binPath = `${BUILD}/2_embeddings.bin`;
+  const bin = Deno.readFileSync(need(binPath));
+  if (bin.byteLength !== ids.length * EMBED_DIM * 4) {
+    throw new Error(
+      `${binPath}: expected ${
+        ids.length * EMBED_DIM * 4
+      } bytes (${ids.length} ids × ${EMBED_DIM} × 4), received ${bin.byteLength}. ${
+        rerun(binPath)
+      }`,
+    );
+  }
   const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
   const idToEmbIdx = new Map<string, number>();
-  for (let i = 0; i < ids.length; i++) idToEmbIdx.set(ids[i], i);
+  for (let i = 0; i < ids.length; i++) {
+    if (idToEmbIdx.has(ids[i])) {
+      throw new Error(
+        `${BUILD}/2_ids.tsv:${i + 1}: expected unique ids, received a second "${
+          ids[i]
+        }". ${rerun(binPath)}`,
+      );
+    }
+    idToEmbIdx.set(ids[i], i);
+  }
   return { ids, emb, idToEmbIdx };
 }
 
@@ -569,9 +570,18 @@ export function normalizedEmbeddingsForSkills(
   const vecs = new Float32Array(skillIds.length * EMBED_DIM);
   for (let i = 0; i < skillIds.length; i++) {
     const ei = idToEmbIdx.get(skillIds[i]);
-    if (ei === undefined) throw new Error(`no embedding for ${skillIds[i]}`);
+    if (ei === undefined) {
+      throw new Error(
+        `${BUILD}/2_ids.tsv: expected an embedding for "${
+          skillIds[i]
+        }", received none. ${rerun(`${BUILD}/2_ids.tsv`)}`,
+      );
+    }
     vecs.set(
-      normalize(emb.subarray(ei * EMBED_DIM, (ei + 1) * EMBED_DIM)),
+      normalize(
+        emb.subarray(ei * EMBED_DIM, (ei + 1) * EMBED_DIM),
+        `"${skillIds[i]}"`,
+      ),
       i * EMBED_DIM,
     );
   }
@@ -601,6 +611,7 @@ export async function readMoocPairs(): Promise<MoocPair[]> {
       );
       text = await new Response(stream).text();
     } catch (e) {
+      if (e instanceof Deno.errors.NotFound) throw e;
       throw new Error(
         `${path}: expected a gzip file of JSON lines, received an error: ${
           (e as Error).message
@@ -653,9 +664,154 @@ export async function readMoocPairs(): Promise<MoocPair[]> {
   return pairs;
 }
 
+// ---------- build tables ----------
+
+export const LIST_HEADER = "id\ttitle\tdescription\tsources\ttags";
+export const TAGGED_HEADER = `${LIST_HEADER}\toccupations\ttopics`;
+export const DIFFICULTY_HEADER = "id\tdifficulty\tdifficulty_raw";
+export const SEED_HEADER =
+  "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback";
+export const EDGES_HEADER = "skill_id\tprereq_id";
+export const PREREQ_CACHE = `${BUILD}/5_prereqs.tsv`;
+
+// Rows of a build table after its header, which must match exactly.
+export function readRows(path: string, header: string): string[][] {
+  const lines = Deno.readTextFileSync(need(path)).split("\n").filter((l) =>
+    l.length
+  );
+  if (lines[0] !== header) {
+    throw new Error(
+      `${path}: unexpected header.\n  expected: ${header}\n  received: ${
+        lines[0]
+      }\n  ${rerun(path)}`,
+    );
+  }
+  const n = header.split("\t").length;
+  return lines.slice(1).map((l, i) => {
+    const c = l.split("\t");
+    if (c.length !== n) {
+      throw new Error(
+        `${path}:${i + 2}: expected ${n} columns, received ${c.length}. ${
+          rerun(path)
+        }`,
+      );
+    }
+    return c;
+  });
+}
+
+export type Tagged = {
+  id: string;
+  title: string;
+  description: string;
+  sources: string;
+  tags: string;
+  occupations: string;
+  topics: string;
+};
+
+export function readTagged(path = TAGGED): Tagged[] {
+  return readRows(path, TAGGED_HEADER).map((
+    [id, title, description, sources, tags, occupations, topics],
+  ) => ({ id, title, description, sources, tags, occupations, topics }));
+}
+
+export function readDifficulty(): Map<string, { band: number; raw: number }> {
+  const path = `${BUILD}/4_difficulty.tsv`;
+  return new Map(
+    readRows(path, DIFFICULTY_HEADER).map((c, i) => {
+      const band = Number(c[1]), raw = Number(c[2]);
+      if (!/^\d+$/.test(c[1]) || band < 1 || band > 20) {
+        throw new Error(
+          `${path}:${
+            i + 2
+          }: expected difficulty as an integer 1–20, received "${c[1]}". ${
+            rerun(path)
+          }`,
+        );
+      }
+      if (c[2] === "" || !Number.isFinite(raw)) {
+        throw new Error(
+          `${path}:${i + 2}: expected a finite difficulty_raw, received "${
+            c[2]
+          }". ${rerun(path)}`,
+        );
+      }
+      return [c[0], { band, raw }];
+    }),
+  );
+}
+
+// 5_prereqs.tsv has no header: `skill\tp1,p2` or `skill\tnone`.
+export function readPrereqPicks(): { skill: string; picks: string[] }[] {
+  return Deno.readTextFileSync(need(PREREQ_CACHE)).split("\n").filter((l) =>
+    l.length
+  ).map((l, i) => {
+    const c = l.split("\t");
+    if (c.length !== 2 || !c[0] || !c[1]) {
+      throw new Error(
+        `${PREREQ_CACHE}:${
+          i + 1
+        }: expected "skill<TAB>p1,p2" or "skill<TAB>none", received "${l}". ${
+          rerun(PREREQ_CACHE)
+        }`,
+      );
+    }
+    return { skill: c[0], picks: c[1] === "none" ? [] : c[1].split(",") };
+  });
+}
+
+// Expert seed edges outside the holdout, with dedupe aliases applied.
+export function readSeeds(): { pre: string; dep: string }[] {
+  const alias = loadAliasesCollapsed();
+  return readRows(`${BUILD}/1e_seed_edges.tsv`, SEED_HEADER)
+    .filter((c) => c[4] === "0").map((c) => ({
+      pre: alias.get(c[0]) ?? c[0],
+      dep: alias.get(c[1]) ?? c[1],
+    }));
+}
+
+// A stage-trees file: slug → ancestor slugs, nearest first.
+export function readTree(path: string): Map<string, string[]> {
+  const m = new Map<string, string[]>();
+  Deno.readTextFileSync(need(path)).split("\n").forEach((line, i) => {
+    if (!line) return;
+    const [slug, anc, extra] = line.split("\t");
+    if (!slug || !anc || extra !== undefined) {
+      throw new Error(
+        `${path}:${i + 1}: expected "slug<TAB>a1,a2", received "${
+          line.slice(0, 80)
+        }". ${rerun(path)}`,
+      );
+    }
+    m.set(slug, anc.split(","));
+  });
+  return m;
+}
+
 // ---------- shared by two stage files ----------
 
 export const TOPIC_REFS = `${BUILD}/1l_topic_refs.tsv`;
+
+// Lookups from a skill title or slug to its id, for resolveConcept.
+export function skillIndex(skills: { id: string; title: string }[]): {
+  idSet: Set<string>;
+  titleToId: Map<string, string>;
+  slugToId: Map<string, string>;
+} {
+  const idSet = new Set<string>();
+  const titleToId = new Map<string, string>();
+  const slugToId = new Map<string, string>();
+  for (const { id, title } of skills) {
+    idSet.add(id);
+    const t = title.toLowerCase().trim();
+    if (t && !titleToId.has(t)) titleToId.set(t, id);
+    slugToId.set(id, id);
+    const altSlug = slugify(title);
+    if (altSlug && !slugToId.has(altSlug)) slugToId.set(altSlug, id);
+  }
+  return { idSet, titleToId, slugToId };
+}
 
 export function resolveConcept(
   raw: string,

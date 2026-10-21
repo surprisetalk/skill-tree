@@ -1,25 +1,30 @@
 import {
   BUILD,
+  EDGES_HEADER,
   EMBED_DIM,
-  forEachLine,
   FRAMEWORK_RE,
   gradeToDifficulty,
   loadAliasesCollapsed,
   need,
   normalizedEmbeddingsForSkills,
+  PREREQ_CACHE,
+  readDifficulty,
+  readPrereqPicks,
+  readRows,
+  readSeeds,
+  readTagged,
+  readTree,
+  rerun,
   resumableOllama,
   SIG_STOP,
   SKILLS_HEADER,
   slugify,
   STOPWORDS,
-  TAGGED,
   WIKI_CAT_RE,
   YEAR_RE,
 } from "./lib.ts";
 
 // ---------- stage prereq ----------
-
-const PREREQ_CACHE = `${BUILD}/5_prereqs.tsv`;
 
 type SkillWithDiff = {
   id: string;
@@ -38,20 +43,9 @@ function parseSkillsWithDifficulty(): {
   diff: Int32Array;
   raw: Float32Array;
 } {
-  const tagged = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((
-    l,
-  ) => l.length);
-  const h = tagged[0].split("\t");
-  const iT = h.indexOf("title"),
-    iD = h.indexOf("description"),
-    iTp = h.indexOf("topics"),
-    iOc = h.indexOf("occupations");
-  const iS = h.indexOf("sources"), iTg = h.indexOf("tags");
-  const skills: SkillWithDiff[] = tagged.slice(1).map((l) => {
-    const c = l.split("\t");
-    const tags = iTg >= 0 ? (c[iTg] || "") : "";
+  const skills: SkillWithDiff[] = readTagged().map((s) => {
     let gs = Infinity, ge = -Infinity;
-    for (const m of tags.matchAll(/grade:([A-Za-z0-9-]+)/g)) {
+    for (const m of s.tags.matchAll(/grade:([A-Za-z0-9-]+)/g)) {
       const d = gradeToDifficulty(m[1]);
       if (d !== null) {
         gs = Math.min(gs, d);
@@ -59,31 +53,23 @@ function parseSkillsWithDifficulty(): {
       }
     }
     return {
-      id: c[0],
-      title: c[iT],
-      description: c[iD],
-      topics: c[iTp],
-      occupations: iOc >= 0 ? (c[iOc] || "") : "",
-      sources: iS >= 0 ? (c[iS] || "") : "",
-      tags,
+      ...s,
       gradeStart: Number.isFinite(gs) ? gs : -2,
       gradeEnd: Number.isFinite(ge) ? ge : -2,
     };
   });
-  const dLines = Deno.readTextFileSync(need(`${BUILD}/4_difficulty.tsv`)).split(
-    "\n",
-  )
-    .filter((l) => l.length).slice(1);
-  const dm = new Map<string, { band: number; raw: number }>();
-  for (const l of dLines) {
-    const c = l.split("\t");
-    dm.set(c[0], { band: Number(c[1]), raw: Number(c[2]) });
-  }
+  const dm = readDifficulty();
   const diff = new Int32Array(skills.length);
   const raw = new Float32Array(skills.length);
   for (let i = 0; i < skills.length; i++) {
     const e = dm.get(skills[i].id);
-    if (!e) throw new Error(`no difficulty for ${skills[i].id}`);
+    if (!e) {
+      throw new Error(
+        `${BUILD}/4_difficulty.tsv: expected a row for "${
+          skills[i].id
+        }", received none. ${rerun(`${BUILD}/4_difficulty.tsv`)}`,
+      );
+    }
     diff[i] = e.band;
     raw[i] = e.raw;
   }
@@ -143,14 +129,8 @@ const FOUNDATION_IDS = new Set([
   "probability",
 ]);
 
-function loadPathologicalIds(): Set<string> {
-  const t = Deno.readTextFileSync(need(`${BUILD}/2_pathological.tsv`));
-  return new Set(t.split("\n").filter((l) => l.length));
-}
-
 function computePrereqCandidates(): Map<string, number[]> {
   const { skills, raw } = parseSkillsWithDifficulty();
-  const DIM = EMBED_DIM;
   const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
   const topicIdx = new Map<string, number[]>();
   for (let i = 0; i < skills.length; i++) {
@@ -164,7 +144,10 @@ function computePrereqCandidates(): Map<string, number[]> {
       arr.push(i);
     }
   }
-  const pathological = loadPathologicalIds();
+  const pathological = new Set(
+    Deno.readTextFileSync(need(`${BUILD}/2_pathological.tsv`)).split("\n")
+      .filter((l) => l.length),
+  );
   const K = 15;
   // At 0.3, 23% of picks had reversed difficulty.
   const MIN_DIFF = 1.5;
@@ -287,15 +270,15 @@ function computePrereqCandidates(): Map<string, number[]> {
       }
     }
 
-    const sOff = i * DIM;
+    const sOff = i * EMBED_DIM;
     const top: { idx: number; score: number }[] = [];
     const globalTop: { idx: number; score: number }[] = [];
     const inTopicSlots = Math.max(1, K - ancestorSet.size - GLOBAL_K);
     for (const j of cands) {
       if (ancestorSet.has(j)) continue;
       let sc = 0;
-      const aOff = j * DIM;
-      for (let d = 0; d < DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];
+      const aOff = j * EMBED_DIM;
+      for (let d = 0; d < EMBED_DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];
       if (top.length < inTopicSlots) {
         top.push({ idx: j, score: sc });
         if (top.length === inTopicSlots) top.sort((a, b) => a.score - b.score);
@@ -362,8 +345,10 @@ function computePrereqCandidates(): Map<string, number[]> {
           if (tokShared < 2) continue;
         }
         let sc = 0;
-        const aOff = j * DIM;
-        for (let d = 0; d < DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];
+        const aOff = j * EMBED_DIM;
+        for (let d = 0; d < EMBED_DIM; d++) {
+          sc += vecs[sOff + d] * vecs[aOff + d];
+        }
         if (globalTop.length < GLOBAL_K) {
           globalTop.push({ idx: j, score: sc });
           if (globalTop.length === GLOBAL_K) {
@@ -397,13 +382,15 @@ function computePrereqCandidates(): Map<string, number[]> {
     for (let a = 0; a < allPicks.length; a++) {
       if (dropped.has(a)) continue;
       const aIdx = allPicks[a].idx;
-      const aOff = aIdx * DIM;
+      const aOff = aIdx * EMBED_DIM;
       for (let b = a + 1; b < allPicks.length; b++) {
         if (dropped.has(b)) continue;
         const bIdx = allPicks[b].idx;
-        const bOff = bIdx * DIM;
+        const bOff = bIdx * EMBED_DIM;
         let sc = 0;
-        for (let d = 0; d < DIM; d++) sc += vecs[aOff + d] * vecs[bOff + d];
+        for (let d = 0; d < EMBED_DIM; d++) {
+          sc += vecs[aOff + d] * vecs[bOff + d];
+        }
         if (sc >= DUP_COS) {
           // keep higher-scoring (or lower index for ancestors — score 0)
           if (allPicks[a].score >= allPicks[b].score) dropped.add(b);
@@ -434,19 +421,15 @@ const PREREQ_PROMPT =
 
 const PREREQ_PICK_CAP = 8;
 
-function parsePrereqResponse(text: string, n: number): number[] {
-  const t = text.trim().toLowerCase();
-  if (t === "none" || t === "" || t === "n/a") return [];
-  const out: number[] = [];
-  const seen = new Set<number>();
-  for (const m of t.matchAll(/\d+/g)) {
-    const k = Number(m[0]);
-    if (k >= 1 && k <= n && !seen.has(k)) {
-      seen.add(k);
-      out.push(k - 1);
-    }
-  }
-  return out.slice(0, PREREQ_PICK_CAP);
+// Candidate indexes from "none" or "2,5,9", or null for any other reply: an
+// empty or prose reply is a failed answer, not a "no prereqs" answer.
+function parsePrereqResponse(text: string, n: number): number[] | null {
+  const t = text.trim().toLowerCase().replace(/\.$/, "");
+  if (t === "none" || t === "n/a") return [];
+  if (!/^\d+(\s*,\s*\d+)*$/.test(t)) return null;
+  const ks = [...new Set(t.split(",").map(Number))];
+  if (ks.some((k) => k < 1 || k > n)) return null;
+  return ks.map((k) => k - 1).slice(0, PREREQ_PICK_CAP);
 }
 
 export async function stagePrereq() {
@@ -475,11 +458,12 @@ export async function stagePrereq() {
     },
     {
       numPredict: 600,
-      // "none", not "", so an empty pick list still reaches the cache.
-      clean: (raw, job) =>
-        parsePrereqResponse(raw, job.cands.length).map((p) =>
-          skills[job.cands[p]].id
-        ).join(",") || "none",
+      // "" rejects the reply; "none" caches an empty pick list.
+      clean: (raw, job) => {
+        const picks = parsePrereqResponse(raw, job.cands.length);
+        if (!picks) return "";
+        return picks.map((p) => skills[job.cands[p]].id).join(",") || "none";
+      },
     },
   );
 }
@@ -487,51 +471,29 @@ export async function stagePrereq() {
 // ---------- stage postproc ----------
 
 export function stagePostproc() {
-  const tagLines = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((
-    l,
-  ) => l.length);
-  const hdr = tagLines[0].split("\t");
-  const iTitle = hdr.indexOf("title"),
-    iTags = hdr.indexOf("tags"),
-    iTopics = hdr.indexOf("topics");
-  const skill = new Map<
-    string,
-    { title: string; tags: string; topics: Set<string> }
-  >();
-  for (let i = 1; i < tagLines.length; i++) {
-    const c = tagLines[i].split("\t");
-    skill.set(c[0], {
-      title: c[iTitle],
-      tags: c[iTags],
-      topics: new Set(c[iTopics].split(",").filter(Boolean)),
-    });
+  const skill = new Map(
+    readTagged().map((s) => [s.id, {
+      title: s.title,
+      tags: s.tags,
+      topics: new Set(s.topics.split(",").filter(Boolean)),
+    }]),
+  );
+  const diffs = readDifficulty();
+  for (const id of skill.keys()) {
+    if (!diffs.has(id)) {
+      throw new Error(
+        `${BUILD}/4_difficulty.tsv: expected a row for "${id}", received none. ${
+          rerun(`${BUILD}/4_difficulty.tsv`)
+        }`,
+      );
+    }
   }
-  const diffLines = Deno.readTextFileSync(need(`${BUILD}/4_difficulty.tsv`))
-    .split(
-      "\n",
-    ).filter((l) => l.length);
-  const rawDiff = new Map<string, number>();
-  const band = new Map<string, number>();
-  for (let i = 1; i < diffLines.length; i++) {
-    const c = diffLines[i].split("\t");
-    band.set(c[0], Number(c[1]));
-    rawDiff.set(c[0], Number(c[2]));
-  }
+  const rawDiff = new Map([...diffs].map(([id, d]) => [id, d.raw]));
+  const band = new Map([...diffs].map(([id, d]) => [id, d.band]));
 
-  const prereqLines = Deno.readTextFileSync(PREREQ_CACHE).split("\n").filter((
-    l,
-  ) => l.length);
-  const pick = new Map<string, string>();
-  for (const line of prereqLines) {
-    const tab = line.indexOf("\t");
-    pick.set(line.slice(0, tab), line.slice(tab + 1));
-  }
-
-  let raw: [string, string][] = [];
-  for (const [id, resp] of pick) {
-    if (!resp || resp === "none") continue;
-    for (const pid of resp.split(",")) if (pid) raw.push([id, pid]);
-  }
+  let raw: [string, string][] = readPrereqPicks().flatMap(({ skill, picks }) =>
+    picks.filter(Boolean).map((p): [string, string] => [skill, p])
+  );
 
   // Apply dedupe aliases (transitive-collapsed)
   {
@@ -554,26 +516,11 @@ export function stagePostproc() {
   console.log(`[postproc] raw edges: ${raw.length}`);
 
   // Load seed edges for exemption
-  const seedEdgeKeys = new Set<string>();
-  let seedLoaded = 0;
-  {
-    const seedLines = Deno.readTextFileSync(need(`${BUILD}/1e_seed_edges.tsv`))
-      .split(
-        "\n",
-      ).filter((l) => l.length).slice(1);
-    const alias = loadAliasesCollapsed();
-    for (const line of seedLines) {
-      const c = line.split("\t");
-      if (c[4] === "1") continue;
-      const src = alias.get(c[0]) ?? c[0];
-      const dst = alias.get(c[1]) ?? c[1];
-      seedEdgeKeys.add(`${dst}\t${src}`);
-      seedLoaded++;
-    }
-  }
+  const seeds = readSeeds();
+  const seedEdgeKeys = new Set(seeds.map((e) => `${e.dep}\t${e.pre}`));
   const isSeed = (s: string, p: string): boolean =>
     seedEdgeKeys.has(`${s}\t${p}`);
-  console.log(`[postproc] seed keys: ${seedLoaded}`);
+  console.log(`[postproc] seed keys: ${seeds.length}`);
 
   // K-3 ELA frameworks give holiday-retell leaves 1,800+ dependents, and the
   // hub caps miss them.
@@ -900,17 +847,8 @@ export function stagePostproc() {
   // Seed ingestion
   let seedAdded = 0, seedDup = 0, seedMissing = 0;
   {
-    const seedLines = Deno.readTextFileSync(need(`${BUILD}/1e_seed_edges.tsv`))
-      .split(
-        "\n",
-      ).filter((l) => l.length);
     const existing = new Set(final.map(([s, p]) => `${s}\t${p}`));
-    const alias = loadAliasesCollapsed();
-    for (let i = 1; i < seedLines.length; i++) {
-      const c = seedLines[i].split("\t");
-      const src = alias.get(c[0]) ?? c[0];
-      const dst = alias.get(c[1]) ?? c[1];
-      if (c[4] === "1") continue;
+    for (const { pre: src, dep: dst } of seeds) {
       if (!skill.has(src) || !skill.has(dst) || src === dst) {
         seedMissing++;
         continue;
@@ -931,7 +869,7 @@ export function stagePostproc() {
 
   // Cycle breaker (Tarjan + rank-based back-edge drop)
   let cyclesBroken = 0, cyclesSeedDropped = 0;
-  for (let iter = 0; iter < 100; iter++) {
+  for (let round = 0;; round++) {
     const adj = new Map<string, string[]>();
     for (const [s, p] of final) {
       const arr = adj.get(p) ?? [];
@@ -1006,6 +944,11 @@ export function stagePostproc() {
     };
     for (const n of nodes) if (!index.has(n)) strongconnect(n);
     if (sccs.length === 0) break;
+    if (round === 100) {
+      throw new Error(
+        `postproc: expected a DAG within 100 cycle-breaker rounds, received ${sccs.length} cycles still left. Check the rank rule in the cycle breaker.`,
+      );
+    }
     const toDrop = new Set<string>();
     for (const scc of sccs) {
       const sccSet = new Set(scc);
@@ -1080,55 +1023,16 @@ export function stagePostproc() {
     for (let i = final.length - 1; i >= 0; i--) {
       if (toDrop.has(`${final[i][0]}\t${final[i][1]}`)) final.splice(i, 1);
     }
+    if (before === final.length) {
+      throw new Error(
+        `postproc: expected round ${round} of the cycle breaker to drop an edge from ${sccs.length} cycles, received none. Check the rank rule in the cycle breaker.`,
+      );
+    }
     cyclesBroken += before - final.length;
-    if (before === final.length) break;
   }
   console.log(
     `[postproc] cycle-breaker: ${cyclesBroken} edges (${cyclesSeedDropped} seed)`,
   );
-
-  // DAG assertion
-  {
-    const adj = new Map<string, string[]>();
-    for (const [s, p] of final) {
-      const arr = adj.get(p) ?? [];
-      arr.push(s);
-      adj.set(p, arr);
-    }
-    const inDeg = new Map<string, number>();
-    const allNodes = new Set<string>();
-    for (const [s, p] of final) {
-      allNodes.add(s);
-      allNodes.add(p);
-    }
-    for (const n of allNodes) inDeg.set(n, 0);
-    for (const [s] of final) inDeg.set(s, (inDeg.get(s) ?? 0) + 1);
-    const q = [...allNodes].filter((n) => (inDeg.get(n) ?? 0) === 0);
-    let removed = 0;
-    const removedSet = new Set<string>(q);
-    while (q.length) {
-      const u = q.shift()!;
-      removed++;
-      for (const v of adj.get(u) ?? []) {
-        inDeg.set(v, (inDeg.get(v) ?? 0) - 1);
-        if (inDeg.get(v) === 0 && !removedSet.has(v)) {
-          removedSet.add(v);
-          q.push(v);
-        }
-      }
-    }
-    const stuck = allNodes.size - removed;
-    if (stuck > 0) {
-      const stuckSet = new Set<string>();
-      for (const n of allNodes) if (!removedSet.has(n)) stuckSet.add(n);
-      for (let i = final.length - 1; i >= 0; i--) {
-        if (stuckSet.has(final[i][0]) && stuckSet.has(final[i][1])) {
-          final.splice(i, 1);
-        }
-      }
-      console.log(`[postproc] force-dropped remaining cycles (${stuck} nodes)`);
-    }
-  }
 
   // Write (sorted for deterministic output across runs)
   final.sort((a, b) =>
@@ -1150,59 +1054,17 @@ export function stagePostproc() {
 // ---------- stage finalize ----------
 
 export function stageFinalize() {
-  const lines = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((l) =>
-    l.length
-  );
-  const h = lines[0].split("\t");
-  const iT = h.indexOf("title"),
-    iD = h.indexOf("description"),
-    iO = h.indexOf("occupations"),
-    iTp = h.indexOf("topics"),
-    iTg = h.indexOf("tags");
-  const skills = lines.slice(1).map((l) => {
-    const c = l.split("\t");
-    return {
-      id: c[0],
-      title: c[iT],
-      description: c[iD],
-      occupations: c[iO],
-      topics: c[iTp],
-      tags: iTg >= 0 ? (c[iTg] || "") : "",
-    };
-  });
-  const dLines = Deno.readTextFileSync(need(`${BUILD}/4_difficulty.tsv`)).split(
-    "\n",
-  )
-    .filter((l) => l.length);
-  const diff = new Map<string, number>();
-  for (let i = 1; i < dLines.length; i++) {
-    const c = dLines[i].split("\t");
-    const b = Number(c[1]);
-    if (!Number.isInteger(b) || b < 1 || b > 20) {
-      throw new Error(`[finalize] bad difficulty for ${c[0]}: ${c[1]}`);
-    }
-    diff.set(c[0], b);
-  }
+  const skills = readTagged();
+  const diff = new Map([...readDifficulty()].map(([id, d]) => [id, d.band]));
 
-  const aliasMap = new Map<string, string>();
-  forEachLine(`${BUILD}/3b_aliases.tsv`, (line) => {
-    const [drop, keep] = line.split("\t");
-    if (drop && keep && drop !== "dropped_id") aliasMap.set(drop, keep);
-  });
-  const remap = (id: string) => aliasMap.get(id) ?? id;
+  const alias = loadAliasesCollapsed();
+  const remap = (id: string) => alias.get(id) ?? id;
 
   const skillIdSet = new Set<string>(skills.map((s) => s.id));
-  const edgeLines = Deno.readTextFileSync(need(`${BUILD}/6_edges.tsv`)).split(
-    "\n",
-  )
-    .filter((l) => l.length).slice(1);
   const prereqs = new Map<string, string[]>();
-  for (const l of edgeLines) {
-    let [s, p] = l.split("\t");
-    const s2 = remap(s), p2 = remap(p);
-    if (!skillIdSet.has(s2) || !skillIdSet.has(p2) || s2 === p2) continue;
-    s = s2;
-    p = p2;
+  for (const [s0, p0] of readRows(`${BUILD}/6_edges.tsv`, EDGES_HEADER)) {
+    const s = remap(s0), p = remap(p0);
+    if (!skillIdSet.has(s) || !skillIdSet.has(p) || s === p) continue;
     const arr = prereqs.get(s) ?? [];
     if (!arr.includes(p)) arr.push(p);
     prereqs.set(s, arr);
@@ -1214,11 +1076,11 @@ export function stageFinalize() {
     new Set(id.split("-").filter((t) => t.length >= 4 && !STOP.has(t)));
 
   // Cruft drop
-  const aliasCanonicals = new Set<string>();
-  forEachLine(`${BUILD}/3b_aliases.tsv`, (line) => {
-    const keep = line.split("\t")[1];
-    if (keep && keep !== "canonical_id") aliasCanonicals.add(keep);
-  });
+  const aliasCanonicals = new Set(
+    readRows(`${BUILD}/3b_aliases.tsv`, "dropped_id\tcanonical_id").map((c) =>
+      c[1]
+    ),
+  );
   const childCount = new Map<string, number>();
   for (const [, p] of prereqs) {
     for (const pid of p) childCount.set(pid, (childCount.get(pid) ?? 0) + 1);
@@ -1262,22 +1124,11 @@ export function stageFinalize() {
   };
 
   // Load LCSH + DBpedia ancestor chains
-  const lcshTree = new Map<string, string[]>();
-  const loadTree = (path: string) =>
-    forEachLine(path, (line) => {
-      const tab = line.indexOf("\t");
-      const slug = line.slice(0, tab);
-      const anc = line.slice(tab + 1).split(",").filter(Boolean);
-      if (slug && anc.length) {
-        const existing = lcshTree.get(slug);
-        lcshTree.set(
-          slug,
-          existing ? [...new Set([...existing, ...anc])] : anc,
-        );
-      }
-    });
-  loadTree(`${BUILD}/1j_lcsh_tree.tsv`);
-  loadTree(`${BUILD}/1k_dbpedia_tree.tsv`);
+  const lcshTree = readTree(`${BUILD}/1j_lcsh_tree.tsv`);
+  for (const [slug, anc] of readTree(`${BUILD}/1k_dbpedia_tree.tsv`)) {
+    const existing = lcshTree.get(slug);
+    lcshTree.set(slug, existing ? [...new Set([...existing, ...anc])] : anc);
+  }
   console.log(
     `[finalize] loaded ${lcshTree.size} LCSH/DBpedia ancestor chains`,
   );
@@ -1475,8 +1326,6 @@ export function stageFinalize() {
       ].join("\t"),
     );
   }
-  Deno.writeTextFileSync("skills.tsv", rows.join("\n") + "\n");
-
   const emittedSet = new Set<string>();
   for (let i = 1; i < rows.length; i++) emittedSet.add(rows[i].split("\t")[0]);
   let violations = 0;
@@ -1492,9 +1341,12 @@ export function stageFinalize() {
     }
   }
   if (violations > 0) {
-    throw new Error(`finalize: ${violations} orphan prereq references`);
+    throw new Error(
+      `finalize: expected every prereq to name an emitted skill, received ${violations} that do not (first 5 above). skills.tsv is unchanged. Rerun: deno run -A pipeline.ts postproc`,
+    );
   }
 
+  Deno.writeTextFileSync("skills.tsv", rows.join("\n") + "\n");
   const gz = new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] })
     .outputSync();
   if (!gz.success) {

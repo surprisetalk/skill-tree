@@ -1,22 +1,29 @@
 import {
   BUILD,
   CACHE_PATH,
+  col,
   EMBED_DIM,
   embedBatch,
-  forEachLine,
   gradeToDifficulty,
   isJunkTopic,
-  loadAliasesCollapsed,
+  LIST_HEADER,
   need,
   normalize,
   normalizedEmbeddingsForSkills,
   readCsv,
+  readRows,
+  readSeeds,
+  readTagged,
+  readTree,
   readTsv,
   resolveConcept,
   SIG_STOP,
+  skillIndex,
   slugify,
   STOPWORDS,
   TAGGED,
+  Tagged,
+  TAGGED_HEADER,
   TOPIC_REFS,
   writeStats,
 } from "./lib.ts";
@@ -47,25 +54,15 @@ function embedSignature(v: Float32Array): string {
 }
 
 export async function stageEmbed() {
-  const lines = Deno.readTextFileSync(need(`${BUILD}/1_skills.tsv`)).split("\n")
-    .filter((l) => l.length);
-  const skills: {
-    id: string;
-    title: string;
-    description: string;
-    tags: string;
-    content: string;
-  }[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const c = lines[i].split("\t");
-    skills.push({
-      id: c[0],
-      title: c[1],
-      description: c[2] || "",
-      tags: c[4] || "",
-      content: buildEmbedContent(c[1], c[2] || "", c[4] || ""),
-    });
-  }
+  const skills = readRows(`${BUILD}/1_skills.tsv`, LIST_HEADER).map((
+    [id, title, description, , tags],
+  ) => ({
+    id,
+    title,
+    description,
+    tags,
+    content: buildEmbedContent(title, description, tags),
+  }));
   console.log(`[embed] ${skills.length} skills`);
 
   const t0 = performance.now();
@@ -169,14 +166,14 @@ function parseOccupationRefs(): { label: string; desc: string }[] {
     refs.push({ label, desc: desc.trim() });
   };
   const esco = readCsv("data/esco/occupations_en.csv");
-  const eh = esco[0],
-    el = eh.indexOf("preferredLabel"),
-    ed = eh.indexOf("description");
+  const el = col(esco, "preferredLabel", "data/esco/occupations_en.csv"),
+    ed = col(esco, "description", "data/esco/occupations_en.csv");
   for (let i = 1; i < esco.length; i++) {
     push(esco[i][el] || "", esco[i][ed] || "");
   }
   const onet = readTsv("data/onet/Occupation Data.txt");
-  const oh = onet[0], ot = oh.indexOf("Title"), od = oh.indexOf("Description");
+  const ot = col(onet, "Title", "data/onet/Occupation Data.txt"),
+    od = col(onet, "Description", "data/onet/Occupation Data.txt");
   for (let i = 1; i < onet.length; i++) {
     push(onet[i][ot] || "", onet[i][od] || "");
   }
@@ -191,11 +188,26 @@ const TOPIC_BADCAT2 =
 
 function parseEscoSkillTopics(): Map<string, string[]> {
   const rows = readCsv("data/esco/broaderRelationsSkillPillar_en.csv");
-  const h = rows[0];
-  const iC = h.indexOf("conceptLabel"),
-    iCu = h.indexOf("conceptUri"),
-    iB = h.indexOf("broaderLabel"),
-    iBu = h.indexOf("broaderUri");
+  const iC = col(
+      rows,
+      "conceptLabel",
+      "data/esco/broaderRelationsSkillPillar_en.csv",
+    ),
+    iCu = col(
+      rows,
+      "conceptUri",
+      "data/esco/broaderRelationsSkillPillar_en.csv",
+    ),
+    iB = col(
+      rows,
+      "broaderLabel",
+      "data/esco/broaderRelationsSkillPillar_en.csv",
+    ),
+    iBu = col(
+      rows,
+      "broaderUri",
+      "data/esco/broaderRelationsSkillPillar_en.csv",
+    );
   const label = new Map<string, string>(),
     parents = new Map<string, string[]>();
   for (let i = 1; i < rows.length; i++) {
@@ -238,28 +250,33 @@ function parseEscoSkillTopics(): Map<string, string[]> {
   return out;
 }
 
+// O*NET element id → element name.
+function onetElementNames(): Map<string, string> {
+  const path = "data/onet/Content Model Reference.txt";
+  const rows = readTsv(path);
+  const iE = col(rows, "Element ID", path),
+    iN = col(rows, "Element Name", path);
+  return new Map(rows.slice(1).map((r) => [r[iE], r[iN]]));
+}
+
 function parseOnetSkillOccupations(): Map<string, string[]> {
   const occTitles = new Map<string, string>();
-  for (
-    const r of readTsv("data/onet/Occupation Data.txt")
-      .slice(1)
-  ) {
-    if (r[0] && r[1]) occTitles.set(r[0], r[1]);
+  {
+    const path = "data/onet/Occupation Data.txt";
+    const rows = readTsv(path);
+    const iC = col(rows, "O*NET-SOC Code", path), iT = col(rows, "Title", path);
+    for (const r of rows.slice(1)) {
+      if (r[iC] && r[iT]) occTitles.set(r[iC], r[iT]);
+    }
   }
-  const cmr = new Map<string, string>();
-  for (
-    const r of readTsv("data/onet/Content Model Reference.txt").slice(1)
-  ) {
-    if (r[0] && r[1]) cmr.set(r[0], r[1]);
-  }
+  const cmr = onetElementNames();
   const bySkill = new Map<string, Map<string, number>>();
   for (const fname of ["Skills.txt", "Knowledge.txt", "Abilities.txt"]) {
     const rows = readTsv(`data/onet/${fname}`);
-    const h = rows[0];
-    const iS = h.indexOf("O*NET-SOC Code"),
-      iE = h.indexOf("Element ID"),
-      iSc = h.indexOf("Scale ID"),
-      iV = h.indexOf("Data Value");
+    const iS = col(rows, "O*NET-SOC Code", `data/onet/${fname}`),
+      iE = col(rows, "Element ID", `data/onet/${fname}`),
+      iSc = col(rows, "Scale ID", `data/onet/${fname}`),
+      iV = col(rows, "Data Value", `data/onet/${fname}`);
     for (let i = 1; i < rows.length; i++) {
       if (rows[i][iSc] !== "IM") continue;
       const name = cmr.get(rows[i][iE]);
@@ -288,10 +305,13 @@ function parseOnetSkillOccupations(): Map<string, string[]> {
 
 function parseEscoSkillOccupations(): Map<string, string[]> {
   const rows = readCsv("data/esco/occupationSkillRelations_en.csv");
-  const h = rows[0];
-  const iO = h.indexOf("occupationLabel"),
-    iS = h.indexOf("skillLabel"),
-    iT = h.indexOf("relationType");
+  const iO = col(
+      rows,
+      "occupationLabel",
+      "data/esco/occupationSkillRelations_en.csv",
+    ),
+    iS = col(rows, "skillLabel", "data/esco/occupationSkillRelations_en.csv"),
+    iT = col(rows, "relationType", "data/esco/occupationSkillRelations_en.csv");
   const m = new Map<string, Set<string>>();
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][iT] !== "essential") continue;
@@ -311,19 +331,9 @@ function parseEscoSkillOccupations(): Map<string, string[]> {
 }
 
 export async function stageTag() {
-  const lines = Deno.readTextFileSync(need(`${BUILD}/1_skills.tsv`)).split("\n")
-    .filter((l) => l.length);
-  const skills = lines.slice(1).map((l) => {
-    const c = l.split("\t");
-    return {
-      id: c[0],
-      title: c[1],
-      description: c[2],
-      sources: c[3],
-      tags: c[4],
-    };
-  });
-  const DIM = EMBED_DIM;
+  const skills = readRows(`${BUILD}/1_skills.tsv`, LIST_HEADER).map((
+    [id, title, description, sources, tags],
+  ) => ({ id, title, description, sources, tags }));
   const skillVecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
 
   const occRefs = parseOccupationRefs();
@@ -349,13 +359,15 @@ export async function stageTag() {
     "tag:topic",
   );
 
-  const packNorm = (vecs: Float32Array[]) => {
-    const buf = new Float32Array(vecs.length * DIM);
-    for (let i = 0; i < vecs.length; i++) buf.set(normalize(vecs[i]), i * DIM);
+  const packNorm = (vecs: Float32Array[], refs: { label: string }[]) => {
+    const buf = new Float32Array(vecs.length * EMBED_DIM);
+    for (let i = 0; i < vecs.length; i++) {
+      buf.set(normalize(vecs[i], `ref "${refs[i].label}"`), i * EMBED_DIM);
+    }
     return buf;
   };
-  const occMat = packNorm(occVecs);
-  const topicMat = packNorm(topicVecs);
+  const occMat = packNorm(occVecs, occRefs);
+  const topicMat = packNorm(topicVecs, topicRefs);
 
   const OCC_K = 2;
   const TOPIC_K = 3;
@@ -456,7 +468,7 @@ export async function stageTag() {
     const refHits = new Int32Array(refCount);
     const refToks = refs.map((r) => tokenize(r.label));
     for (let i = 0; i < skills.length; i++) {
-      const sOff = i * DIM;
+      const sOff = i * EMBED_DIM;
       const skToks = skillToks[i];
       const top: { idx: number; score: number }[] = [];
       for (let r = 0; r < refCount; r++) {
@@ -470,8 +482,8 @@ export async function stageTag() {
         }
         if (!rareHit && hits < 2) continue;
         let s = 0;
-        const rOff = r * DIM;
-        for (let d = 0; d < DIM; d++) {
+        const rOff = r * EMBED_DIM;
+        for (let d = 0; d < EMBED_DIM; d++) {
           s += skillVecs[sOff + d] * refMat[rOff + d];
         }
         if (s < th) continue;
@@ -539,15 +551,6 @@ export async function stageTag() {
   const directEscoTopics = parseEscoSkillTopics();
   const DIRECT_OCC_CAP = 3, DIRECT_TOPIC_CAP = 3;
 
-  const frameworkTopic = (tagString: string): string | null => {
-    const m = tagString.match(/framework:([^,]+)/);
-    if (!m) return null;
-    return m[1].replace(
-      /^(ui-|gcps-aks-|pcg-|ccs-|chicago-public-schools-illinois-|western-and-northern-canadian-protocol-)/,
-      "",
-    );
-  };
-
   const MANAGER_RE =
     /-manager$|-manager-|-director$|-director-|-supervisor$|-supervisor-/;
   // A hex suffix marks an overflow-hashed ESCO title.
@@ -568,13 +571,11 @@ export async function stageTag() {
       }
     }
     const maxGrade = grades.length ? Math.max(...grades) : -1;
-    const isKhanContent = /framework:content-khan-academy/.test(s.tags) ||
-      s.tags.includes("framework:content-khan-academy");
     const khanSlug = /^khan-|-khan-|-khan$/.test(s.id) ||
       s.title.toLowerCase().startsWith("khan");
     const lowGradeOnly = maxGrade >= 0 && maxGrade <= 9 && // diff 9 = grade 8
       !s.sources.includes("onet") && !s.sources.includes("esco");
-    const skipOccs = isKhanContent || khanSlug || lowGradeOnly;
+    const skipOccs = khanSlug || lowGradeOnly;
 
     let occs: Picked[] = skipOccs ? [] : occPass.out[i]
       .filter((r) => occMask[r.idx])
@@ -662,16 +663,6 @@ export async function stageTag() {
         occs = merged.slice(0, DIRECT_OCC_CAP);
       }
     }
-    if (s.sources.includes("opensalt")) {
-      const ft = frameworkTopic(s.tags);
-      if (ft) {
-        const existing = new Set(topics.map((p) => p.slug));
-        const merged: Picked[] = existing.has(ft)
-          ? topics
-          : [{ slug: ft, score: 1.0 }, ...topics];
-        topics = merged.slice(0, DIRECT_TOPIC_CAP);
-      }
-    }
     pickedOccs[i] = occs;
     pickedTopics[i] = topics;
   }
@@ -743,31 +734,7 @@ export async function stageTag() {
 // ---------- stage dedupe ----------
 
 export function stageDedupe() {
-  const lines = Deno.readTextFileSync(need(`${BUILD}/3_tagged.tsv`)).split("\n")
-    .filter((l) => l.length);
-  const hdr = lines[0];
-  type Row = {
-    id: string;
-    title: string;
-    description: string;
-    sources: string;
-    tags: string;
-    occupations: string;
-    topics: string;
-  };
-  const rows: Row[] = lines.slice(1).map((l) => {
-    const c = l.split("\t");
-    return {
-      id: c[0],
-      title: c[1],
-      description: c[2],
-      sources: c[3],
-      tags: c[4],
-      occupations: c[5],
-      topics: c[6],
-    };
-  });
-  const DIM = EMBED_DIM;
+  const rows = readTagged(`${BUILD}/3_tagged.tsv`);
   const vecs = normalizedEmbeddingsForSkills(rows.map((r) => r.id));
   const DEDUPE_COSINE = 0.96;
 
@@ -840,16 +807,10 @@ export function stageDedupe() {
       }
       if (!sameWord) return true; // different antonym word in same group
     }
-    for (const [g, setB] of groupsB) {
-      if (!groupsA.has(g)) continue;
-      // Already handled above.
-      void g;
-      void setB;
-    }
     return false;
   };
 
-  const sourceCount = (r: Row): number => {
+  const sourceCount = (r: Tagged): number => {
     if (!r.sources) return 0;
     return r.sources.split(",").filter(Boolean).length;
   };
@@ -991,8 +952,8 @@ export function stageDedupe() {
           if (inter / Math.min(sa.size, sb.size) < 0.4) continue;
         }
         let sc = 0;
-        const oa = idxs[a] * DIM, ob = idxs[b] * DIM;
-        for (let d = 0; d < DIM; d++) sc += vecs[oa + d] * vecs[ob + d];
+        const oa = idxs[a] * EMBED_DIM, ob = idxs[b] * EMBED_DIM;
+        for (let d = 0; d < EMBED_DIM; d++) sc += vecs[oa + d] * vecs[ob + d];
         if (sc < DEDUPE_COSINE) continue;
         if (union(idxs[a], idxs[b])) merged++;
         else cosBlocked++;
@@ -1096,7 +1057,7 @@ export function stageDedupe() {
       for (const i of arr) if (i !== k) pool.add(i);
     }
     if (!pool.size) continue;
-    const qOff = c.idx * DIM;
+    const qOff = c.idx * EMBED_DIM;
     const scored: [number, number][] = [];
     for (const i of pool) {
       const other = canons[i];
@@ -1106,8 +1067,8 @@ export function stageDedupe() {
       ) continue;
       if (!needTopics && needOccs && other.occs.length === 0) continue;
       let sc = 0;
-      const oOff = other.idx * DIM;
-      for (let d = 0; d < DIM; d++) sc += vecs[qOff + d] * vecs[oOff + d];
+      const oOff = other.idx * EMBED_DIM;
+      for (let d = 0; d < EMBED_DIM; d++) sc += vecs[qOff + d] * vecs[oOff + d];
       if (sc >= threshold) scored.push([i, sc]);
     }
     if (scored.length < 3) continue;
@@ -1148,19 +1109,9 @@ export function stageDedupe() {
   }
 
   // Last-resort topic seed from LCSH / DBpedia ancestor trees
-  const lcshTree = new Map<string, string[]>();
-  for (
-    const path of [`${BUILD}/1j_lcsh_tree.tsv`, `${BUILD}/1k_dbpedia_tree.tsv`]
-  ) {
-    {
-      forEachLine(path, (line) => {
-        const tab = line.indexOf("\t");
-        if (tab < 0) return;
-        const slug = line.slice(0, tab);
-        const anc = line.slice(tab + 1).split(",").filter(Boolean);
-        if (slug && anc.length && !lcshTree.has(slug)) lcshTree.set(slug, anc);
-      });
-    }
+  const lcshTree = readTree(`${BUILD}/1j_lcsh_tree.tsv`);
+  for (const [slug, anc] of readTree(`${BUILD}/1k_dbpedia_tree.tsv`)) {
+    if (!lcshTree.has(slug)) lcshTree.set(slug, anc);
   }
   if (lcshTree.size > 0) {
     for (const c of canons) {
@@ -1183,7 +1134,7 @@ export function stageDedupe() {
     `[dedupe] backfill: topics+=${bfTopics}, occs+=${bfOccs}, lcsh-topics+=${bfLcsh}`,
   );
 
-  const outLines = [hdr];
+  const outLines = [TAGGED_HEADER];
   for (const c of canons) {
     const r = rows[c.idx];
     outLines.push(
@@ -1214,24 +1165,7 @@ export function stageDedupe() {
 // ---------- stage difficulty ----------
 
 export function stageDifficulty() {
-  const lines = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((l) =>
-    l.length
-  );
-  const hdr = lines[0].split("\t");
-  const iTags = hdr.indexOf("tags"),
-    iSources = hdr.indexOf("sources"),
-    iTopics = hdr.indexOf("topics");
-  const skills = lines.slice(1).map((l) => {
-    const c = l.split("\t");
-    return {
-      id: c[0],
-      title: c[1],
-      sources: c[iSources],
-      tags: c[iTags],
-      topics: c[iTopics],
-    };
-  });
-  const DIM = EMBED_DIM;
+  const skills = readTagged();
   const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
 
   const anchor = new Float32Array(skills.length);
@@ -1252,34 +1186,16 @@ export function stageDifficulty() {
     }
   }
   {
-    const lines = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split(
-      "\n",
-    ).filter((l) => l.length);
-    const h = lines[0].split("\t");
-    const iN = h.indexOf("Data Name"),
-      iD = h.indexOf("Display Name"),
-      iV = h.indexOf("V-Position");
-    // Build the richer skill index (title + slug + id) once for resolveConcept-style matching.
-    const idSet = new Set<string>();
-    const titleToId = new Map<string, string>();
-    const slugToId = new Map<string, string>();
-    const idToIdx = new Map<string, number>();
-    for (let i = 0; i < skills.length; i++) {
-      idSet.add(skills[i].id);
-      idToIdx.set(skills[i].id, i);
-      const t = (skills[i].title || "").toLowerCase().trim();
-      if (t && !titleToId.has(t)) titleToId.set(t, skills[i].id);
-      slugToId.set(skills[i].id, skills[i].id);
-      const altSlug = slugify(skills[i].title || "");
-      if (altSlug && !slugToId.has(altSlug)) {
-        slugToId.set(altSlug, skills[i].id);
-      }
-    }
-    const kidx = { idSet, titleToId, slugToId };
+    const path = "data/khanacademy/khandata.tsv";
+    const rows = readTsv(path);
+    const iN = col(rows, "Data Name", path),
+      iD = col(rows, "Display Name", path),
+      iV = col(rows, "V-Position", path);
+    const kidx = skillIndex(skills);
+    const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
     const labelsV: [string, number][] = [];
     let vMin = Infinity, vMax = -Infinity;
-    for (let i = 1; i < lines.length; i++) {
-      const c = lines[i].split("\t");
+    for (const c of rows.slice(1)) {
       const v = Number(c[iV]);
       if (!Number.isFinite(v)) continue;
       vMin = Math.min(vMin, v);
@@ -1304,27 +1220,21 @@ export function stageDifficulty() {
   let zoneAnchored = 0;
   {
     const zoneRows = readTsv("data/onet/Job Zones.txt");
-    const zh = zoneRows[0];
-    const iZs = zh.indexOf("O*NET-SOC Code"), iZz = zh.indexOf("Job Zone");
+    const iZs = col(zoneRows, "O*NET-SOC Code", "data/onet/Job Zones.txt"),
+      iZz = col(zoneRows, "Job Zone", "data/onet/Job Zones.txt");
     const socToZone = new Map<string, number>();
     for (let i = 1; i < zoneRows.length; i++) {
       const soc = zoneRows[i][iZs], z = Number(zoneRows[i][iZz]);
       if (soc && Number.isFinite(z) && z >= 1 && z <= 5) socToZone.set(soc, z);
     }
-    const cmr = new Map<string, string>();
-    for (
-      const r of readTsv("data/onet/Content Model Reference.txt").slice(1)
-    ) {
-      if (r[0] && r[1]) cmr.set(r[0], r[1]);
-    }
+    const cmr = onetElementNames();
     const skillZoneSum = new Map<string, { w: number; wz: number }>();
     for (const fname of ["Skills.txt", "Knowledge.txt", "Abilities.txt"]) {
       const rows = readTsv(`data/onet/${fname}`);
-      const h = rows[0];
-      const iS = h.indexOf("O*NET-SOC Code"),
-        iE = h.indexOf("Element ID"),
-        iSc = h.indexOf("Scale ID"),
-        iV = h.indexOf("Data Value");
+      const iS = col(rows, "O*NET-SOC Code", `data/onet/${fname}`),
+        iE = col(rows, "Element ID", `data/onet/${fname}`),
+        iSc = col(rows, "Scale ID", `data/onet/${fname}`),
+        iV = col(rows, "Data Value", `data/onet/${fname}`);
       for (let i = 1; i < rows.length; i++) {
         if (rows[i][iSc] !== "IM") continue;
         const name = cmr.get(rows[i][iE]);
@@ -1345,10 +1255,9 @@ export function stageDifficulty() {
     const taskTextByTid = new Map<string, string>();
     {
       const rows = readTsv("data/onet/Task Statements.txt");
-      const h = rows[0];
-      const iS = h.indexOf("O*NET-SOC Code"),
-        iTid = h.indexOf("Task ID"),
-        iTask = h.indexOf("Task");
+      const iS = col(rows, "O*NET-SOC Code", "data/onet/Task Statements.txt"),
+        iTid = col(rows, "Task ID", "data/onet/Task Statements.txt"),
+        iTask = col(rows, "Task", "data/onet/Task Statements.txt");
       for (let i = 1; i < rows.length; i++) {
         const tid = rows[i][iTid], task = rows[i][iTask], soc = rows[i][iS];
         if (!tid || !task || !soc) continue;
@@ -1373,8 +1282,8 @@ export function stageDifficulty() {
         if (r[0] && r[1]) dwaTitle.set(r[0] || "", r[1] || "");
       }
       const t2d = readTsv("data/onet/Tasks to DWAs.txt");
-      const h = t2d[0];
-      const iTid = h.indexOf("Task ID"), iDid = h.indexOf("DWA ID");
+      const iTid = col(t2d, "Task ID", "data/onet/Tasks to DWAs.txt"),
+        iDid = col(t2d, "DWA ID", "data/onet/Tasks to DWAs.txt");
       for (let i = 1; i < t2d.length; i++) {
         const tid = t2d[i][iTid], did = t2d[i][iDid];
         const title = dwaTitle.get(did);
@@ -1407,6 +1316,12 @@ export function stageDifficulty() {
   console.log(
     `[difficulty] anchors: grade=${gradeAnchored}, khan=${khanAnchored}, zone=${zoneAnchored}, total=${anchorIdxs.length}`,
   );
+  // With no anchors of one kind, kNN still runs and every band skews.
+  if (!gradeAnchored || !khanAnchored || !zoneAnchored) {
+    throw new Error(
+      `difficulty: expected grade, Khan, and Job Zone anchors, received grade=${gradeAnchored}, khan=${khanAnchored}, zone=${zoneAnchored}. Check the grade:* tags in ${TAGGED}, data/khanacademy/khandata.tsv, and data/onet/Job Zones.txt.`,
+    );
+  }
 
   const K = 15;
   const t0 = performance.now();
@@ -1431,22 +1346,25 @@ export function stageDifficulty() {
       const arr = topicToAnchors.get(topic);
       if (arr) { for (const a of arr) seen.add(a); }
     }
-    return seen.size ? [...seen] : [];
+    return [...seen];
   };
   const out = new Float32Array(skills.length);
   let withinTopic = 0, globalFallback = 0;
   {
-    const anchorMat = new Float32Array(anchorIdxs.length * DIM);
+    const anchorMat = new Float32Array(anchorIdxs.length * EMBED_DIM);
     const anchorDiff = new Float32Array(anchorIdxs.length);
     for (let a = 0; a < anchorIdxs.length; a++) {
       anchorMat.set(
-        vecs.subarray(anchorIdxs[a] * DIM, (anchorIdxs[a] + 1) * DIM),
-        a * DIM,
+        vecs.subarray(
+          anchorIdxs[a] * EMBED_DIM,
+          (anchorIdxs[a] + 1) * EMBED_DIM,
+        ),
+        a * EMBED_DIM,
       );
       anchorDiff[a] = anchor[anchorIdxs[a]];
     }
     for (let i = 0; i < skills.length; i++) {
-      const sOff = i * DIM;
+      const sOff = i * EMBED_DIM;
       const top: { score: number; a: number }[] = [];
       let pool: number[] | null = candidates(i);
       if (!pool.length) pool = null;
@@ -1456,8 +1374,8 @@ export function stageDifficulty() {
       for (let k = 0; k < n; k++) {
         const a = pool ? pool[k] : k;
         let sc = 0;
-        const aOff = a * DIM;
-        for (let d = 0; d < DIM; d++) {
+        const aOff = a * EMBED_DIM;
+        for (let d = 0; d < EMBED_DIM; d++) {
           sc += vecs[sOff + d] * anchorMat[aOff + d];
         }
         if (top.length < K) {
@@ -1574,19 +1492,9 @@ export function stageDifficulty() {
   // of seeds otherwise reverse.
   let seedAnchorAdjusted = 0;
   {
-    const idToIdx = new Map<string, number>();
-    for (let i = 0; i < skills.length; i++) idToIdx.set(skills[i].id, i);
-    const alias = loadAliasesCollapsed();
-    const seedLines = Deno.readTextFileSync(need(`${BUILD}/1e_seed_edges.tsv`))
-      .split(
-        "\n",
-      ).filter((l) => l.length).slice(1);
-    for (const line of seedLines) {
-      const c = line.split("\t");
-      if (c[4] === "1") continue; // skip holdout seeds
-      const src = alias.get(c[0]) ?? c[0];
-      const dst = alias.get(c[1]) ?? c[1];
-      const si = idToIdx.get(src), di = idToIdx.get(dst);
+    const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
+    for (const { pre, dep } of readSeeds()) {
+      const si = idToIdx.get(pre), di = idToIdx.get(dep);
       if (si === undefined || di === undefined) continue;
       if (out[si] >= out[di]) {
         out[si] = out[di] - 1.0;

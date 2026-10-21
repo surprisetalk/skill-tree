@@ -108,8 +108,9 @@ pairs across 4 domains: Data Mining, Geometry, Physics, Precalculus. CC BY 4.0.
 
 - **data/*.pairs** — all concept pairs considered: `ConceptA,ConceptB`
   (Wikipedia article titles)
-- **data/*.preqs** — confirmed prerequisite pairs: `Prerequisite,Target` (subset
-  of .pairs where experts agreed A is prerequisite of B)
+- **data/*.preqs** — confirmed prerequisite pairs: `Target,Prerequisite`. The
+  second column is a prerequisite of the first (subset of .pairs where experts
+  agreed).
 - **features/** — precomputed features for prerequisite prediction models
 
 ### data/metacademy/ — ML/AI Concept Prerequisite Graph

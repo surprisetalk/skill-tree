@@ -2,37 +2,96 @@ import { TextLineStream } from "@std/streams/text-line-stream";
 import {
   BUILD,
   cleanDef,
+  col,
   decodeEntities,
-  denoiseTitle,
   EMBED_DIM,
   embedBatch,
   h32,
   HAN_RE,
   isTranslation,
+  LIST_HEADER,
   loadRawEmbeddings,
   loadTsvCache,
-  need,
   normalize,
   normalizedEmbeddingsForSkills,
-  normalizeText,
-  pct,
   readCsv,
   readMoocPairs,
+  readRows,
+  readTagged,
   readTsv,
   resolveConcept,
   resumableOllama,
-  sentenceCase,
   Skill,
+  skillIndex,
   slugify,
   STOPWORDS,
-  stripStudentPrefix,
-  TAGGED,
   TOPIC_REFS,
   TRANSLATE_CACHE,
   writeStats,
 } from "./lib.ts";
 
 // ---------- stage list ----------
+
+const normalizeText = (s: string): string => {
+  if (!s) return "";
+  let t = decodeEntities(s);
+  t = t.replace(/<\/?[a-z][^>]*>/gi, "");
+  t = t.replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(
+    /[\u201C\u201D\u201E\u201F]/g,
+    '"',
+  );
+  t = t.replace(/[\u2010\u2011\u2012\u2013\u2014]/g, "-");
+  t = t.replace(/\*\*([^*]+)\*\*/g, "$1");
+  t = t.replace(/\s+/g, " ").trim();
+  return t;
+};
+
+const denoiseTitle = (s: string): string => {
+  if (!s) return "";
+  let t = s;
+  t = t.replace(/\s*\((?:e\.g\.|i\.e\.)[^)]*\)/gi, "");
+  t = t.replace(/\s*\([^)]{60,}\)/g, "");
+  t = t.replace(/,?\s+such as\b[^.]*\.?$/i, ".");
+  t = t.replace(
+    /^(perform|conduct|provide|ensure|coordinate)\s+(the|an?|of)\s+/i,
+    "$1 ",
+  );
+  t = t.replace(/[\s:;\-–—]+$/g, "");
+  t = t.replace(/^[•▪►■◆]\s*/, "");
+  t = t.replace(/^\d+\.\s+/, "");
+  t = t.replace(/\s+\([A-Z]\)$/g, "");
+  t = t.replace(/\s+\(Supplemental\)$/gi, "");
+  t = t.replace(/\.$/g, "");
+  t = t.replace(/;?\s+and$/i, "");
+  t = t.replace(/\$([^$]+)\$/g, "$1");
+  t = t.replace(/\\bmod\b/g, "mod").replace(/\\small\b\s*/g, "");
+  t = t.replace(/\s+/g, " ").trim();
+  return t;
+};
+
+const sentenceCase = (s: string): string => {
+  if (!s) return s;
+  if (s[0] === s[0].toUpperCase() && s[0] !== s[0].toLowerCase()) return s;
+  return s[0].toUpperCase() + s.slice(1);
+};
+
+const stripStudentPrefix = (s: string): string => {
+  if (!s) return s;
+  const t = s.replace(/^(the\s+)?students?\s+will\s+(be\s+able\s+to\s+)?/i, "")
+    .replace(/^students?\s+can\s+/i, "")
+    .replace(/^by\s+the\s+end\s+of[^,.]+,\s*/i, "")
+    .replace(/^upon\s+completion[^,.]+,\s*/i, "")
+    .replace(/^(tswbat|swbat)[:\s]+/i, "")
+    .trim();
+  if (!t) return s;
+  return t[0].toUpperCase() + t.slice(1);
+};
+
+function pct(arr: number[], p: number): number {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(s.length * p))];
+}
 
 const INFILL_CACHE = `${BUILD}/1b_infill.tsv`;
 const SUMMARIZE_CACHE = `${BUILD}/1c_summarize.tsv`;
@@ -153,11 +212,10 @@ export function stageList() {
   // ESCO
   {
     const rows = readCsv("data/esco/skills_en.csv");
-    const h = rows[0];
-    const iLabel = h.indexOf("preferredLabel"),
-      iDesc = h.indexOf("description"),
-      iDef = h.indexOf("definition"),
-      iType = h.indexOf("skillType");
+    const iLabel = col(rows, "preferredLabel", "data/esco/skills_en.csv"),
+      iDesc = col(rows, "description", "data/esco/skills_en.csv"),
+      iDef = col(rows, "definition", "data/esco/skills_en.csv"),
+      iType = col(rows, "skillType", "data/esco/skills_en.csv");
     let n = 0;
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
@@ -177,10 +235,17 @@ export function stageList() {
   // O*NET Skills/Knowledge/Abilities
   {
     const cmrRows = readTsv("data/onet/Content Model Reference.txt");
-    const ch = cmrRows[0];
-    const ci = ch.indexOf("Element ID"),
-      cn = ch.indexOf("Element Name"),
-      cd = ch.indexOf("Description");
+    const ci = col(
+        cmrRows,
+        "Element ID",
+        "data/onet/Content Model Reference.txt",
+      ),
+      cn = col(
+        cmrRows,
+        "Element Name",
+        "data/onet/Content Model Reference.txt",
+      ),
+      cd = col(cmrRows, "Description", "data/onet/Content Model Reference.txt");
     const cmr = new Map<string, { name: string; desc: string }>();
     for (let i = 1; i < cmrRows.length; i++) {
       const r = cmrRows[i];
@@ -194,7 +259,7 @@ export function stageList() {
       ]
     ) {
       const rows = readTsv(path);
-      const idI = rows[0].indexOf("Element ID");
+      const idI = col(rows, "Element ID", path);
       const seen = new Set<string>();
       let n = 0;
       for (let i = 1; i < rows.length; i++) {
@@ -219,8 +284,8 @@ export function stageList() {
   // O*NET Tasks
   {
     const rows = readTsv("data/onet/Task Statements.txt");
-    const h = rows[0];
-    const iTask = h.indexOf("Task"), iType = h.indexOf("Task Type");
+    const iTask = col(rows, "Task", "data/onet/Task Statements.txt"),
+      iType = col(rows, "Task Type", "data/onet/Task Statements.txt");
     const seen = new Set<string>();
     let n = 0, dup = 0, naDropped = 0;
     for (let i = 1; i < rows.length; i++) {
@@ -252,7 +317,7 @@ export function stageList() {
   // O*NET DWAs
   {
     const rows = readTsv("data/onet/DWA Reference.txt");
-    const iTitle = rows[0].indexOf("DWA Title");
+    const iTitle = col(rows, "DWA Title", "data/onet/DWA Reference.txt");
     const seen = new Set<string>();
     let n = 0;
     for (let i = 1; i < rows.length; i++) {
@@ -278,10 +343,9 @@ export function stageList() {
     const BRAND_RE =
       /^[!\d]|\b(Inc|LLC|Corp|Corporation|Ltd|GmbH|Co\.)\b|\bSoftware\s+\d/;
     const rows = readTsv("data/onet/Technology Skills.txt");
-    const h = rows[0];
-    const iEx = h.indexOf("Example"),
-      iCat = h.indexOf("Commodity Title"),
-      iHot = h.indexOf("Hot Technology");
+    const iEx = col(rows, "Example", "data/onet/Technology Skills.txt"),
+      iCat = col(rows, "Commodity Title", "data/onet/Technology Skills.txt"),
+      iHot = col(rows, "Hot Technology", "data/onet/Technology Skills.txt");
     const seen = new Map<
       string,
       { orig: string; desc: string; hot: boolean }
@@ -323,7 +387,15 @@ export function stageList() {
 
   // Lightcast
   {
-    const j = JSON.parse(Deno.readTextFileSync("data/lightcast/skills.json"));
+    const path = "data/lightcast/skills.json";
+    const j = JSON.parse(Deno.readTextFileSync(path));
+    if (!Array.isArray(j?.data) || !j.data.length) {
+      throw new Error(
+        `${path}: expected {"data": [skill, …]}, received keys ${
+          JSON.stringify(Object.keys(j ?? {}))
+        }. Re-download the file.`,
+      );
+    }
     let n = 0, infilled = 0, placeholdered = 0, certsDropped = 0;
     for (const s of j.data) {
       if (!s.name) continue;
@@ -798,14 +870,39 @@ export function stageList() {
   }
 
   const out = [...byKey.values()];
+  const ids = new Set<string>();
+  for (const s of out) {
+    if (!s.id || ids.has(s.id)) {
+      throw new Error(
+        `list: expected a unique, non-empty id per skill, received "${s.id}" for "${s.title}". A -N collision suffix met a real id; change the suffix scheme.`,
+      );
+    }
+    ids.add(s.id);
+  }
+  const perSource = Object.fromEntries(
+    ["esco", "onet", "lightcast", "opensalt", "foundation"].map((
+      src,
+    ) => [src, out.filter((s) => s.sources.includes(src)).length]),
+  );
+  for (const [src, n] of Object.entries(perSource)) {
+    if (!n) {
+      throw new Error(
+        `list: expected rows from every source, received 0 from ${src}. Check its files under data/.`,
+      );
+    }
+  }
+  if (out.length < 20000) {
+    throw new Error(
+      `list: expected at least 20000 skills, received ${out.length}. Check the per-source counts above.`,
+    );
+  }
   const clean = (c: string) =>
     c
       // deno-lint-ignore no-control-regex -- strips C0 controls (tab, newline included) from source text
       .replace(/[\u0000-\u001f\u200b-\u200f\ufeff]/g, "")
       .replace(/\s+/g, " ").trim();
-  const tsv = ["id\ttitle\tdescription\tsources\ttags"];
+  const tsv = [LIST_HEADER];
   for (const s of out) {
-    if (!s.id) throw new Error(`empty id: ${s.title}`);
     tsv.push(
       [
         s.id,
@@ -826,12 +923,7 @@ export function stageList() {
     empty_key_drops: emptyKey,
     empty_slug_drops: emptySlug,
     slug_collisions: slugCollisions,
-    per_source: {
-      esco: out.filter((s) => s.sources.includes("esco")).length,
-      onet: out.filter((s) => s.sources.includes("onet")).length,
-      lightcast: out.filter((s) => s.sources.includes("lightcast")).length,
-      opensalt: out.filter((s) => s.sources.includes("opensalt")).length,
-    },
+    per_source: perSource,
     title_len: {
       p50: pct(titleLens, 0.5),
       p95: pct(titleLens, 0.95),
@@ -839,26 +931,23 @@ export function stageList() {
     },
     empty_description: out.filter((s) => !s.description).length,
   });
-
-  if (out.length < 20000) {
-    throw new Error(`list: suspiciously few rows (${out.length})`);
-  }
 }
 
 // ---------- stage enrich: Ollama infill + summarize + onet-desc ----------
 
 export async function stageEnrich() {
-  const lines = Deno.readTextFileSync(need(`${BUILD}/1_skills.tsv`)).split("\n")
-    .filter((l) => l.length);
   const SUM_MAX = 120;
   const infillTargets: { id: string; title: string }[] = [];
   const sumTargets: { id: string; title: string }[] = [];
   const onetTargets: { id: string; title: string }[] = [];
   const opensaltTargets: { id: string; title: string }[] = [];
   let opaqueSkipped = 0;
-  for (let i = 1; i < lines.length; i++) {
-    const c = lines[i].split("\t");
-    const [id, title, desc, sources, tags] = c;
+  for (
+    const [id, title, desc, sources, tags] of readRows(
+      `${BUILD}/1_skills.tsv`,
+      LIST_HEADER,
+    )
+  ) {
     if (title.length > SUM_MAX) sumTargets.push({ id, title });
     if (
       sources.includes("lightcast") &&
@@ -952,10 +1041,9 @@ export async function stageEnrich() {
 async function buildTree(
   label: string,
   cmd: string[],
-  outPath: string,
   depth: number,
   junkRe?: RegExp,
-): Promise<string[]> {
+): Promise<{ ancestors: Map<string, string[]>; topics: string[] }> {
   console.log(`[trees] ${label}: streaming…`);
   const labels = new Map<string, string>();
   const parents = new Map<string, string[]>();
@@ -1028,6 +1116,13 @@ async function buildTree(
   console.log(
     `[trees] ${label}: ${labels.size} labels, ${parents.size} with parents`,
   );
+  if (!labels.size || !parents.size) {
+    throw new Error(
+      `${
+        cmd.join(" ")
+      }: expected SKOS prefLabel and broader triples, received ${labels.size} labels and ${parents.size} broader links in ${n} lines. Check the dump format; re-download it.`,
+    );
+  }
 
   // The 5000 labelled targets with the most broader edges, from the 25000
   // targets with the most. Pick them now and free both maps: DBpedia nears
@@ -1067,25 +1162,14 @@ async function buildTree(
     }
     if (anc.length) slugToAncestors.set(slug, anc.slice(0, 6));
   }
-  const fh = Deno.openSync(outPath, {
-    create: true,
-    write: true,
-    truncate: true,
-  });
-  const enc = new TextEncoder();
-  for (const [slug, anc] of slugToAncestors) {
-    fh.writeSync(enc.encode(`${slug}\t${anc.join(",")}\n`));
-  }
-  fh.close();
-  console.log(`[trees] ${label}: ${slugToAncestors.size} slugs → ${outPath}`);
-  return topics;
+  console.log(`[trees] ${label}: ${slugToAncestors.size} slugs`);
+  return { ancestors: slugToAncestors, topics };
 }
 
 export async function stageTrees() {
   const lcsh = await buildTree(
     "lcsh",
     ["gunzip", "-c", "data/lcsh/subjects.skosrdf.nt.gz"],
-    `${BUILD}/1j_lcsh_tree.tsv`,
     4,
   );
   const JUNK =
@@ -1093,50 +1177,45 @@ export async function stageTrees() {
   const dbp = await buildTree(
     "dbpedia",
     ["bzcat", "data/dbpedia/skos_categories_en.ttl.bz2"],
-    `${BUILD}/1k_dbpedia_tree.tsv`,
     3,
     JUNK,
   );
   const seen = new Set<string>();
-  const refs = [...lcsh, ...dbp].filter((l) => {
+  const refs = [...lcsh.topics, ...dbp.topics].filter((l) => {
     const k = l.toLowerCase();
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
   });
+  // Write only after both dumps parse, so the three files come from one run.
+  for (
+    const [path, tree] of [
+      [`${BUILD}/1j_lcsh_tree.tsv`, lcsh.ancestors],
+      [`${BUILD}/1k_dbpedia_tree.tsv`, dbp.ancestors],
+    ] as const
+  ) {
+    const fh = Deno.openSync(path, {
+      create: true,
+      write: true,
+      truncate: true,
+    });
+    const enc = new TextEncoder();
+    for (const [slug, anc] of tree) {
+      fh.writeSync(enc.encode(`${slug}\t${anc.join(",")}\n`));
+    }
+    fh.close();
+    console.log(`[trees] ${tree.size} slugs → ${path}`);
+  }
   Deno.writeTextFileSync(TOPIC_REFS, refs.join("\n") + "\n");
   console.log(`[trees] ${refs.length} topic refs → ${TOPIC_REFS}`);
 }
 
 // ---------- stage seed-edges ----------
 
-function loadSkillIndex(): {
-  idSet: Set<string>;
-  titleToId: Map<string, string>;
-  slugToId: Map<string, string>;
-} {
-  const lines = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((l) =>
-    l.length
-  );
-  const idSet = new Set<string>();
-  const titleToId = new Map<string, string>();
-  const slugToId = new Map<string, string>();
-  for (let i = 1; i < lines.length; i++) {
-    const [id, title] = lines[i].split("\t");
-    if (!id) continue;
-    idSet.add(id);
-    const t = (title || "").toLowerCase().trim();
-    if (t && !titleToId.has(t)) titleToId.set(t, id);
-    slugToId.set(id, id);
-    const altSlug = slugify(title || "");
-    if (altSlug && !slugToId.has(altSlug)) slugToId.set(altSlug, id);
-  }
-  return { idSet, titleToId, slugToId };
-}
-
 export async function stageSeedEdges() {
   console.log("[seed-edges] collecting…");
-  const idx = loadSkillIndex();
+  const tagged = readTagged();
+  const idx = skillIndex(tagged);
   console.log(`[seed-edges] index: ${idx.idSet.size} ids`);
   type RawPair = {
     rawSrc: string;
@@ -1168,18 +1247,15 @@ export async function stageSeedEdges() {
 
   // Khan Academy
   {
-    const lines = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split(
-      "\n",
-    ).filter((l) => l.length);
-    const h = lines[0].split("\t");
-    const iName = h.indexOf("Data Name"),
-      iPre = h.indexOf("Prereq(s)"),
-      iCode = h.indexOf("Code"),
-      iDisp = h.indexOf("Display Name");
+    const path = "data/khanacademy/khandata.tsv";
+    const rows = readTsv(path);
+    const iName = col(rows, "Data Name", path),
+      iPre = col(rows, "Prereq(s)", path),
+      iCode = col(rows, "Code", path),
+      iDisp = col(rows, "Display Name", path);
     const codeToName = new Map<string, string>(),
       nameToDisplay = new Map<string, string>();
-    for (let i = 1; i < lines.length; i++) {
-      const c = lines[i].split("\t");
+    for (const c of rows.slice(1)) {
       if (c[iCode] && c[iName]) {
         codeToName.set(c[iCode].trim(), c[iName].trim());
       }
@@ -1187,8 +1263,7 @@ export async function stageSeedEdges() {
         nameToDisplay.set(c[iName].trim(), c[iDisp].trim());
       }
     }
-    for (let i = 1; i < lines.length; i++) {
-      const c = lines[i].split("\t");
+    for (const c of rows.slice(1)) {
       const target = (c[iName] || "").trim();
       const pre = (c[iPre] || "").trim();
       if (!target || !pre || pre === "root") continue;
@@ -1504,16 +1579,7 @@ export async function stageSeedEdges() {
     }
     return out;
   };
-  const titleById = new Map<string, string>();
-  {
-    const tlines = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((
-      l,
-    ) => l.length);
-    for (let i = 1; i < tlines.length; i++) {
-      const [id, title] = tlines[i].split("\t");
-      if (id) titleById.set(id, title || "");
-    }
-  }
+  const titleById = new Map(tagged.map((s) => [s.id, s.title]));
   const dropReason = new Map<string, string>();
   if (unresolved.size > 0) {
     const { ids: embIds } = loadRawEmbeddings();
@@ -1523,7 +1589,9 @@ export async function stageSeedEdges() {
       `[seed-edges] active vectors: ${matIds.length}/${embIds.length}`,
     );
     const labels = [...unresolved];
-    const labelVecs = (await embedBatch(labels, "seed-edges")).map(normalize);
+    const labelVecs = (await embedBatch(labels, "seed-edges")).map((v, i) =>
+      normalize(v, `seed label "${labels[i]}"`)
+    );
     let matched = 0;
     for (let li = 0; li < labels.length; li++) {
       const lv = labelVecs[li];
@@ -1573,8 +1641,7 @@ export async function stageSeedEdges() {
   const labelReason = (lbl: string): string => {
     if (labelToId.get(lbl)) return "ok";
     if (dropReason.has(lbl)) return dropReason.get(lbl)!;
-    if (unresolved.has(lbl)) return "no-match";
-    return "unknown";
+    return "no-match";
   };
   for (const p of rawPairs) {
     const src = labelToId.get(p.rawSrc);
