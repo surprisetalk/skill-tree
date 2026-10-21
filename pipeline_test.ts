@@ -177,15 +177,19 @@ Deno.test("status: graph defects score below 1 and exit 1", async () => {
   assertEquals(score("Addition is a transitive prereq of multiplication."), 1);
 });
 
-Deno.test("status: an untranslated MOOCCubeX label scores below 1", async () => {
-  const build = goodBuild();
-  build["build/1f_translate.tsv"] = "函数\tfunction\n";
-  const { code, score } = await runStatus(build);
-  assertEquals(code, 1);
-  assertEquals(
-    score("Every Chinese MOOCCubeX label has an English translation."),
-    0.5,
-  );
+Deno.test("status: a missing or still-Chinese translation scores below 1", async () => {
+  for (
+    const cache of ["函数\tfunction\n", "函数\tfunction\n欧拉函数\t欧拉\n"]
+  ) {
+    const build = goodBuild();
+    build["build/1f_translate.tsv"] = cache;
+    const { code, score } = await runStatus(build);
+    assertEquals(code, 1);
+    assertEquals(
+      score("Every Chinese MOOCCubeX label has an English translation."),
+      0.5,
+    );
+  }
 });
 
 Deno.test("status: a missing build file scores 0 and names the stage to rerun", async () => {
@@ -213,6 +217,11 @@ Deno.test("status: a malformed build file crashes with the condition and the fix
         "finite difficulty_raw",
       ],
       ["build/5_prereqs.tsv", "addition\n", "skill<TAB>p1,p2"],
+      [
+        "data/mooccubex/cs.json.gz",
+        await gzip("null\n"),
+        "cs.json.gz:1: expected a JSON object",
+      ],
     ] as const
   ) {
     const build = goodBuild();

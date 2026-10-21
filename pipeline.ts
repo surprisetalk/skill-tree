@@ -648,24 +648,49 @@ const HAN_RE = /\p{Script=Han}/u;
 
 type MoocPair = { domain: string; c1: string; c2: string };
 
+// The cache value that seed-edges accepts as a translation.
+const isTranslation = (t: string | undefined): t is string =>
+  !!t?.trim() && !HAN_RE.test(t) && !/[\t\r\n]/.test(t);
+
 // Expert-confirmed (ground_truth 1) prereq pairs, c1 → c2.
 async function readMoocPairs(): Promise<MoocPair[]> {
   const pairs: MoocPair[] = [];
   for (const domain of ["cs", "math", "psy"]) {
     const path = `data/mooccubex/${domain}.json.gz`;
-    const stream = new Blob([Deno.readFileSync(path)]).stream().pipeThrough(
-      new DecompressionStream("gzip"),
-    );
-    const lines = (await new Response(stream).text()).split("\n");
-    lines.forEach((line, i) => {
+    let text: string;
+    try {
+      const stream = new Blob([Deno.readFileSync(path)]).stream().pipeThrough(
+        new DecompressionStream("gzip"),
+      );
+      text = await new Response(stream).text();
+    } catch (e) {
+      throw new Error(
+        `${path}: expected a gzip file of JSON lines, received an error: ${
+          (e as Error).message
+        }. Re-download it: deno run -A data/download.ts`,
+      );
+    }
+    const before = pairs.length;
+    text.split("\n").forEach((line, i) => {
       if (!line) return;
+      const where = `${path}:${i + 1}`;
       let o: { c1?: unknown; c2?: unknown; ground_truth?: unknown };
       try {
         o = JSON.parse(line);
       } catch {
         throw new Error(
-          `${path}:${i + 1}: expected a JSON object, received ${
-            line.slice(0, 80)
+          `${where}: expected a JSON object, received ${line.slice(0, 80)}`,
+        );
+      }
+      if (typeof o !== "object" || o === null || Array.isArray(o)) {
+        throw new Error(
+          `${where}: expected a JSON object, received ${line.slice(0, 80)}`,
+        );
+      }
+      if (![-1, 0, 1].includes(o.ground_truth as number)) {
+        throw new Error(
+          `${where}: expected ground_truth as the number -1, 0, or 1, received ${
+            JSON.stringify(o.ground_truth)
           }`,
         );
       }
@@ -675,15 +700,18 @@ async function readMoocPairs(): Promise<MoocPair[]> {
         !o.c2 || /[\t\n]/.test(o.c1 + o.c2)
       ) {
         throw new Error(
-          `${path}:${
-            i + 1
-          }: expected labels c1 and c2 as non-empty strings without tabs, received ${
+          `${where}: expected labels c1 and c2 as non-empty strings without tabs, received ${
             JSON.stringify([o.c1, o.c2])
           }`,
         );
       }
       pairs.push({ domain, c1: o.c1, c2: o.c2 });
     });
+    if (pairs.length === before) {
+      throw new Error(
+        `${path}: expected at least one pair with ground_truth 1, received none. Re-download it: deno run -A data/download.ts`,
+      );
+    }
   }
   return pairs;
 }
@@ -1965,9 +1993,11 @@ async function stageSeedEdges() {
     const english = (label: string) => {
       if (!HAN_RE.test(label)) return label;
       const t = translations.get(label);
-      if (!t) {
+      if (!isTranslation(t)) {
         throw new Error(
-          `MOOCCubeX label "${label}" has no translation in ${TRANSLATE_CACHE}. Run: deno run -A pipeline.ts enrich`,
+          `MOOCCubeX label "${label}": expected an English translation in ${TRANSLATE_CACHE}, received ${
+            JSON.stringify(t)
+          }. Delete that row if present, then run: deno run -A pipeline.ts enrich`,
         );
       }
       return t;
@@ -6404,7 +6434,14 @@ async function stageStatus() {
           HAN_RE.test(l)
         ),
       );
-      const done = [...labels].filter((l) => translations.has(l));
+      if (!labels.size) {
+        throw new Error(
+          "data/mooccubex/*.json.gz: expected Chinese labels in the ground_truth 1 pairs, received none.",
+        );
+      }
+      const done = [...labels].filter((l) =>
+        isTranslation(translations.get(l))
+      );
       return grade(done.length / labels.size, 1, 0);
     }],
     ["Under 10% of seed edges put the prereq in a higher band.", () => {

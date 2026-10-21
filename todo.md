@@ -2,12 +2,11 @@
 
 - [ ] You get a fresh `skills.tsv` that includes the fixes from audit passes
       9–16, and `deno task status` passes. Blocker: a multi-hour Ollama run on
-      the Mac, after the MOOCCubeX entry lands. The last full build predates the
-      April 17 fixes. `build/` holds only the committed caches. Decision:
-      regenerate every LLM cache. Deleting `5_prereqs.tsv` applies the R1–R10
-      and DR1 candidate fixes to every skill. Deleting the Haiku enrichment
-      caches removes the ~10% wrong descriptions (E2) and applies the ENR1–4
-      prompts.
+      the Mac. The last full build predates the April 17 fixes. `build/` holds
+      only the committed caches. Decision: regenerate every LLM cache. Deleting
+      `5_prereqs.tsv` applies the R1–R10 and DR1 candidate fixes to every skill.
+      Deleting the Haiku enrichment caches removes the ~10% wrong descriptions
+      (E2) and applies the ENR1–4 prompts.
   1. `git rm build/1b_infill.tsv build/1c_summarize.tsv build/1d_onet_desc.tsv build/5_prereqs.tsv`.
   2. Run `deno run -A pipeline.ts enrich`. It now also translates the MOOCCubeX
      labels into `build/1f_translate.tsv`; commit that cache. Stage `list` drops
