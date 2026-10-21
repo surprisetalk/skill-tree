@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertGreater } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertGreater } from "@std/assert";
 
 Deno.test("stage 1: build/1_skills.tsv exists with expected schema", () => {
   const text = Deno.readTextFileSync("build/1_skills.tsv");
@@ -26,16 +26,24 @@ Deno.test("stage 1 stats: all four sources represented", () => {
 
 Deno.test("stage 1: ids are unique", () => {
   const text = Deno.readTextFileSync("build/1_skills.tsv");
-  const ids = text.split("\n").slice(1).filter((l) => l.length).map((l) => l.split("\t")[0]);
+  const ids = text.split("\n").slice(1).filter((l) => l.length).map((l) =>
+    l.split("\t")[0]
+  );
   const set = new Set(ids);
   assertEquals(ids.length, set.size, "duplicate ids in output");
 });
 
 Deno.test("stage 2: embeddings file matches ids and is correct shape", () => {
-  const ids = Deno.readTextFileSync("build/2_ids.tsv").split("\n").filter((l) => l.length);
+  const ids = Deno.readTextFileSync("build/2_ids.tsv").split("\n").filter((l) =>
+    l.length
+  );
   const bin = Deno.readFileSync("build/2_embeddings.bin");
   const DIM = 768;
-  assertEquals(bin.byteLength, ids.length * DIM * 4, "bin size doesn't match ids × dim × 4");
+  assertEquals(
+    bin.byteLength,
+    ids.length * DIM * 4,
+    "bin size doesn't match ids × dim × 4",
+  );
   const f32 = new Float32Array(bin.buffer);
 
   const N = Math.min(ids.length, 500);
@@ -61,28 +69,43 @@ Deno.test("stage 2 stats: dim=768 and no NaNs", () => {
 // creating 271 duplicate-vector groups (453+ skills in the worst group).
 // Stage embed pads short content and re-embeds detected duplicates.
 Deno.test("stage 2: no more than 5 skills share a 3-float embedding signature", () => {
-  const ids = Deno.readTextFileSync("build/2_ids.tsv").split("\n").filter((l) => l.length);
+  const ids = Deno.readTextFileSync("build/2_ids.tsv").split("\n").filter((l) =>
+    l.length
+  );
   const bin = Deno.readFileSync("build/2_embeddings.bin");
   const DIM = 768;
   const f32 = new Float32Array(bin.buffer);
   const sig = new Map<string, number>();
   for (let i = 0; i < ids.length; i++) {
-    const k = `${f32[i * DIM].toFixed(4)}_${f32[i * DIM + 1].toFixed(4)}_${f32[i * DIM + 2].toFixed(4)}`;
+    const k = `${f32[i * DIM].toFixed(4)}_${f32[i * DIM + 1].toFixed(4)}_${
+      f32[i * DIM + 2].toFixed(4)
+    }`;
     sig.set(k, (sig.get(k) ?? 0) + 1);
   }
   const worst = Math.max(...sig.values());
-  assert(worst <= 5, `${worst} skills share a 3-float embedding signature — embed quality collapsed (CR1 regression)`);
+  assert(
+    worst <= 5,
+    `${worst} skills share a 3-float embedding signature — embed quality collapsed (CR1 regression)`,
+  );
 });
 
 Deno.test("stage 2 stats: dup_vector_count below threshold", () => {
   const s = JSON.parse(Deno.readTextFileSync("build/2_stats.json"));
   const c = (s.dup_vector_count as number | undefined) ?? 0;
-  assert(c < 50, `${c} pathological embeddings remain after retry (was 271 pre-fix)`);
+  assert(
+    c < 50,
+    `${c} pathological embeddings remain after retry (was 271 pre-fix)`,
+  );
 });
 
 Deno.test("stage 3: tagged.tsv has 7 columns and tags are reasonable", () => {
-  const lines = Deno.readTextFileSync("build/3_tagged.tsv").split("\n").filter((l) => l.length);
-  assertEquals(lines[0], "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics");
+  const lines = Deno.readTextFileSync("build/3_tagged.tsv").split("\n").filter((
+    l,
+  ) => l.length);
+  assertEquals(
+    lines[0],
+    "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+  );
   for (let i = 1; i < Math.min(lines.length, 500); i++) {
     const c = lines[i].split("\t");
     assertEquals(c.length, 7, `row ${i} has ${c.length} cols`);
@@ -90,7 +113,9 @@ Deno.test("stage 3: tagged.tsv has 7 columns and tags are reasonable", () => {
 });
 
 Deno.test("stage 3: known skills land on sensible tags", () => {
-  const lines = Deno.readTextFileSync("build/3_tagged.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("build/3_tagged.tsv").split("\n").filter((
+    l,
+  ) => l.length);
   const byId = new Map<string, string[]>();
   for (let i = 1; i < lines.length; i++) {
     const c = lines[i].split("\t");
@@ -98,10 +123,16 @@ Deno.test("stage 3: known skills land on sensible tags", () => {
   }
   const js = byId.get("javascript");
   assert(js, "missing javascript row");
-  assert(js![5].includes("software-developer") || js![6].includes("programming"), `javascript tags look wrong: occ=${js![5]} topics=${js![6]}`);
+  assert(
+    js![5].includes("software-developer") || js![6].includes("programming"),
+    `javascript tags look wrong: occ=${js![5]} topics=${js![6]}`,
+  );
   const bio = byId.get("biology");
   assert(bio, "missing biology row");
-  assert(bio![5].includes("biologist") || bio![6].includes("biology"), `biology tags look wrong`);
+  assert(
+    bio![5].includes("biologist") || bio![6].includes("biology"),
+    `biology tags look wrong`,
+  );
 });
 
 Deno.test("stage 3 stats: IDF pruning dropped the worst embedding-match offenders", () => {
@@ -113,23 +144,33 @@ Deno.test("stage 3 stats: IDF pruning dropped the worst embedding-match offender
       throw new Error(`degenerate ${name} not pruned: ${n}`);
     }
   }
-  assert(s.top_occupations[0][1] < 10000, `top occupation clustered too hard: ${s.top_occupations[0][1]}`);
+  assert(
+    s.top_occupations[0][1] < 10000,
+    `top occupation clustered too hard: ${s.top_occupations[0][1]}`,
+  );
 });
 
 Deno.test("stage 4: difficulty.tsv is 1..20 integer band", () => {
-  const lines = Deno.readTextFileSync("build/4_difficulty.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("build/4_difficulty.tsv").split("\n")
+    .filter((l) => l.length);
   assertEquals(lines[0], "id\tdifficulty\tdifficulty_raw");
   for (let i = 1; i < Math.min(lines.length, 500); i++) {
     const [, band, raw] = lines[i].split("\t");
     const b = Number(band);
-    assert(Number.isInteger(b) && b >= 1 && b <= 20, `row ${i} band out of range: ${band}`);
+    assert(
+      Number.isInteger(b) && b >= 1 && b <= 20,
+      `row ${i} band out of range: ${band}`,
+    );
     assert(Number.isFinite(Number(raw)), `row ${i} non-finite raw`);
   }
 });
 
 Deno.test("stage 4: monotonic sanity — addition before calculus", () => {
-  const lines = Deno.readTextFileSync("build/4_difficulty.tsv").split("\n").filter((l) => l.length);
-  const map = new Map(lines.slice(1).map((l) => l.split("\t")).map((c) => [c[0], Number(c[1])]));
+  const lines = Deno.readTextFileSync("build/4_difficulty.tsv").split("\n")
+    .filter((l) => l.length);
+  const map = new Map(
+    lines.slice(1).map((l) => l.split("\t")).map((c) => [c[0], Number(c[1])]),
+  );
   const add = map.get("addition"), calc = map.get("calculus");
   if (add !== undefined && calc !== undefined) {
     assert(add <= calc, `addition (${add}) should be ≤ calculus (${calc})`);
@@ -138,30 +179,50 @@ Deno.test("stage 4: monotonic sanity — addition before calculus", () => {
 
 Deno.test("stage 4 stats: kendall-τ vs anchors above 0.5", () => {
   const s = JSON.parse(Deno.readTextFileSync("build/4_stats.json"));
-  assert(s.kendall_tau_vs_anchor > 0.5, `kendall τ = ${s.kendall_tau_vs_anchor}`);
+  assert(
+    s.kendall_tau_vs_anchor > 0.5,
+    `kendall τ = ${s.kendall_tau_vs_anchor}`,
+  );
 });
 
 Deno.test("final skills.tsv schema", () => {
-  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
-  assertEquals(lines[0], "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end");
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+    l.length
+  );
+  assertEquals(
+    lines[0],
+    "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end",
+  );
   for (let i = 1; i < Math.min(lines.length, 500); i++) {
     const c = lines[i].split("\t");
     assertEquals(c.length, 10, `row ${i} has ${c.length} cols`);
     const d = Number(c[4]);
-    assert(Number.isInteger(d) && d >= 1 && d <= 20, `row ${i} bad difficulty: ${c[4]}`);
+    assert(
+      Number.isInteger(d) && d >= 1 && d <= 20,
+      `row ${i} bad difficulty: ${c[4]}`,
+    );
     assert(c[0].length <= 80, `row ${i} id too long: ${c[0].length}`);
-    assert(c[2].length <= 80, `row ${i} display_title too long: ${c[2].length}`);
+    assert(
+      c[2].length <= 80,
+      `row ${i} display_title too long: ${c[2].length}`,
+    );
   }
 });
 
 Deno.test("final: every non-orphan skill reachable from some root", () => {
   const s = JSON.parse(Deno.readTextFileSync("build/7_stats.json"));
-  assertEquals(s.unreachable, 0, `${s.unreachable} skills unreachable from roots`);
+  assertEquals(
+    s.unreachable,
+    0,
+    `${s.unreachable} skills unreachable from roots`,
+  );
   assert(s.roots > 0, "no root skills");
 });
 
 Deno.test("final: every prereq id exists as a skill id", () => {
-  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+    l.length
+  );
   const ids = new Set<string>();
   for (let i = 1; i < lines.length; i++) ids.add(lines[i].split("\t")[0]);
   let missing = 0;
@@ -174,7 +235,9 @@ Deno.test("final: every prereq id exists as a skill id", () => {
 });
 
 Deno.test("final: no self-loops in prereq column", () => {
-  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+    l.length
+  );
   let loops = 0;
   for (let i = 1; i < lines.length; i++) {
     const c = lines[i].split("\t");
@@ -187,7 +250,9 @@ Deno.test("final: no self-loops in prereq column", () => {
 Deno.test("final: difficulty mostly monotonic across prereq chains", () => {
   // Seed edges can override inferred difficulty, so we allow a small fraction
   // of chains to violate monotonicity. ≥98% of sampled chains should be clean.
-  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+    l.length
+  );
   const diff = new Map<string, number>();
   const prereqs = new Map<string, string[]>();
   for (let i = 1; i < lines.length; i++) {
@@ -207,43 +272,68 @@ Deno.test("final: difficulty mostly monotonic across prereq chains", () => {
       const u = stack.pop()!;
       if (seen.has(u)) continue;
       seen.add(u);
-      if ((diff.get(u) ?? 0) > target) { ok = false; break; }
+      if ((diff.get(u) ?? 0) > target) {
+        ok = false;
+        break;
+      }
       for (const p of prereqs.get(u) ?? []) if (!seen.has(p)) stack.push(p);
     }
-    if (ok) clean++; else violated++;
+    if (ok) clean++;
+    else violated++;
   }
   const pct = clean / (clean + violated);
-  assert(pct >= 0.95, `only ${(pct * 100).toFixed(1)}% of chains monotonic (${violated} violations)`);
+  assert(
+    pct >= 0.95,
+    `only ${
+      (pct * 100).toFixed(1)
+    }% of chains monotonic (${violated} violations)`,
+  );
 });
 
 Deno.test("final: roots are a non-trivial fraction of skills", () => {
   const s = JSON.parse(Deno.readTextFileSync("build/7_stats.json"));
   assert(s.roots > 100, `only ${s.roots} roots — graph may be over-connected`);
-  assert(s.roots < s.skills_emitted * 0.2, `${s.roots} roots >20% of skills — too many orphans`);
+  assert(
+    s.roots < s.skills_emitted * 0.2,
+    `${s.roots} roots >20% of skills — too many orphans`,
+  );
 });
 
 Deno.test("dedupe: if stage 3b ran, alias file references real ids", () => {
   try {
     Deno.statSync("build/3b_aliases.tsv");
-  } catch { return; /* dedupe didn't run, skip */ }
-  const aliasLines = Deno.readTextFileSync("build/3b_aliases.tsv").split("\n").filter((l) => l.length);
+  } catch {
+    return; /* dedupe didn't run, skip */
+  }
+  const aliasLines = Deno.readTextFileSync("build/3b_aliases.tsv").split("\n")
+    .filter((l) => l.length);
   const skillIds = new Set<string>();
-  const skillLines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
-  for (let i = 1; i < skillLines.length; i++) skillIds.add(skillLines[i].split("\t")[0]);
+  const skillLines = Deno.readTextFileSync("skills.tsv").split("\n").filter((
+    l,
+  ) => l.length);
+  for (let i = 1; i < skillLines.length; i++) {
+    skillIds.add(skillLines[i].split("\t")[0]);
+  }
   for (let i = 1; i < aliasLines.length; i++) {
     const [, canonical] = aliasLines[i].split("\t");
-    assert(skillIds.has(canonical), `alias canonical ${canonical} not in skills.tsv`);
+    assert(
+      skillIds.has(canonical),
+      `alias canonical ${canonical} not in skills.tsv`,
+    );
   }
 });
 
 Deno.test("final: final_edges preserves strict raw-difficulty ordering", () => {
-  const skillLines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const skillLines = Deno.readTextFileSync("skills.tsv").split("\n").filter((
+    l,
+  ) => l.length);
   const diff = new Map<string, number>();
   for (let i = 1; i < skillLines.length; i++) {
     const c = skillLines[i].split("\t");
     diff.set(c[0], Number(c[4]));
   }
-  const edgeLines = Deno.readTextFileSync("build/6_edges.tsv").split("\n").filter((l) => l.length).slice(1);
+  const edgeLines = Deno.readTextFileSync("build/6_edges.tsv").split("\n")
+    .filter((l) => l.length).slice(1);
   for (let i = 0; i < Math.min(edgeLines.length, 1000); i++) {
     const [s, p] = edgeLines[i].split("\t");
     const ds = diff.get(s), dp = diff.get(p);
@@ -254,26 +344,44 @@ Deno.test("final: final_edges preserves strict raw-difficulty ordering", () => {
 
 Deno.test("stage 8: eval metrics are sane (not column-shifted)", () => {
   let s: Record<string, unknown>;
-  try { s = JSON.parse(Deno.readTextFileSync("build/8_stats.json")); } catch { return; }
+  try {
+    s = JSON.parse(Deno.readTextFileSync("build/8_stats.json"));
+  } catch {
+    return;
+  }
 
   // Kendall tau should be positive (difficulty correlates with Khan ordering)
   const kt = s.khan_tau as { kendall_tau: number | null };
   if (kt?.kendall_tau !== null) {
-    assert(kt.kendall_tau > 0, `kendall_tau ${kt.kendall_tau} should be positive`);
+    assert(
+      kt.kendall_tau > 0,
+      `kendall_tau ${kt.kendall_tau} should be positive`,
+    );
   }
 
   // Graph must be a DAG
   const cy = s.cycles as { dag: boolean; leftover_after_kahn: number };
-  assert(cy.dag, `cycles.dag should be true, leftover=${cy.leftover_after_kahn}`);
+  assert(
+    cy.dag,
+    `cycles.dag should be true, leftover=${cy.leftover_after_kahn}`,
+  );
 
   // Depth should be > 1 (not a flat graph)
   const dd = s.depth_distribution as { max: number };
-  assert(dd.max > 1, `depth max=${dd.max} — graph is flat, likely column-shift bug`);
+  assert(
+    dd.max > 1,
+    `depth max=${dd.max} — graph is flat, likely column-shift bug`,
+  );
 
   // Top out-degree nodes should be real skill IDs, not bare numbers
-  const br = s.branching as { top_out_degree: [string, number, string | null][] };
+  const br = s.branching as {
+    top_out_degree: [string, number, string | null][];
+  };
   for (const [id] of br.top_out_degree) {
-    assert(!/^\d+$/.test(id), `top hub "${id}" is a bare number — likely difficulty parsed as prereq`);
+    assert(
+      !/^\d+$/.test(id),
+      `top hub "${id}" is a bare number — likely difficulty parsed as prereq`,
+    );
   }
 
   // Reachability: roots should exist
@@ -284,7 +392,11 @@ Deno.test("stage 8: eval metrics are sane (not column-shifted)", () => {
 
 Deno.test("stage 6: orphan_rate is in [0, 1]", () => {
   let s: Record<string, unknown>;
-  try { s = JSON.parse(Deno.readTextFileSync("build/6_stats.json")); } catch { return; }
+  try {
+    s = JSON.parse(Deno.readTextFileSync("build/6_stats.json"));
+  } catch {
+    return;
+  }
   const r = s.orphan_rate as number;
   assert(r >= 0 && r <= 1, `orphan_rate ${r} outside [0,1]`);
 });
@@ -304,17 +416,25 @@ Deno.test("seed-edges: quarantine file exists and stats surface drop counts", ()
   } catch {
     return; // seed-edges stage didn't run
   }
-  const s = JSON.parse(Deno.readTextFileSync("build/1e_stats.json")) as Record<string, unknown>;
+  const s = JSON.parse(Deno.readTextFileSync("build/1e_stats.json")) as Record<
+    string,
+    unknown
+  >;
   assert("dropped_total" in s, "dropped_total missing from seed-edges stats");
   assert("embed_errors" in s, "embed_errors missing from seed-edges stats");
-  assert("dropped_per_source" in s, "dropped_per_source missing from seed-edges stats");
+  assert(
+    "dropped_per_source" in s,
+    "dropped_per_source missing from seed-edges stats",
+  );
 });
 
 Deno.test("final: no slug collision hex suffix from OpenSALT overflow", () => {
   // OpenSALT compliance statements should be dropped in stage list if their
   // base slug exceeds 80 chars. The hash path only kicks in when the full
   // slug is >70 chars AND ends in a 6-char hex segment, so we gate on both.
-  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+    l.length
+  );
   let offenders = 0, example = "";
   for (let i = 1; i < lines.length; i++) {
     const id = lines[i].split("\t")[0];
@@ -323,32 +443,51 @@ Deno.test("final: no slug collision hex suffix from OpenSALT overflow", () => {
       if (!example) example = id;
     }
   }
-  assert(offenders < 5, `${offenders} ids still have hex collision suffix (e.g. ${example})`);
+  assert(
+    offenders < 5,
+    `${offenders} ids still have hex collision suffix (e.g. ${example})`,
+  );
 });
 
 Deno.test("final: difficulty always in [1,20] integer, no NaN", () => {
-  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+    l.length
+  );
   for (let i = 1; i < lines.length; i++) {
     const c = lines[i].split("\t");
     const d = Number(c[4]);
-    assert(Number.isInteger(d) && d >= 1 && d <= 20, `row ${i} (${c[0]}) bad difficulty: ${c[4]}`);
+    assert(
+      Number.isInteger(d) && d >= 1 && d <= 20,
+      `row ${i} (${c[0]}) bad difficulty: ${c[4]}`,
+    );
   }
 });
 
 Deno.test("difficulty: grade-anchored skills mostly agree with inferred band", () => {
   let s: Record<string, unknown>;
-  try { s = JSON.parse(Deno.readTextFileSync("build/4_stats.json")); } catch { return; }
+  try {
+    s = JSON.parse(Deno.readTextFileSync("build/4_stats.json"));
+  } catch {
+    return;
+  }
   const anchored = (s.grade_anchored_skills as number | undefined) ?? 0;
   const inversions = (s.grade_band_inversions as number | undefined) ?? 0;
   if (anchored === 0) return;
   const rate = inversions / anchored;
-  assert(rate < 0.05, `${(rate * 100).toFixed(1)}% of grade-anchored skills disagree with band by >5 (${inversions}/${anchored})`);
+  assert(
+    rate < 0.05,
+    `${
+      (rate * 100).toFixed(1)
+    }% of grade-anchored skills disagree with band by >5 (${inversions}/${anchored})`,
+  );
 });
 
 Deno.test("final: no obvious cross-domain false-positive prereqs", () => {
   // Concrete edges that were spotted as false positives during the audit.
   // If these reappear, the candidate pool or LLM filtering regressed.
-  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+    l.length
+  );
   const h = lines[0].split("\t");
   const iPrereqs = h.indexOf("prereqs");
   const byId = new Map<string, string>();
@@ -357,7 +496,10 @@ Deno.test("final: no obvious cross-domain false-positive prereqs", () => {
     byId.set(c[0], c[iPrereqs] || "");
   }
   const shouldNotBePrereq: [string, string][] = [
-    ["describe-consequences-of-following-rules", "antisocial-personality-disorder"],
+    [
+      "describe-consequences-of-following-rules",
+      "antisocial-personality-disorder",
+    ],
     ["distinguish-lumber-categories", "pack-fragile-items-for-transportation"],
     ["weigh-products-or-estimate-weight", "use-measures-of-dispersion"],
   ];
@@ -365,9 +507,15 @@ Deno.test("final: no obvious cross-domain false-positive prereqs", () => {
   for (const [skill, bogusPrereq] of shouldNotBePrereq) {
     const p = byId.get(skill);
     if (!p) continue;
-    if (p.split(",").includes(bogusPrereq)) violations.push(`${skill} ← ${bogusPrereq}`);
+    if (p.split(",").includes(bogusPrereq)) {
+      violations.push(`${skill} ← ${bogusPrereq}`);
+    }
   }
-  assertEquals(violations.length, 0, `cross-domain false positives returned: ${violations.join("; ")}`);
+  assertEquals(
+    violations.length,
+    0,
+    `cross-domain false positives returned: ${violations.join("; ")}`,
+  );
 });
 
 // ---------- Tranche F regression/eval tests codified from todo.md passes 8-16 ----------
@@ -395,7 +543,10 @@ Deno.test("stage 1 REG-EC2: no Can/Could/Should/How-to/What-is prefixes", () => 
     const title = l.split("\t")[1];
     if (/^(Can|Could|Should|How to|What is|Why does)\s+/i.test(title)) bad++;
   }
-  assert(bad < 10, `${bad} student-directive prefix titles escaped stage-list filter`);
+  assert(
+    bad < 10,
+    `${bad} student-directive prefix titles escaped stage-list filter`,
+  );
 });
 
 // REG-R5: scaffolding prefixes
@@ -421,12 +572,17 @@ Deno.test("stage 1 REG-TG2: no code:* tag shorter than 4 chars", () => {
       if (t.startsWith("code:") && t.slice(5).length < 4) bad++;
     }
   }
-  assert(bad < 50, `${bad} short code:* tags — deriveDisplay will fall back to them (bug)`);
+  assert(
+    bad < 50,
+    `${bad} short code:* tags — deriveDisplay will fall back to them (bug)`,
+  );
 });
 
 // REG-O1: no hex-suffix occupation slugs
 Deno.test("stage 3 REG-O1: no hex-suffix occupation slugs", () => {
-  const lines = Deno.readTextFileSync("build/3_tagged.tsv").split("\n").filter((l) => l.length).slice(1);
+  const lines = Deno.readTextFileSync("build/3_tagged.tsv").split("\n").filter((
+    l,
+  ) => l.length).slice(1);
   let bad = 0;
   for (const l of lines) {
     const occ = l.split("\t")[5] || "";
@@ -439,13 +595,19 @@ Deno.test("stage 3 REG-O1: no hex-suffix occupation slugs", () => {
 Deno.test("stage 3 REG-T2: no wiki-category junk topics", () => {
   try {
     Deno.statSync("build/3b_tagged_deduped.tsv");
-  } catch { return; }
-  const lines = Deno.readTextFileSync("build/3b_tagged_deduped.tsv").split("\n").filter((l) => l.length).slice(1);
+  } catch {
+    return;
+  }
+  const lines = Deno.readTextFileSync("build/3b_tagged_deduped.tsv").split("\n")
+    .filter((l) => l.length).slice(1);
   const bad: string[] = [];
-  const junkRe = /^wikiproject-|-templates$|^years-in-|^decades-in-|-matches$|-aircraft$|-records$|-officials-and-employees$/;
+  const junkRe =
+    /^wikiproject-|-templates$|^years-in-|^decades-in-|-matches$|-aircraft$|-records$|-officials-and-employees$/;
   for (const l of lines) {
     const topics = l.split("\t")[6] || "";
-    for (const t of topics.split(",")) if (junkRe.test(t) && bad.length < 5) bad.push(t);
+    for (const t of topics.split(",")) {
+      if (junkRe.test(t) && bad.length < 5) bad.push(t);
+    }
   }
   assertEquals(bad.length, 0, `wiki-category junk topics: ${bad.join("; ")}`);
 });
@@ -455,12 +617,19 @@ Deno.test("stage 5 REG-DR1: reversed-difficulty rate below target", () => {
   try {
     Deno.statSync("build/5_prereqs.tsv");
     Deno.statSync("build/4_difficulty.tsv");
-  } catch { return; }
-  const dLines = Deno.readTextFileSync("build/4_difficulty.tsv").split("\n").filter((l) => l.length).slice(1);
+  } catch {
+    return;
+  }
+  const dLines = Deno.readTextFileSync("build/4_difficulty.tsv").split("\n")
+    .filter((l) => l.length).slice(1);
   const raw = new Map<string, number>();
-  for (const l of dLines) { const c = l.split("\t"); raw.set(c[0], Number(c[2])); }
+  for (const l of dLines) {
+    const c = l.split("\t");
+    raw.set(c[0], Number(c[2]));
+  }
 
-  const pLines = Deno.readTextFileSync("build/5_prereqs.tsv").split("\n").filter((l) => l.length);
+  const pLines = Deno.readTextFileSync("build/5_prereqs.tsv").split("\n")
+    .filter((l) => l.length);
   let picks = 0, reversed = 0;
   for (const line of pLines) {
     const tab = line.indexOf("\t");
@@ -477,28 +646,58 @@ Deno.test("stage 5 REG-DR1: reversed-difficulty rate below target", () => {
   }
   if (picks === 0) return;
   const rate = reversed / picks;
-  assert(rate < 0.08, `reversed-difficulty rate ${(rate * 100).toFixed(1)}% — MIN_DIFF_DELTA guard regressed (was 23% pre-fix, target <8%)`);
+  assert(
+    rate < 0.08,
+    `reversed-difficulty rate ${
+      (rate * 100).toFixed(1)
+    }% — MIN_DIFF_DELTA guard regressed (was 23% pre-fix, target <8%)`,
+  );
 });
 
 // REG-H1/H4: top hubs don't match anomalous-leaf patterns
 Deno.test("stage 6 REG-H1: no anomalous holiday-retell hubs with >200 in-degree", () => {
   let s: Record<string, unknown>;
-  try { s = JSON.parse(Deno.readTextFileSync("build/6_stats.json")); } catch { return; }
-  const branching = s.branching as { top_in_degree?: [string, number][] } | undefined;
+  try {
+    s = JSON.parse(Deno.readTextFileSync("build/6_stats.json"));
+  } catch {
+    return;
+  }
+  const branching = s.branching as
+    | { top_in_degree?: [string, number][] }
+    | undefined;
   const top = branching?.top_in_degree ?? [];
-  const bad = /retell-stories-related-to.*-day|sced-|language-immersion-prior|understand-object-naming-and-naming-conventions/;
+  const bad =
+    /retell-stories-related-to.*-day|sced-|language-immersion-prior|understand-object-naming-and-naming-conventions/;
   for (const [id, count] of top.slice(0, 20)) {
-    assert(!bad.test(id) || count <= 200, `anomalous hub "${id}" with in-degree ${count}`);
+    assert(
+      !bad.test(id) || count <= 200,
+      `anomalous hub "${id}" with in-degree ${count}`,
+    );
   }
 });
 
 // REG-R6: language-family separation
 Deno.test("final REG-R6: language-family skills don't cross-depend", () => {
-  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+    l.length
+  );
   const h = lines[0].split("\t");
   const iPre = h.indexOf("prereqs");
-  const LANGS = ["spanish", "french", "german", "italian", "portuguese", "japanese", "greek", "latin"];
-  const containsLang = (id: string) => LANGS.find((l) => id === l || id.includes(`-${l}-`) || id.startsWith(`${l}-`) || id.endsWith(`-${l}`));
+  const LANGS = [
+    "spanish",
+    "french",
+    "german",
+    "italian",
+    "portuguese",
+    "japanese",
+    "greek",
+    "latin",
+  ];
+  const containsLang = (id: string) =>
+    LANGS.find((l) =>
+      id === l || id.includes(`-${l}-`) || id.startsWith(`${l}-`) ||
+      id.endsWith(`-${l}`)
+    );
   const bad: string[] = [];
   for (let i = 1; i < lines.length; i++) {
     const c = lines[i].split("\t");
@@ -507,7 +706,9 @@ Deno.test("final REG-R6: language-family skills don't cross-depend", () => {
     if (!sLang || !c[iPre]) continue;
     for (const p of c[iPre].split(",")) {
       const pLang = containsLang(p);
-      if (pLang && pLang !== sLang && bad.length < 5) bad.push(`${skill} ← ${p}`);
+      if (pLang && pLang !== sLang && bad.length < 5) {
+        bad.push(`${skill} ← ${p}`);
+      }
     }
   }
   assertEquals(bad.length, 0, `cross-language prereqs: ${bad.join("; ")}`);
@@ -515,7 +716,9 @@ Deno.test("final REG-R6: language-family skills don't cross-depend", () => {
 
 // REG-R1: SCED phantom-hub cap
 Deno.test("final REG-R1: SCED phantom hubs capped at 200 in-degree", () => {
-  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+    l.length
+  );
   const h = lines[0].split("\t");
   const iPre = h.indexOf("prereqs");
   const count = new Map<string, number>();
@@ -524,9 +727,12 @@ Deno.test("final REG-R1: SCED phantom hubs capped at 200 in-degree", () => {
     if (!c[iPre]) continue;
     for (const p of c[iPre].split(",")) count.set(p, (count.get(p) ?? 0) + 1);
   }
-  const phantomRe = /^(leadership|american-(sign|indian)-language-immersion|assisted-reading|corrective-reading|study-hall)$/;
+  const phantomRe =
+    /^(leadership|american-(sign|indian)-language-immersion|assisted-reading|corrective-reading|study-hall)$/;
   for (const [id, n] of count) {
-    if (phantomRe.test(id)) assert(n <= 200, `SCED phantom hub "${id}" has in-degree ${n}`);
+    if (phantomRe.test(id)) {
+      assert(n <= 200, `SCED phantom hub "${id}" has in-degree ${n}`);
+    }
   }
 });
 
@@ -534,7 +740,9 @@ Deno.test("final: elementary-math progression surfaces known prereqs", () => {
   // Seed-edge coverage goal: addition should be reachable as a prereq of
   // multiplication (either directly or transitively). If Khan/AL-CPL/
   // Metacademy seed resolution regresses, this test fails.
-  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+    l.length
+  );
   const h = lines[0].split("\t");
   const iPrereqs = h.indexOf("prereqs");
   const prereqs = new Map<string, string[]>();
@@ -556,6 +764,8 @@ Deno.test("final: elementary-math progression surfaces known prereqs", () => {
   // This is currently a known-failing test — it documents D6 coverage work.
   // Allow as warning only for now; flip to assert once seed resolution improves.
   if (!reachable.has("addition")) {
-    console.warn(`[test] WARN: addition not a transitive prereq of multiplication (D6 coverage goal)`);
+    console.warn(
+      `[test] WARN: addition not a transitive prereq of multiplication (D6 coverage goal)`,
+    );
   }
 });

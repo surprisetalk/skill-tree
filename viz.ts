@@ -7,16 +7,37 @@
 //   viz.ts --all skills-full.html       → full 101k graph (~64MB, slow to render)
 
 const arg0 = Deno.args[0] ?? "";
-const out = Deno.args[1] ?? (arg0 && arg0 !== "--all" ? `skills-${arg0}.html` : "skills.html");
+const out = Deno.args[1] ??
+  (arg0 && arg0 !== "--all" ? `skills-${arg0}.html` : "skills.html");
 const mode = arg0 === "--all" ? "all" : arg0 ? "seed" : "top";
 const seed = mode === "seed" ? arg0 : "";
 const TOP_N = 2000;
 
-type Row = { id: string; title: string; display: string; description: string; difficulty: number; prereqs: string[]; occupations: string; topics: string };
-const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) => l.length);
+type Row = {
+  id: string;
+  title: string;
+  display: string;
+  description: string;
+  difficulty: number;
+  prereqs: string[];
+  occupations: string;
+  topics: string;
+};
+const lines = Deno.readTextFileSync("skills.tsv").split("\n").filter((l) =>
+  l.length
+);
 const rows: Row[] = lines.slice(1).map((l) => {
   const c = l.split("\t");
-  return { id: c[0], title: c[1], display: c[2], description: c[3], difficulty: Number(c[4]), prereqs: c[5] ? c[5].split(",") : [], occupations: c[6], topics: c[7] };
+  return {
+    id: c[0],
+    title: c[1],
+    display: c[2],
+    description: c[3],
+    difficulty: Number(c[4]),
+    prereqs: c[5] ? c[5].split(",") : [],
+    occupations: c[6],
+    topics: c[7],
+  };
 });
 const byId = new Map(rows.map((r) => [r.id, r] as const));
 
@@ -25,8 +46,13 @@ let keepIds: Set<string>;
 if (mode === "top") {
   // Top-N most-connected skills: sum of incoming edges (descendants use this) + outgoing (has these prereqs)
   const inDeg = new Map<string, number>();
-  for (const r of rows) for (const p of r.prereqs) inDeg.set(p, (inDeg.get(p) ?? 0) + 1);
-  const scored = rows.map((r) => ({ id: r.id, score: (inDeg.get(r.id) ?? 0) + r.prereqs.length }));
+  for (const r of rows) {
+    for (const p of r.prereqs) inDeg.set(p, (inDeg.get(p) ?? 0) + 1);
+  }
+  const scored = rows.map((r) => ({
+    id: r.id,
+    score: (inDeg.get(r.id) ?? 0) + r.prereqs.length,
+  }));
   scored.sort((a, b) => b.score - a.score);
   keepIds = new Set(scored.slice(0, TOP_N).map((s) => s.id));
   console.log(`[viz] top-${TOP_N} most-connected skills selected`);
@@ -34,15 +60,30 @@ if (mode === "top") {
   const seedRow = byId.get(seed);
   if (!seedRow) throw new Error(`seed not found: ${seed}`);
   const children = new Map<string, string[]>();
-  for (const r of rows) for (const p of r.prereqs) {
-    const arr = children.get(p) ?? []; arr.push(r.id); children.set(p, arr);
+  for (const r of rows) {
+    for (const p of r.prereqs) {
+      const arr = children.get(p) ?? [];
+      arr.push(r.id);
+      children.set(p, arr);
+    }
   }
   keepIds = new Set<string>([seed]);
-  const expand = (start: string, hops: number, neighbors: (id: string) => string[]) => {
+  const expand = (
+    start: string,
+    hops: number,
+    neighbors: (id: string) => string[],
+  ) => {
     let frontier = [start];
     for (let h = 0; h < hops; h++) {
       const next: string[] = [];
-      for (const u of frontier) for (const v of neighbors(u)) if (!keepIds.has(v)) { keepIds.add(v); next.push(v); }
+      for (const u of frontier) {
+        for (const v of neighbors(u)) {
+          if (!keepIds.has(v)) {
+            keepIds.add(v);
+            next.push(v);
+          }
+        }
+      }
       frontier = next;
     }
   };
@@ -58,13 +99,21 @@ const visible = rows.filter((r) => keepIds.has(r.id));
 // Group by band
 const byBand = new Map<number, Row[]>();
 for (const r of visible) {
-  const arr = byBand.get(r.difficulty) ?? []; arr.push(r); byBand.set(r.difficulty, arr);
+  const arr = byBand.get(r.difficulty) ?? [];
+  arr.push(r);
+  byBand.set(r.difficulty, arr);
 }
-for (const [, arr] of byBand) arr.sort((a, b) => a.title.localeCompare(b.title));
+for (const [, arr] of byBand) {
+  arr.sort((a, b) => a.title.localeCompare(b.title));
+}
 
 // Build edge list for drawing
 const edges: { src: string; dst: string }[] = [];
-for (const r of visible) for (const p of r.prereqs) if (keepIds.has(p)) edges.push({ src: p, dst: r.id });
+for (const r of visible) {
+  for (const p of r.prereqs) {
+    if (keepIds.has(p)) edges.push({ src: p, dst: r.id });
+  }
+}
 
 const html = `<!DOCTYPE html>
 <html lang="en">
@@ -98,22 +147,44 @@ const html = `<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>Skill Tree <span class="stats">${visible.length} skills · ${edges.length} edges${seed ? ` · focus: ${seed}` : ""}</span></h1>
+  <h1>Skill Tree <span class="stats">${visible.length} skills · ${edges.length} edges${
+  seed ? ` · focus: ${seed}` : ""
+}</span></h1>
   <input id="search" placeholder="search title or id…" autofocus>
 </header>
 <main>
-${Array.from(byBand.entries()).sort(([a], [b]) => a - b).map(([band, skills]) => `
+${
+  Array.from(byBand.entries()).sort(([a], [b]) => a - b).map((
+    [band, skills],
+  ) => `
 <section class="band" data-band="${band}">
   <h2>band ${band} · ${skills.length} skills</h2>
   <div class="skills">
-    ${skills.map((s) => `<div class="skill" data-id="${s.id}">${escape(s.display || s.title)}</div>`).join("")}
+    ${
+    skills.map((s) =>
+      `<div class="skill" data-id="${s.id}">${
+        escape(s.display || s.title)
+      }</div>`
+    ).join("")
+  }
   </div>
 </section>
-`).join("")}
+`).join("")
+}
 </main>
 <aside id="detail"></aside>
 <script>
-const DATA = ${JSON.stringify(Object.fromEntries(visible.map((r) => [r.id, { title: r.title, display: r.display || r.title, description: r.description, difficulty: r.difficulty, prereqs: r.prereqs.filter((p) => keepIds.has(p)), occupations: r.occupations, topics: r.topics }])))};
+const DATA = ${
+  JSON.stringify(Object.fromEntries(visible.map((r) => [r.id, {
+    title: r.title,
+    display: r.display || r.title,
+    description: r.description,
+    difficulty: r.difficulty,
+    prereqs: r.prereqs.filter((p) => keepIds.has(p)),
+    occupations: r.occupations,
+    topics: r.topics,
+  }])))
+};
 const CHILDREN = {};
 for (const [id, row] of Object.entries(DATA)) for (const p of row.prereqs) { (CHILDREN[p] ||= []).push(id); }
 
@@ -161,9 +232,19 @@ search.addEventListener("input", () => {
 </html>`;
 
 function escape(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
+  return s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ] as string,
+  );
 }
 
 Deno.writeTextFileSync(out, html);
 const sz = Deno.statSync(out).size;
-console.log(`[viz] wrote ${out} (${(sz / 1024 / 1024).toFixed(1)}MB, ${visible.length} skills, ${edges.length} edges)`);
+console.log(
+  `[viz] wrote ${out} (${
+    (sz / 1024 / 1024).toFixed(1)
+  }MB, ${visible.length} skills, ${edges.length} edges)`,
+);

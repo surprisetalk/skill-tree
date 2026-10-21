@@ -3,50 +3,133 @@
 // Usage: deno run --allow-all pipeline.ts [stage]
 // Stages: list, enrich, trees, seed-edges, embed, tag, dedupe, difficulty, prereq, postproc, finalize.
 
-import { TextLineStream } from "jsr:@std/streams@1/text-line-stream";
+import { TextLineStream } from "@std/streams/text-line-stream";
 
 const BUILD = "build";
 await Deno.mkdir(BUILD, { recursive: true });
 
-type Skill = { id: string; title: string; description: string; sources: string[]; tags: string[] };
+type Skill = {
+  id: string;
+  title: string;
+  description: string;
+  sources: string[];
+  tags: string[];
+};
 
 // ---------- util ----------
 
 const NAMED_ENTITY: Record<string, string> = {
-  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
-  rsquo: "'", lsquo: "'", rdquo: '"', ldquo: '"', sbquo: ",", bdquo: '"',
-  ndash: "-", mdash: "-", hellip: "…", middot: "·", bull: "•",
-  acirc: "â", aacute: "á", agrave: "à", auml: "ä", atilde: "ã", aring: "å", aelig: "æ",
-  ecirc: "ê", eacute: "é", egrave: "è", euml: "ë",
-  icirc: "î", iacute: "í", igrave: "ì", iuml: "ï",
-  ocirc: "ô", oacute: "ó", ograve: "ò", ouml: "ö", otilde: "õ", oslash: "ø",
-  ucirc: "û", uacute: "ú", ugrave: "ù", uuml: "ü",
-  ccedil: "ç", ntilde: "ñ", szlig: "ß", yacute: "ý", yuml: "ÿ",
-  Acirc: "Â", Aacute: "Á", Agrave: "À", Auml: "Ä", Atilde: "Ã", Aring: "Å", AElig: "Æ",
-  Ecirc: "Ê", Eacute: "É", Egrave: "È", Euml: "Ë",
-  Icirc: "Î", Iacute: "Í", Igrave: "Ì", Iuml: "Ï",
-  Ocirc: "Ô", Oacute: "Ó", Ograve: "Ò", Ouml: "Ö", Otilde: "Õ", Oslash: "Ø",
-  Ucirc: "Û", Uacute: "Ú", Ugrave: "Ù", Uuml: "Ü",
-  Ccedil: "Ç", Ntilde: "Ñ", Yacute: "Ý",
-  copy: "©", reg: "®", trade: "™", deg: "°", plusmn: "±", times: "×", divide: "÷",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  rsquo: "'",
+  lsquo: "'",
+  rdquo: '"',
+  ldquo: '"',
+  sbquo: ",",
+  bdquo: '"',
+  ndash: "-",
+  mdash: "-",
+  hellip: "…",
+  middot: "·",
+  bull: "•",
+  acirc: "â",
+  aacute: "á",
+  agrave: "à",
+  auml: "ä",
+  atilde: "ã",
+  aring: "å",
+  aelig: "æ",
+  ecirc: "ê",
+  eacute: "é",
+  egrave: "è",
+  euml: "ë",
+  icirc: "î",
+  iacute: "í",
+  igrave: "ì",
+  iuml: "ï",
+  ocirc: "ô",
+  oacute: "ó",
+  ograve: "ò",
+  ouml: "ö",
+  otilde: "õ",
+  oslash: "ø",
+  ucirc: "û",
+  uacute: "ú",
+  ugrave: "ù",
+  uuml: "ü",
+  ccedil: "ç",
+  ntilde: "ñ",
+  szlig: "ß",
+  yacute: "ý",
+  yuml: "ÿ",
+  Acirc: "Â",
+  Aacute: "Á",
+  Agrave: "À",
+  Auml: "Ä",
+  Atilde: "Ã",
+  Aring: "Å",
+  AElig: "Æ",
+  Ecirc: "Ê",
+  Eacute: "É",
+  Egrave: "È",
+  Euml: "Ë",
+  Icirc: "Î",
+  Iacute: "Í",
+  Igrave: "Ì",
+  Iuml: "Ï",
+  Ocirc: "Ô",
+  Oacute: "Ó",
+  Ograve: "Ò",
+  Ouml: "Ö",
+  Otilde: "Õ",
+  Oslash: "Ø",
+  Ucirc: "Û",
+  Uacute: "Ú",
+  Ugrave: "Ù",
+  Uuml: "Ü",
+  Ccedil: "Ç",
+  Ntilde: "Ñ",
+  Yacute: "Ý",
+  copy: "©",
+  reg: "®",
+  trade: "™",
+  deg: "°",
+  plusmn: "±",
+  times: "×",
+  divide: "÷",
 };
-const decodeEntities = (s: string) => s
-  .replace(/&([a-zA-Z]+);/g, (m, name) => NAMED_ENTITY[name] ?? m)
-  .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
-  .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+const decodeEntities = (s: string) =>
+  s
+    .replace(/&([a-zA-Z]+);/g, (m, name) => NAMED_ENTITY[name] ?? m)
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) =>
+      String.fromCharCode(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, n) =>
+      String.fromCharCode(Number(n)));
 
 const normalizeText = (s: string): string => {
   if (!s) return "";
   let t = decodeEntities(s);
   t = t.replace(/<\/?[a-z][^>]*>/gi, "");
-  t = t.replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(/[\u201C\u201D\u201E\u201F]/g, '"');
+  t = t.replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(
+    /[\u201C\u201D\u201E\u201F]/g,
+    '"',
+  );
   t = t.replace(/[\u2010\u2011\u2012\u2013\u2014]/g, "-");
   t = t.replace(/\*\*([^*]+)\*\*/g, "$1");
   t = t.replace(/Â\s*/g, " ");
   t = t.replace(/â€[\u0090-\u009F\u200B-\u200F]*/g, "");
   t = t.replace(/Ã[\u0080-\u00BF]/g, (m) => {
-    try { return new TextDecoder().decode(new Uint8Array([...m].map((c) => c.charCodeAt(0)))); }
-    catch { return m; }
+    try {
+      return new TextDecoder().decode(
+        new Uint8Array([...m].map((c) => c.charCodeAt(0))),
+      );
+    } catch {
+      return m;
+    }
   });
   t = t.replace(/\s+/g, " ").trim();
   return t;
@@ -58,7 +141,10 @@ const denoiseTitle = (s: string): string => {
   t = t.replace(/\s*\((?:e\.g\.|i\.e\.)[^)]*\)/gi, "");
   t = t.replace(/\s*\([^)]{60,}\)/g, "");
   t = t.replace(/,?\s+such as\b[^.]*\.?$/i, ".");
-  t = t.replace(/^(perform|conduct|provide|ensure|coordinate)\s+(the|an?|of)\s+/i, "$1 ");
+  t = t.replace(
+    /^(perform|conduct|provide|ensure|coordinate)\s+(the|an?|of)\s+/i,
+    "$1 ",
+  );
   t = t.replace(/[\s:;\-–—]+$/g, "");
   t = t.replace(/^[•▪►■◆]\s*/, "");
   t = t.replace(/^\d+\.\s+/, "");
@@ -81,18 +167,21 @@ const sentenceCase = (s: string): string => {
 const stripStudentPrefix = (s: string): string => {
   if (!s) return s;
   const t = s.replace(/^(the\s+)?students?\s+will\s+(be\s+able\s+to\s+)?/i, "")
-           .replace(/^students?\s+can\s+/i, "")
-           .replace(/^by\s+the\s+end\s+of[^,.]+,\s*/i, "")
-           .replace(/^upon\s+completion[^,.]+,\s*/i, "")
-           .replace(/^(tswbat|swbat)[:\s]+/i, "")
-           .trim();
+    .replace(/^students?\s+can\s+/i, "")
+    .replace(/^by\s+the\s+end\s+of[^,.]+,\s*/i, "")
+    .replace(/^upon\s+completion[^,.]+,\s*/i, "")
+    .replace(/^(tswbat|swbat)[:\s]+/i, "")
+    .trim();
   if (!t) return s;
   return t[0].toUpperCase() + t.slice(1);
 };
 
 function h32(s: string): number {
   let h = 2166136261 >>> 0;
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
   return h;
 }
 
@@ -113,17 +202,31 @@ const slugify = (s: string) => {
 };
 
 const parseTsv = (text: string, tag?: string): string[][] => {
-  const rows = text.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l.length).map((l) => l.split("\t"));
+  const rows = text.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) =>
+    l.length
+  ).map((l) => l.split("\t"));
   if (rows.length < 2) return rows;
   const expected = rows[0].length;
   let mismatched = 0;
   for (let i = 1; i < rows.length; i++) {
     if (rows[i].length !== expected) {
-      if (mismatched < 3) console.warn(`[parseTsv${tag ? ` ${tag}` : ""}] row ${i} has ${rows[i].length} cols, header has ${expected} — embedded newline/tab?`);
+      if (mismatched < 3) {
+        console.warn(
+          `[parseTsv${tag ? ` ${tag}` : ""}] row ${i} has ${
+            rows[i].length
+          } cols, header has ${expected} — embedded newline/tab?`,
+        );
+      }
       mismatched++;
     }
   }
-  if (mismatched > 0) console.warn(`[parseTsv${tag ? ` ${tag}` : ""}] ${mismatched}/${rows.length - 1} rows have mismatched column count`);
+  if (mismatched > 0) {
+    console.warn(
+      `[parseTsv${tag ? ` ${tag}` : ""}] ${mismatched}/${
+        rows.length - 1
+      } rows have mismatched column count`,
+    );
+  }
   return rows;
 };
 
@@ -136,17 +239,29 @@ function parseCsv(text: string): string[][] {
     const c = text[i];
     if (inQuotes) {
       if (c === '"') {
-        if (text[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false;
+        if (text[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else inQuotes = false;
       } else cur += c;
     } else {
       if (c === '"') inQuotes = true;
-      else if (c === ",") { row.push(cur); cur = ""; }
-      else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
-      else if (c === "\r") { /* skip */ }
+      else if (c === ",") {
+        row.push(cur);
+        cur = "";
+      } else if (c === "\n") {
+        row.push(cur);
+        rows.push(row);
+        row = [];
+        cur = "";
+      } else if (c === "\r") { /* skip */ }
       else cur += c;
     }
   }
-  if (cur.length || row.length) { row.push(cur); rows.push(row); }
+  if (cur.length || row.length) {
+    row.push(cur);
+    rows.push(row);
+  }
   return rows;
 }
 
@@ -170,38 +285,43 @@ function loadTsvCache(...paths: string[]): Map<string, string> {
         if (!line) continue;
         const tab = line.indexOf("\t");
         if (tab < 0) continue;
-        if (!m.has(line.slice(0, tab))) m.set(line.slice(0, tab), line.slice(tab + 1));
+        if (!m.has(line.slice(0, tab))) {
+          m.set(line.slice(0, tab), line.slice(tab + 1));
+        }
       }
     } catch { /* missing */ }
   }
   return m;
 }
 
-function appendTsvCache(path: string, entries: Record<string, string>) {
-  const enc = new TextEncoder();
-  const fh = Deno.openSync(path, { create: true, append: true });
-  for (const [k, v] of Object.entries(entries))
-    fh.writeSync(enc.encode(`${k}\t${v.replace(/[\t\n\r]/g, " ")}\n`));
-  fh.close();
-}
-
 function forEachLine(path: string, fn: (line: string) => void) {
   try {
     for (const l of Deno.readTextFileSync(path).split("\n")) if (l) fn(l);
   } catch (e) {
-    if (!(e instanceof Deno.errors.NotFound)) console.warn(`[forEachLine] WARN: ${path} — ${(e as Error).message}`);
+    if (!(e instanceof Deno.errors.NotFound)) {
+      console.warn(`[forEachLine] WARN: ${path} — ${(e as Error).message}`);
+    }
   }
 }
 
 async function streamLines(cmd: string[], onLine: (line: string) => void) {
-  const p = new Deno.Command(cmd[0], { args: cmd.slice(1), stdout: "piped", stderr: "null" }).spawn();
-  const lines = p.stdout.pipeThrough(new TextDecoderStream()).pipeThrough(new TextLineStream());
+  const p = new Deno.Command(cmd[0], {
+    args: cmd.slice(1),
+    stdout: "piped",
+    stderr: "null",
+  }).spawn();
+  const lines = p.stdout.pipeThrough(new TextDecoderStream()).pipeThrough(
+    new TextLineStream(),
+  );
   for await (const line of lines) onLine(line);
   await p.status;
 }
 
 async function sha256(s: string): Promise<Uint8Array> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  const buf = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(s),
+  );
   return new Uint8Array(buf);
 }
 
@@ -214,10 +334,13 @@ const EMBED_DIM = 768;
 // Pass 11 T1/T3: centralized junk-topic regexes.
 // Applied in stage dedupe backfill (LCSH/DBpedia ancestors) AND stage finalize.
 // Previously these existed only at finalize, letting junk leak through dedupe.
-const FRAMEWORK_RE = /-standards|-20\d\d|^sced-|^content-khan|^ccss$|^ngss$|next-generation-science|k-5-mathematics|adult-basic-education|cte-standards|curriculum|course-codes|^skills$|^content$|^learning-stage-|\d{4}-\d{4}|\d{2}-\d{2}-updates|scope-and-sequence|-sy\d{4}|-effective-starting|early-childhood-standards/;
-const WIKI_CAT_RE = /-officials-and-employees$|-by-country$|-by-region$|-by-type$|-by-year$|-by-nationality$|-introduced-in-|-established-in-|-disestablished-in-|-founded-in-|-born-in-|-died-in-|-set-in-|^people-in-|-people$|-in-history$|^wikiproject-|-templates$|^years-in-|^decades-in-|^centuries-in-|-matches$|-aircraft$|-records$|-(judges|officials|employees|members|persons)$/;
+const FRAMEWORK_RE =
+  /-standards|-20\d\d|^sced-|^content-khan|^ccss$|^ngss$|next-generation-science|k-5-mathematics|adult-basic-education|cte-standards|curriculum|course-codes|^skills$|^content$|^learning-stage-|\d{4}-\d{4}|\d{2}-\d{2}-updates|scope-and-sequence|-sy\d{4}|-effective-starting|early-childhood-standards/;
+const WIKI_CAT_RE =
+  /-officials-and-employees$|-by-country$|-by-region$|-by-type$|-by-year$|-by-nationality$|-introduced-in-|-established-in-|-disestablished-in-|-founded-in-|-born-in-|-died-in-|-set-in-|^people-in-|-people$|-in-history$|^wikiproject-|-templates$|^years-in-|^decades-in-|^centuries-in-|-matches$|-aircraft$|-records$|-(judges|officials|employees|members|persons)$/;
 const YEAR_RE = /(^|-)(19|20)\d\d(-|$)|^\d+$/;
-const isJunkTopic = (t: string): boolean => FRAMEWORK_RE.test(t) || WIKI_CAT_RE.test(t) || YEAR_RE.test(t);
+const isJunkTopic = (t: string): boolean =>
+  FRAMEWORK_RE.test(t) || WIKI_CAT_RE.test(t) || YEAR_RE.test(t);
 
 const GEN_MODEL = Deno.env.get("OLLAMA_GEN_MODEL") ?? "gpt-oss:20b";
 const CACHE_PATH = `${BUILD}/2_cache.bin`;
@@ -229,7 +352,9 @@ async function embedOne(content: string): Promise<Float32Array> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ model: EMBED_MODEL, prompt: content }),
   });
-  if (!res.ok) throw new Error(`ollama embed ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    throw new Error(`ollama embed ${res.status}: ${await res.text()}`);
+  }
   const j = await res.json();
   if (!j.embedding || j.embedding.length !== EMBED_DIM) {
     throw new Error(`bad embedding: length=${j.embedding?.length}`);
@@ -241,7 +366,9 @@ async function generateOne(prompt: string, numPredict = 120): Promise<string> {
   const res = await fetch(`${OLLAMA}/api/generate`, {
     method: "POST",
     body: JSON.stringify({
-      model: GEN_MODEL, prompt, stream: false,
+      model: GEN_MODEL,
+      prompt,
+      stream: false,
       options: { temperature: 0.1, num_predict: numPredict },
     }),
   });
@@ -250,7 +377,8 @@ async function generateOne(prompt: string, numPredict = 120): Promise<string> {
   return (j.response || "").replace(/[\t\n\r]/g, " ").trim();
 }
 
-const REFUSAL_RE = /(cannot|unable to|not familiar with|not (?:able|aware|sure)|do(?:n't| not) have|no (?:recognized |clear |standard )?(?:definition|meaning)|without (?:more |further |additional )?(?:context|information)|could you (?:provide|clarify|specify)|recognized definition|clear workplace skill)/i;
+const REFUSAL_RE =
+  /(cannot|unable to|not familiar with|not (?:able|aware|sure)|do(?:n't| not) have|no (?:recognized |clear |standard )?(?:definition|meaning)|without (?:more |further |additional )?(?:context|information)|could you (?:provide|clarify|specify)|recognized definition|clear workplace skill)/i;
 
 function cleanDef(raw: string): string {
   const trimmed = raw.trim()
@@ -261,7 +389,11 @@ function cleanDef(raw: string): string {
   if (/^skip$/i.test(trimmed)) return "";
   if (trimmed.length <= 400) return trimmed;
   const head = trimmed.slice(0, 400);
-  const lastSent = Math.max(head.lastIndexOf(". "), head.lastIndexOf("? "), head.lastIndexOf("! "));
+  const lastSent = Math.max(
+    head.lastIndexOf(". "),
+    head.lastIndexOf("? "),
+    head.lastIndexOf("! "),
+  );
   if (lastSent > 200) return head.slice(0, lastSent + 1).trim();
   const lastSpace = head.lastIndexOf(" ");
   return (lastSpace > 200 ? head.slice(0, lastSpace) : head).trim() + "…";
@@ -272,7 +404,11 @@ async function resumableOllama<T extends { id: string }>(
   cachePath: string,
   targets: T[],
   promptFn: (t: T) => string,
-  opts: { numPredict?: number; concurrency?: number; clean?: (raw: string) => string } = {},
+  opts: {
+    numPredict?: number;
+    concurrency?: number;
+    clean?: (raw: string) => string;
+  } = {},
 ): Promise<void> {
   const cache = new Set<string>();
   try {
@@ -283,11 +419,17 @@ async function resumableOllama<T extends { id: string }>(
     }
   } catch { /* fresh */ }
   const todo = targets.filter((t) => !cache.has(t.id));
-  console.log(`[${label}] targets=${targets.length} cached=${cache.size} todo=${todo.length} → ${cachePath}`);
+  console.log(
+    `[${label}] targets=${targets.length} cached=${cache.size} todo=${todo.length} → ${cachePath}`,
+  );
   if (!todo.length) return;
 
-  const concurrency = Number(Deno.env.get("OLLAMA_CONCURRENCY") ?? opts.concurrency ?? 4);
-  const limit = Deno.env.get("OLLAMA_LIMIT") ? Number(Deno.env.get("OLLAMA_LIMIT")) : todo.length;
+  const concurrency = Number(
+    Deno.env.get("OLLAMA_CONCURRENCY") ?? opts.concurrency ?? 4,
+  );
+  const limit = Deno.env.get("OLLAMA_LIMIT")
+    ? Number(Deno.env.get("OLLAMA_LIMIT"))
+    : todo.length;
   const queue = todo.slice(0, limit);
   const fh = Deno.openSync(cachePath, { create: true, append: true });
   const enc = new TextEncoder();
@@ -304,23 +446,40 @@ async function resumableOllama<T extends { id: string }>(
         if (cleaned) fh.writeSync(enc.encode(`${item.id}\t${cleaned}\n`));
       } catch (e) {
         errs++;
-        if (errs < 5) console.warn(`[${label}] err ${item.id}: ${(e as Error).message.slice(0, 80)}`);
+        if (errs < 5) {
+          console.warn(
+            `[${label}] err ${item.id}: ${(e as Error).message.slice(0, 80)}`,
+          );
+        }
       }
       done++;
       if (done % 200 === 0) {
         const dt = (performance.now() - t0) / 1000;
         const rate = done / dt;
-        console.log(`  ${done}/${queue.length + done} (${rate.toFixed(1)}/s, eta ${(queue.length / rate / 60).toFixed(1)}min, errs=${errs})`);
+        console.log(
+          `  ${done}/${queue.length + done} (${rate.toFixed(1)}/s, eta ${
+            (queue.length / rate / 60).toFixed(1)
+          }min, errs=${errs})`,
+        );
       }
     }
   }
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   fh.close();
-  console.log(`[${label}] done ${done} (errs=${errs}) in ${((performance.now() - t0) / 1000).toFixed(0)}s`);
+  console.log(
+    `[${label}] done ${done} (errs=${errs}) in ${
+      ((performance.now() - t0) / 1000).toFixed(0)
+    }s`,
+  );
 }
 
 function taggedTsvPath(): string {
-  try { Deno.statSync(`${BUILD}/3b_tagged_deduped.tsv`); return `${BUILD}/3b_tagged_deduped.tsv`; } catch { return `${BUILD}/3_tagged.tsv`; }
+  try {
+    Deno.statSync(`${BUILD}/3b_tagged_deduped.tsv`);
+    return `${BUILD}/3b_tagged_deduped.tsv`;
+  } catch {
+    return `${BUILD}/3_tagged.tsv`;
+  }
 }
 
 // Pass 10 S3-5: transitive alias collapse — follow chains to terminal canonical.
@@ -328,12 +487,15 @@ function taggedTsvPath(): string {
 function loadAliasesCollapsed(): Map<string, string> {
   const raw = new Map<string, string>();
   try {
-    const aLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n").filter((l) => l.length);
+    const aLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n")
+      .filter((l) => l.length);
     for (let i = 1; i < aLines.length; i++) {
       const [d, c] = aLines[i].split("\t");
       if (d && c) raw.set(d, c);
     }
-  } catch { return raw; }
+  } catch {
+    return raw;
+  }
   const collapsed = new Map<string, string>();
   for (const [d] of raw) {
     let cur = d;
@@ -352,35 +514,61 @@ function loadAliasesCollapsed(): Map<string, string> {
 function loadEmbCache(): Map<string, Float32Array> {
   const cache = new Map<string, Float32Array>();
   let data: Uint8Array;
-  try { data = Deno.readFileSync(CACHE_PATH); } catch { return cache; }
+  try {
+    data = Deno.readFileSync(CACHE_PATH);
+  } catch {
+    return cache;
+  }
   if (data.byteLength % CACHE_RECORD_BYTES !== 0) {
-    throw new Error(`cache ${CACHE_PATH} size ${data.byteLength} not multiple of ${CACHE_RECORD_BYTES}; delete to rebuild`);
+    throw new Error(
+      `cache ${CACHE_PATH} size ${data.byteLength} not multiple of ${CACHE_RECORD_BYTES}; delete to rebuild`,
+    );
   }
   const n = data.byteLength / CACHE_RECORD_BYTES;
   for (let i = 0; i < n; i++) {
     const off = i * CACHE_RECORD_BYTES;
-    const hash = Array.from(data.slice(off, off + 32)).map((b) => b.toString(16).padStart(2, "0")).join("");
-    const vec = new Float32Array(data.buffer.slice(data.byteOffset + off + 32, data.byteOffset + off + CACHE_RECORD_BYTES));
+    const hash = Array.from(data.slice(off, off + 32)).map((b) =>
+      b.toString(16).padStart(2, "0")
+    ).join("");
+    const vec = new Float32Array(
+      data.buffer.slice(
+        data.byteOffset + off + 32,
+        data.byteOffset + off + CACHE_RECORD_BYTES,
+      ),
+    );
     cache.set(hash, vec);
   }
   return cache;
 }
 
-function appendEmbCache(fh: Deno.FsFile, hashBytes: Uint8Array, vec: Float32Array) {
+function appendEmbCache(
+  fh: Deno.FsFile,
+  hashBytes: Uint8Array,
+  vec: Float32Array,
+) {
   const rec = new Uint8Array(CACHE_RECORD_BYTES);
   rec.set(hashBytes, 0);
   rec.set(new Uint8Array(vec.buffer, vec.byteOffset, vec.byteLength), 32);
   fh.writeSync(rec);
 }
 
-async function embedBatch(contents: string[], label: string): Promise<Float32Array[]> {
+async function embedBatch(
+  contents: string[],
+  label: string,
+): Promise<Float32Array[]> {
   const cache = loadEmbCache();
   const fh = Deno.openSync(CACHE_PATH, { create: true, append: true });
   const hashes = await Promise.all(contents.map((c) => sha256(c)));
-  const hashHex = hashes.map((h) => Array.from(h).map((b) => b.toString(16).padStart(2, "0")).join(""));
+  const hashHex = hashes.map((h) =>
+    Array.from(h).map((b) => b.toString(16).padStart(2, "0")).join("")
+  );
   const missing: number[] = [];
-  for (let i = 0; i < contents.length; i++) if (!cache.has(hashHex[i])) missing.push(i);
-  console.log(`[${label}] embedding ${contents.length} (${missing.length} new)`);
+  for (let i = 0; i < contents.length; i++) {
+    if (!cache.has(hashHex[i])) missing.push(i);
+  }
+  console.log(
+    `[${label}] embedding ${contents.length} (${missing.length} new)`,
+  );
   const concurrency = Number(Deno.env.get("EMBED_CONCURRENCY") ?? "8");
   let done = 0;
   const t0 = performance.now();
@@ -394,7 +582,9 @@ async function embedBatch(contents: string[], label: string): Promise<Float32Arr
       done++;
       if (done % 500 === 0) {
         const el = (performance.now() - t0) / 1000;
-        console.log(`  ${done}/${missing.length} (${(done / el).toFixed(1)}/s)`);
+        console.log(
+          `  ${done}/${missing.length} (${(done / el).toFixed(1)}/s)`,
+        );
       }
     }
   }
@@ -412,8 +602,14 @@ function normalize(v: Float32Array): Float32Array {
   return r;
 }
 
-function loadRawEmbeddings(): { ids: string[]; emb: Float32Array; idToEmbIdx: Map<string, number> } {
-  const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((l) => l.length);
+function loadRawEmbeddings(): {
+  ids: string[];
+  emb: Float32Array;
+  idToEmbIdx: Map<string, number>;
+} {
+  const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((
+    l,
+  ) => l.length);
   const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
   const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
   const idToEmbIdx = new Map<string, number>();
@@ -427,7 +623,10 @@ function normalizedEmbeddingsForSkills(skillIds: string[]): Float32Array {
   for (let i = 0; i < skillIds.length; i++) {
     const ei = idToEmbIdx.get(skillIds[i]);
     if (ei === undefined) throw new Error(`no embedding for ${skillIds[i]}`);
-    vecs.set(normalize(emb.subarray(ei * EMBED_DIM, (ei + 1) * EMBED_DIM)), i * EMBED_DIM);
+    vecs.set(
+      normalize(emb.subarray(ei * EMBED_DIM, (ei + 1) * EMBED_DIM)),
+      i * EMBED_DIM,
+    );
   }
   return vecs;
 }
@@ -440,8 +639,30 @@ const ONET_DESC_CACHE = `${BUILD}/1d_onet_desc.tsv`;
 const OPENSALT_DESC_CACHE_PATH = `${BUILD}/1e_opensalt_desc.tsv`;
 
 const SHORT_TECH_WHITELIST = new Set([
-  "r", "go", "c#", "c++", "ada", "apl", "awk", "css", "db2", "git", "ios", "jet",
-  "lua", "mdx", "mmx", "php", "qml", "sql", "tcl", "xml", "yml", "vim", "tex", "rsa",
+  "r",
+  "go",
+  "c#",
+  "c++",
+  "ada",
+  "apl",
+  "awk",
+  "css",
+  "db2",
+  "git",
+  "ios",
+  "jet",
+  "lua",
+  "mdx",
+  "mmx",
+  "php",
+  "qml",
+  "sql",
+  "tcl",
+  "xml",
+  "yml",
+  "vim",
+  "tex",
+  "rsa",
 ]);
 
 function stageList() {
@@ -450,22 +671,29 @@ function stageList() {
   const summarize = loadTsvCache(SUMMARIZE_CACHE);
   const onetDesc = loadTsvCache(ONET_DESC_CACHE);
   const opensaltDesc = loadTsvCache(OPENSALT_DESC_CACHE_PATH);
-  console.log(`[list] caches: infill=${infill.size} summarize=${summarize.size} onet_desc=${onetDesc.size} opensalt_desc=${opensaltDesc.size}`);
+  console.log(
+    `[list] caches: infill=${infill.size} summarize=${summarize.size} onet_desc=${onetDesc.size} opensalt_desc=${opensaltDesc.size}`,
+  );
   const raw: Skill[] = [];
 
   // ESCO
   {
     const rows = parseCsv(Deno.readTextFileSync("data/esco/skills_en.csv"));
     const h = rows[0];
-    const iLabel = h.indexOf("preferredLabel"), iDesc = h.indexOf("description"),
-          iDef = h.indexOf("definition"), iType = h.indexOf("skillType");
+    const iLabel = h.indexOf("preferredLabel"),
+      iDesc = h.indexOf("description"),
+      iDef = h.indexOf("definition"),
+      iType = h.indexOf("skillType");
     let n = 0;
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
       if (!r[iLabel]) continue;
       raw.push({
-        id: "", title: sentenceCase(r[iLabel].trim()), description: (r[iDesc] || r[iDef] || "").trim(),
-        sources: ["esco"], tags: r[iType] ? [`esco:${r[iType]}`] : ["esco"],
+        id: "",
+        title: sentenceCase(r[iLabel].trim()),
+        description: (r[iDesc] || r[iDef] || "").trim(),
+        sources: ["esco"],
+        tags: r[iType] ? [`esco:${r[iType]}`] : ["esco"],
       });
       n++;
     }
@@ -474,19 +702,25 @@ function stageList() {
 
   // O*NET Skills/Knowledge/Abilities
   {
-    const cmrRows = parseTsv(Deno.readTextFileSync("data/onet/Content Model Reference.txt"));
+    const cmrRows = parseTsv(
+      Deno.readTextFileSync("data/onet/Content Model Reference.txt"),
+    );
     const ch = cmrRows[0];
-    const ci = ch.indexOf("Element ID"), cn = ch.indexOf("Element Name"), cd = ch.indexOf("Description");
+    const ci = ch.indexOf("Element ID"),
+      cn = ch.indexOf("Element Name"),
+      cd = ch.indexOf("Description");
     const cmr = new Map<string, { name: string; desc: string }>();
     for (let i = 1; i < cmrRows.length; i++) {
       const r = cmrRows[i];
       cmr.set(r[ci], { name: r[cn], desc: r[cd] || "" });
     }
-    for (const { path, tag } of [
-      { path: "data/onet/Skills.txt", tag: "onet:skill" },
-      { path: "data/onet/Knowledge.txt", tag: "onet:knowledge" },
-      { path: "data/onet/Abilities.txt", tag: "onet:ability" },
-    ]) {
+    for (
+      const { path, tag } of [
+        { path: "data/onet/Skills.txt", tag: "onet:skill" },
+        { path: "data/onet/Knowledge.txt", tag: "onet:knowledge" },
+        { path: "data/onet/Abilities.txt", tag: "onet:ability" },
+      ]
+    ) {
       const rows = parseTsv(Deno.readTextFileSync(path));
       const idI = rows[0].indexOf("Element ID");
       const seen = new Set<string>();
@@ -497,7 +731,13 @@ function stageList() {
         seen.add(eid);
         const m = cmr.get(eid);
         if (!m) throw new Error(`ONET element ${eid} missing from CMR`);
-        raw.push({ id: "", title: m.name.trim(), description: m.desc.trim(), sources: ["onet"], tags: [tag] });
+        raw.push({
+          id: "",
+          title: m.name.trim(),
+          description: m.desc.trim(),
+          sources: ["onet"],
+          tags: [tag],
+        });
         n++;
       }
       console.log(`  ${path}: ${n}`);
@@ -506,7 +746,9 @@ function stageList() {
 
   // O*NET Tasks
   {
-    const rows = parseTsv(Deno.readTextFileSync("data/onet/Task Statements.txt"));
+    const rows = parseTsv(
+      Deno.readTextFileSync("data/onet/Task Statements.txt"),
+    );
     const h = rows[0];
     const iTask = h.indexOf("Task"), iType = h.indexOf("Task Type");
     const seen = new Set<string>();
@@ -515,11 +757,23 @@ function stageList() {
       const task = rows[i][iTask]?.trim();
       if (!task) continue;
       const taskType = rows[i][iType]?.trim() || "";
-      if (!taskType) { naDropped++; continue; }
+      if (!taskType) {
+        naDropped++;
+        continue;
+      }
       const key = task.toLowerCase();
-      if (seen.has(key)) { dup++; continue; }
+      if (seen.has(key)) {
+        dup++;
+        continue;
+      }
       seen.add(key);
-      raw.push({ id: "", title: task, description: "", sources: ["onet"], tags: ["onet:task", `onet:${taskType.toLowerCase()}`] });
+      raw.push({
+        id: "",
+        title: task,
+        description: "",
+        sources: ["onet"],
+        tags: ["onet:task", `onet:${taskType.toLowerCase()}`],
+      });
       n++;
     }
     console.log(`  onet tasks: ${n} (dup=${dup}, n/a=${naDropped})`);
@@ -537,7 +791,13 @@ function stageList() {
       const k = title.toLowerCase();
       if (seen.has(k)) continue;
       seen.add(k);
-      raw.push({ id: "", title, description: "", sources: ["onet"], tags: ["onet:dwa"] });
+      raw.push({
+        id: "",
+        title,
+        description: "",
+        sources: ["onet"],
+        tags: ["onet:dwa"],
+      });
       n++;
     }
     console.log(`  onet dwas: ${n}`);
@@ -546,11 +806,19 @@ function stageList() {
   // O*NET Tech
   {
     const TECH_MODE = Deno.env.get("ONET_TECH_MODE") ?? "hot";
-    const BRAND_RE = /^[!\d]|\b(Inc|LLC|Corp|Corporation|Ltd|GmbH|Co\.)\b|\bSoftware\s+\d/;
-    const rows = parseTsv(Deno.readTextFileSync("data/onet/Technology Skills.txt"));
+    const BRAND_RE =
+      /^[!\d]|\b(Inc|LLC|Corp|Corporation|Ltd|GmbH|Co\.)\b|\bSoftware\s+\d/;
+    const rows = parseTsv(
+      Deno.readTextFileSync("data/onet/Technology Skills.txt"),
+    );
     const h = rows[0];
-    const iEx = h.indexOf("Example"), iCat = h.indexOf("Commodity Title"), iHot = h.indexOf("Hot Technology");
-    const seen = new Map<string, { orig: string; desc: string; hot: boolean }>();
+    const iEx = h.indexOf("Example"),
+      iCat = h.indexOf("Commodity Title"),
+      iHot = h.indexOf("Hot Technology");
+    const seen = new Map<
+      string,
+      { orig: string; desc: string; hot: boolean }
+    >();
     for (let i = 1; i < rows.length; i++) {
       const ex = rows[i][iEx]?.trim();
       if (!ex) continue;
@@ -558,21 +826,33 @@ function stageList() {
       const hot = rows[i][iHot] === "Y";
       const key = ex.toLowerCase();
       const prev = seen.get(key);
-      if (!prev || (hot && !prev.hot)) seen.set(key, { orig: ex, desc: cat, hot });
+      if (!prev || (hot && !prev.hot)) {
+        seen.set(key, { orig: ex, desc: cat, hot });
+      }
     }
     let n = 0, modeDropped = 0, brandDropped = 0;
     for (const { orig, desc, hot } of seen.values()) {
-      if (TECH_MODE === "hot" && !hot) { modeDropped++; continue; }
-      if (BRAND_RE.test(orig)) { brandDropped++; continue; }
+      if (TECH_MODE === "hot" && !hot) {
+        modeDropped++;
+        continue;
+      }
+      if (BRAND_RE.test(orig)) {
+        brandDropped++;
+        continue;
+      }
       raw.push({
-        id: "", title: orig, description: desc ? `${orig} — ${desc}` : "",
+        id: "",
+        title: orig,
+        description: desc ? `${orig} — ${desc}` : "",
         sources: ["onet"],
         // Pass 12 TG5: drop onet:hot (redundant with onet:tech:* subtypes)
         tags: ["onet:tech", ...(desc ? [`onet:tech:${slugify(desc)}`] : [])],
       });
       n++;
     }
-    console.log(`  onet tech: ${n} (mode=${TECH_MODE}, mode_dropped=${modeDropped}, brand_dropped=${brandDropped})`);
+    console.log(
+      `  onet tech: ${n} (mode=${TECH_MODE}, mode_dropped=${modeDropped}, brand_dropped=${brandDropped})`,
+    );
   }
 
   // Lightcast
@@ -580,7 +860,12 @@ function stageList() {
     const j = JSON.parse(Deno.readTextFileSync("data/lightcast/skills.json"));
     let n = 0, infilled = 0, placeholdered = 0, certsDropped = 0;
     const missingIds: string[] = [];
-    const certs: { id: string; title: string; type: string; category: string }[] = [];
+    const certs: {
+      id: string;
+      title: string;
+      type: string;
+      category: string;
+    }[] = [];
     for (const s of j.data) {
       if (!s.name) continue;
       const title = s.name.trim();
@@ -597,20 +882,39 @@ function stageList() {
       if (desc && desc.trim() !== typeName) infilled++;
       else {
         desc = "";
-        if (category) { desc = `${title} — ${category}`; placeholdered++; }
+        if (category) {
+          desc = `${title} — ${category}`;
+          placeholdered++;
+        }
         tags.push("desc:placeholder");
         missingIds.push(id);
       }
-      raw.push({ id: "", title, description: desc, sources: ["lightcast"], tags });
+      raw.push({
+        id: "",
+        title,
+        description: desc,
+        sources: ["lightcast"],
+        tags,
+      });
       n++;
     }
-    Deno.writeTextFileSync(`${BUILD}/1_lightcast_missing.tsv`, missingIds.join("\n") + "\n");
+    Deno.writeTextFileSync(
+      `${BUILD}/1_lightcast_missing.tsv`,
+      missingIds.join("\n") + "\n",
+    );
     if (certs.length) {
-      const lines = ["id\ttitle\ttype\tcategory",
-        ...certs.map((c) => `${c.id}\t${c.title}\t${c.type}\t${c.category}`)];
-      Deno.writeTextFileSync(`${BUILD}/1_certifications.tsv`, lines.join("\n") + "\n");
+      const lines = [
+        "id\ttitle\ttype\tcategory",
+        ...certs.map((c) => `${c.id}\t${c.title}\t${c.type}\t${c.category}`),
+      ];
+      Deno.writeTextFileSync(
+        `${BUILD}/1_certifications.tsv`,
+        lines.join("\n") + "\n",
+      );
     }
-    console.log(`  lightcast: ${n} (infilled=${infilled}, placeholder=${placeholdered}, certs=${certsDropped})`);
+    console.log(
+      `  lightcast: ${n} (infilled=${infilled}, placeholder=${placeholdered}, certs=${certsDropped})`,
+    );
   }
 
   // Pass 16 MF1: synthesized foundations. These hub concepts (addition, fractions,
@@ -624,43 +928,99 @@ function stageList() {
       for (const fd of f.foundations || []) {
         if (!fd.id || !fd.title) continue;
         const tags = ["foundation", `foundation:${fd.id}`];
-        if (Number.isFinite(fd.grade_start)) tags.push(`grade:${fd.grade_start === 0 ? "K" : fd.grade_start === -1 ? "PK" : String(fd.grade_start)}`);
-        if (Number.isFinite(fd.grade_end) && fd.grade_end !== fd.grade_start) tags.push(`grade:${fd.grade_end === 0 ? "K" : fd.grade_end === -1 ? "PK" : String(fd.grade_end)}`);
-        raw.push({ id: "", title: fd.title, description: fd.description || "", sources: ["foundation"], tags });
+        if (Number.isFinite(fd.grade_start)) {
+          tags.push(
+            `grade:${
+              fd.grade_start === 0
+                ? "K"
+                : fd.grade_start === -1
+                ? "PK"
+                : String(fd.grade_start)
+            }`,
+          );
+        }
+        if (Number.isFinite(fd.grade_end) && fd.grade_end !== fd.grade_start) {
+          tags.push(
+            `grade:${
+              fd.grade_end === 0
+                ? "K"
+                : fd.grade_end === -1
+                ? "PK"
+                : String(fd.grade_end)
+            }`,
+          );
+        }
+        raw.push({
+          id: "",
+          title: fd.title,
+          description: fd.description || "",
+          sources: ["foundation"],
+          tags,
+        });
         n++;
       }
       console.log(`  foundations: ${n}`);
-    } catch (e) { console.warn(`[list] foundations skipped: ${(e as Error).message}`); }
+    } catch (e) {
+      console.warn(`[list] foundations skipped: ${(e as Error).message}`);
+    }
   }
 
   // OpenSALT CFItems
   {
     const SCAFFOLDING_TYPES = new Set([
-      "Grade Level","Domain","Strand","Course","Topic","Cluster",
-      "Component","Section","Module","Chapter","Unit",
+      "Grade Level",
+      "Domain",
+      "Strand",
+      "Course",
+      "Topic",
+      "Cluster",
+      "Component",
+      "Section",
+      "Module",
+      "Chapter",
+      "Unit",
       // Pass 15 OT1 extension — non-learnable framework scaffolding nodes
-      "Sub-Domain","Category","Connection","Grade","Grade Band","Quarter",
-      "Section Heading","Pathway","Subject","Dimension","Cognitive Complexity",
-      "Performance Level","Assignment","Lesson","Job Role","Employee",
-      "Team Leader","People Leader","Senior Leader",
+      "Sub-Domain",
+      "Category",
+      "Connection",
+      "Grade",
+      "Grade Band",
+      "Quarter",
+      "Section Heading",
+      "Pathway",
+      "Subject",
+      "Dimension",
+      "Cognitive Complexity",
+      "Performance Level",
+      "Assignment",
+      "Lesson",
+      "Job Role",
+      "Employee",
+      "Team Leader",
+      "People Leader",
+      "Senior Leader",
     ]);
-    const SCAFFOLDING_RE = /^(\s*)?(grade|kindergarten|pre-?k|elementary|middle school|high school|[0-9]+(st|nd|rd|th)\s+grade|unit\s+\d|chapter\s+\d|section\s+\d|module\s+\d|standard\s+\d|topic\s+\d|strand|domain)\b/i;
-    const SCAFFOLDING_SIMPLE_RE = new RegExp([
-      /^DEPRECATED\b/,
-      /^(?:Use the (?:clock|timer)|Click the|Press the|Drag the|Open the app)/,
-      /^(?:Constructed Response|Hook Activity|Background Information|Vocabulary Activity|Document Analysis)\s*:/,
-      /^(?:Sample Problem|Example)\s*:/,
-      /^Particular Topics in /,
-      /^(?:CFItemType|Course|Subject)\s*:/,
-      /\?\s*(?:Hook Activity|Background Information|Vocabulary Activity|Document Analysis|Writing)$/,
-      /\s+(?:Hook Activity|Writing Activity|Vocabulary Activity|Assessment Activity)$/,
-      // Pass 15 EC1: metadata-prefix titles
-      /^(?:Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]*/,
-      // Pass 9 R5: scaffolding/student-directive prefixes
-      /^with\s+(?:prompting|guidance|support)\b/,
-      /^by\s+(?:date|the\s+end\s+of)\b/,
-      /^(?:train|instruct|teach)\s+\w+s?\s+to\b/,
-    ].map((r) => r.source).join("|"), "i");
+    const SCAFFOLDING_RE =
+      /^(\s*)?(grade|kindergarten|pre-?k|elementary|middle school|high school|[0-9]+(st|nd|rd|th)\s+grade|unit\s+\d|chapter\s+\d|section\s+\d|module\s+\d|standard\s+\d|topic\s+\d|strand|domain)\b/i;
+    const SCAFFOLDING_SIMPLE_RE = new RegExp(
+      [
+        /^DEPRECATED\b/,
+        /^(?:Use the (?:clock|timer)|Click the|Press the|Drag the|Open the app)/,
+        /^(?:Constructed Response|Hook Activity|Background Information|Vocabulary Activity|Document Analysis)\s*:/,
+        /^(?:Sample Problem|Example)\s*:/,
+        /^Particular Topics in /,
+        /^(?:CFItemType|Course|Subject)\s*:/,
+        /\?\s*(?:Hook Activity|Background Information|Vocabulary Activity|Document Analysis|Writing)$/,
+        /\s+(?:Hook Activity|Writing Activity|Vocabulary Activity|Assessment Activity)$/,
+        // Pass 15 EC1: metadata-prefix titles
+        /^(?:Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]*/,
+        // Pass 9 R5: scaffolding/student-directive prefixes
+        /^with\s+(?:prompting|guidance|support)\b/,
+        /^by\s+(?:date|the\s+end\s+of)\b/,
+        /^(?:train|instruct|teach)\s+\w+s?\s+to\b/,
+      ].map((r) => r.source).join("|"),
+      "i",
+    );
     // Pass 15 OS1/OS2/OS3/OS5: framework-level drops
     const FRAMEWORK_BLOCKLIST = new Set([
       "pcg-georgia-s-k-12-mathematics-standards-implementation-sy2023-2024-2",
@@ -693,29 +1053,53 @@ function stageList() {
     const truncTitle = (t: string, cap: number): string => {
       if (t.length <= cap) return t;
       const head = t.slice(0, cap);
-      const lastDot = Math.max(head.lastIndexOf(". "), head.lastIndexOf("? "), head.lastIndexOf("! "));
+      const lastDot = Math.max(
+        head.lastIndexOf(". "),
+        head.lastIndexOf("? "),
+        head.lastIndexOf("! "),
+      );
       if (lastDot > cap * 0.5) return head.slice(0, lastDot + 1).trim();
       const lastSpace = head.lastIndexOf(" ");
-      return (lastSpace > cap * 0.5 ? head.slice(0, lastSpace) : head).trim() + "…";
+      return (lastSpace > cap * 0.5 ? head.slice(0, lastSpace) : head).trim() +
+        "…";
     };
-    let n = 0, scaffType = 0, scaffPat = 0, truncated = 0, perFrameDup = 0, stuPrefix = 0, pureVerb = 0, frameDropped = 0;
+    let n = 0,
+      scaffType = 0,
+      scaffPat = 0,
+      truncated = 0,
+      perFrameDup = 0,
+      stuPrefix = 0,
+      pureVerb = 0,
+      frameDropped = 0;
     for (const e of Deno.readDirSync("data/opensalt")) {
       if (!e.name.endsWith(".json") || e.name === "index.json") continue;
       const j = JSON.parse(Deno.readTextFileSync(`data/opensalt/${e.name}`));
       const items = j.CFItems || [];
       const docSlug = slugify(j.CFDocument?.title || "opensalt");
-      if (FRAMEWORK_BLOCKLIST.has(docSlug)) { frameDropped += items.length; continue; }
+      if (FRAMEWORK_BLOCKLIST.has(docSlug)) {
+        frameDropped += items.length;
+        continue;
+      }
       const isSced = docSlug.startsWith("sced-");
       const seenInFrame = new Set<string>();
       for (const it of items) {
-        if (it.CFItemType && SCAFFOLDING_TYPES.has(it.CFItemType)) { scaffType++; continue; }
+        if (it.CFItemType && SCAFFOLDING_TYPES.has(it.CFItemType)) {
+          scaffType++;
+          continue;
+        }
         const fullStmt = (it.fullStatement || "").trim();
         const abbrev = (it.abbreviatedStatement || "").trim();
         const notes = (it.notes || "").trim();
-        if (!fullStmt && !abbrev) { scaffPat++; continue; }
+        if (!fullStmt && !abbrev) {
+          scaffPat++;
+          continue;
+        }
         const CODE_RE = /^[A-Z0-9\u2013\u2014–-][\w.\u2013\u2014–-]*$/;
         let title: string, description: string;
-        if (abbrev && (!fullStmt || abbrev.length < fullStmt.length) && !(abbrev.length <= 20 && CODE_RE.test(abbrev))) {
+        if (
+          abbrev && (!fullStmt || abbrev.length < fullStmt.length) &&
+          !(abbrev.length <= 20 && CODE_RE.test(abbrev))
+        ) {
           title = abbrev;
           description = fullStmt && fullStmt !== abbrev ? fullStmt : notes;
         } else {
@@ -726,24 +1110,68 @@ function stageList() {
         const before = title;
         title = stripStudentPrefix(title);
         // Pass 15 EC2: strip question/command prefixes
-        title = title.replace(/^(Can|Could|Should|How to|What is|Why does)\s+/i, (_m, _g, _off, _s) => "");
-        if (title && title[0] === title[0].toLowerCase()) title = title[0].toUpperCase() + title.slice(1);
+        title = title.replace(
+          /^(Can|Could|Should|How to|What is|Why does)\s+/i,
+          (_m, _g, _off, _s) => "",
+        );
+        if (title && title[0] === title[0].toLowerCase()) {
+          title = title[0].toUpperCase() + title.slice(1);
+        }
         if (title !== before) stuPrefix++;
-        title = title.replace(/^(Benchmark|Standard|Indicator)\s+[\d.]+\s*:\s*/i, "").trim();
-        if (title.length > 300) { title = truncTitle(title, 300); truncated++; }
-        if (title.length <= 2 || (title.length <= 20 && CODE_RE.test(title))) { scaffPat++; continue; }
-        if (SCAFFOLDING_SIMPLE_RE.test(title)) { scaffPat++; continue; }
-        if (/^(Essential|Proficient|Advanced|Intermediate|Beginning|Emerging|Developing|Extending|Exceeding|Level)\s+[IVX0-9]+/i.test(title) && title.length < 30) { scaffPat++; continue; }
-        if (/^You\s+[a-z]/i.test(title) && title.length > 20) { scaffPat++; continue; }
+        title = title.replace(
+          /^(Benchmark|Standard|Indicator)\s+[\d.]+\s*:\s*/i,
+          "",
+        ).trim();
+        if (title.length > 300) {
+          title = truncTitle(title, 300);
+          truncated++;
+        }
+        if (title.length <= 2 || (title.length <= 20 && CODE_RE.test(title))) {
+          scaffPat++;
+          continue;
+        }
+        if (SCAFFOLDING_SIMPLE_RE.test(title)) {
+          scaffPat++;
+          continue;
+        }
+        if (
+          /^(Essential|Proficient|Advanced|Intermediate|Beginning|Emerging|Developing|Extending|Exceeding|Level)\s+[IVX0-9]+/i
+            .test(title) && title.length < 30
+        ) {
+          scaffPat++;
+          continue;
+        }
+        if (/^You\s+[a-z]/i.test(title) && title.length > 20) {
+          scaffPat++;
+          continue;
+        }
         // Pass 9 R7: extend single-token drop from <20 to <30 (kills bare acronyms like "WCAG", "GPS", "IoT", "HMI")
-        if (!/\s/.test(title) && title.length < 30) { scaffPat++; continue; }
-        if (SCAFFOLDING_RE.test(title) && title.length < 50 && !it.CFItemType) { scaffPat++; continue; }
-        if (/^(understand|recognize|demonstrate|apply|identify|know|explain|describe)\s+(the|how|that|what|why|when|where|a|an)\s/i.test(title)
-            && title.length < 60 && !it.CFItemType) { pureVerb++; continue; }
+        if (!/\s/.test(title) && title.length < 30) {
+          scaffPat++;
+          continue;
+        }
+        if (SCAFFOLDING_RE.test(title) && title.length < 50 && !it.CFItemType) {
+          scaffPat++;
+          continue;
+        }
+        if (
+          /^(understand|recognize|demonstrate|apply|identify|know|explain|describe)\s+(the|how|that|what|why|when|where|a|an)\s/i
+            .test(title) &&
+          title.length < 60 && !it.CFItemType
+        ) {
+          pureVerb++;
+          continue;
+        }
         // Pass 12 DESC3: strip pedagogical filler prefixes from description
-        description = description.replace(/^(Students?\s+(will|demonstrate)|The student|This unit|Module \d+|The course|Courses)\s[^.]*?\.\s+/i, "");
+        description = description.replace(
+          /^(Students?\s+(will|demonstrate)|The student|This unit|Module \d+|The course|Courses)\s[^.]*?\.\s+/i,
+          "",
+        );
         const localKey = title.toLowerCase();
-        if (seenInFrame.has(localKey)) { perFrameDup++; continue; }
+        if (seenInFrame.has(localKey)) {
+          perFrameDup++;
+          continue;
+        }
         seenInFrame.add(localKey);
 
         // Pass 12 TG3: drop framework:* tag (no downstream consumer; noise). Keep source marker.
@@ -752,7 +1180,7 @@ function stageList() {
         if (isSced) tags.push("sced:catalog");
         if (Array.isArray(it.educationLevel)) {
           for (const g of it.educationLevel) {
-            const gv = normGrade(String(g));  // Pass 12 TG1: KG→K etc.
+            const gv = normGrade(String(g)); // Pass 12 TG1: KG→K etc.
             if (gv) tags.push(`grade:${gv}`);
           }
         }
@@ -766,8 +1194,13 @@ function stageList() {
         // (≥4 chars AND contains uppercase/dot). Blocks single-letter humanCodingScheme
         // sub-item labels that were corrupting deriveDisplay() fallback.
         if (it.humanCodingScheme) {
-          const code = String(it.humanCodingScheme).trim().replace(/^Khan\s+/i, "");
-          if (code.length >= 4 && (/[A-Z]/.test(code) || /\./.test(code))) tags.push(`code:${code}`);
+          const code = String(it.humanCodingScheme).trim().replace(
+            /^Khan\s+/i,
+            "",
+          );
+          if (code.length >= 4 && (/[A-Z]/.test(code) || /\./.test(code))) {
+            tags.push(`code:${code}`);
+          }
         }
         if (it.CFItemType) tags.push(`opensalt:${slugify(it.CFItemType)}`);
 
@@ -775,7 +1208,9 @@ function stageList() {
         n++;
       }
     }
-    console.log(`  opensalt: ${n} (scaff_type=${scaffType}, scaff_pat=${scaffPat}, pure_verb=${pureVerb}, stu_prefix=${stuPrefix}, trunc=${truncated}, dup=${perFrameDup}, framework_dropped=${frameDropped})`);
+    console.log(
+      `  opensalt: ${n} (scaff_type=${scaffType}, scaff_pat=${scaffPat}, pure_verb=${pureVerb}, stu_prefix=${stuPrefix}, trunc=${truncated}, dup=${perFrameDup}, framework_dropped=${frameDropped})`,
+    );
   }
 
   // Normalize + denoise
@@ -784,23 +1219,40 @@ function stageList() {
     const t0 = s.title, d0 = s.description;
     s.title = normalizeText(s.title);
     s.description = normalizeText(s.description);
-    if (/^The SCED provides a series of unused codes/i.test(s.description)) s.description = "";
+    if (/^The SCED provides a series of unused codes/i.test(s.description)) {
+      s.description = "";
+    }
     if (/We took this down/i.test(s.description)) s.description = "";
-    if (/^\*\*(See |Standards (related|that))/i.test(s.description)) s.description = "";
+    if (/^\*\*(See |Standards (related|that))/i.test(s.description)) {
+      s.description = "";
+    }
     if (/^(\*\*)?Big Idea:/i.test(s.description)) s.description = "";
-    if (/^Modeling is best interpreted not as a collection/i.test(s.description)) s.description = "";
-    if (/On the state assessment, items measuring/i.test(s.description)) s.description = "";
-    if (/^Students need not use formal/i.test(s.description)) s.description = "";
-    if (/^Examples may include but are not limited/i.test(s.description)) s.description = "";
+    if (
+      /^Modeling is best interpreted not as a collection/i.test(s.description)
+    ) s.description = "";
+    if (/On the state assessment, items measuring/i.test(s.description)) {
+      s.description = "";
+    }
+    if (/^Students need not use formal/i.test(s.description)) {
+      s.description = "";
+    }
+    if (/^Examples may include but are not limited/i.test(s.description)) {
+      s.description = "";
+    }
     if (/^\d\.$/.test(s.description)) s.description = "";
-    s.description = s.description.replace(/^(Progression|Clarification|Note|Sample|Sample Problem)\s*:\s*/i, "");
+    s.description = s.description.replace(
+      /^(Progression|Clarification|Note|Sample|Sample Problem)\s*:\s*/i,
+      "",
+    );
     s.title = s.title.replace(/\s*:$/g, "");
     if (s.title !== t0 || s.description !== d0) normalized++;
     const before = s.title;
     const after = denoiseTitle(before);
     if (after && after !== before) {
       denoised++;
-      if (!s.description && (before.length - after.length) / before.length > 0.3) s.description = before;
+      if (
+        !s.description && (before.length - after.length) / before.length > 0.3
+      ) s.description = before;
       s.title = after;
     }
   }
@@ -819,21 +1271,32 @@ function stageList() {
     }
     if (!s.description && s.sources.includes("onet")) {
       const d = onetDesc.get(k);
-      if (d) { s.description = d; onetEnriched++; }
+      if (d) {
+        s.description = d;
+        onetEnriched++;
+      }
     }
     if (!s.description && s.sources.includes("opensalt")) {
       const d = opensaltDesc.get(k);
-      if (d) { s.description = d; opensaltEnriched++; }
+      if (d) {
+        s.description = d;
+        opensaltEnriched++;
+      }
     }
   }
-  console.log(`[list] applied ${summarized} summaries, ${onetEnriched} onet descs, ${opensaltEnriched} opensalt descs`);
+  console.log(
+    `[list] applied ${summarized} summaries, ${onetEnriched} onet descs, ${opensaltEnriched} opensalt descs`,
+  );
 
   // Long-title drop: anything that would overflow an 80-char slug and
   // require a hex-suffix hash is a compliance statement, not a skill.
   let longTitleDropped = 0, slugOverflowDropped = 0;
   const survivors: Skill[] = [];
   for (const s of raw) {
-    if (/^DEPRECATED\b/i.test(s.title)) { longTitleDropped++; continue; }
+    if (/^DEPRECATED\b/i.test(s.title)) {
+      longTitleDropped++;
+      continue;
+    }
     const fromOpensalt = s.sources.includes("opensalt");
     const fromOnetTask = s.tags.some((t) => t === "onet:task");
     const wc = s.title.split(/\s+/).filter(Boolean).length;
@@ -843,7 +1306,10 @@ function stageList() {
     }
     if (fromOpensalt) {
       const slugBase = decodeEntities(s.title).toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, " ").trim().replace(/\s+/g, "-").replace(/-+/g, "-");
+        .replace(/[^a-z0-9\s-]/g, " ").trim().replace(/\s+/g, "-").replace(
+          /-+/g,
+          "-",
+        );
       if (slugBase.length > 80) {
         // Still overflows post-summarize: summarization didn't fire or didn't help.
         slugOverflowDropped++;
@@ -854,35 +1320,52 @@ function stageList() {
   }
   raw.length = 0;
   raw.push(...survivors);
-  console.log(`[list] long_title_dropped=${longTitleDropped}, slug_overflow=${slugOverflowDropped}`);
+  console.log(
+    `[list] long_title_dropped=${longTitleDropped}, slug_overflow=${slugOverflowDropped}`,
+  );
 
   // Fuzzy dedupe
   const fuzzyKey = (s: string): string =>
     s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
-      .replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+      .replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(
+        /\s+/g,
+        " ",
+      );
   const TAG_CAP = 20;
   const byKey = new Map<string, Skill>();
   let collisions = 0, emptyKey = 0, emptySlug = 0;
   for (const s of raw) {
     const k = fuzzyKey(s.title);
-    if (!k) { emptyKey++; continue; }
+    if (!k) {
+      emptyKey++;
+      continue;
+    }
     const existing = byKey.get(k);
     if (existing) {
       collisions++;
-      for (const src of s.sources) if (!existing.sources.includes(src)) existing.sources.push(src);
+      for (const src of s.sources) {
+        if (!existing.sources.includes(src)) existing.sources.push(src);
+      }
       for (const t of s.tags) {
         if (existing.tags.length >= TAG_CAP) break;
         if (!existing.tags.includes(t)) existing.tags.push(t);
       }
-      if (s.description && s.description.length > existing.description.length) existing.description = s.description;
+      if (s.description && s.description.length > existing.description.length) {
+        existing.description = s.description;
+      }
     } else {
       const slug = slugify(s.title);
-      if (!slug) { emptySlug++; continue; }
+      if (!slug) {
+        emptySlug++;
+        continue;
+      }
       byKey.set(k, { ...s, id: slug });
     }
   }
   if (emptyKey + emptySlug > raw.length * 0.01) {
-    throw new Error(`list: too many drops (empty_key=${emptyKey}, empty_slug=${emptySlug})`);
+    throw new Error(
+      `list: too many drops (empty_key=${emptyKey}, empty_slug=${emptySlug})`,
+    );
   }
 
   // Resolve slug collisions
@@ -896,17 +1379,29 @@ function stageList() {
   for (const arr of bySlug.values()) {
     if (arr.length === 1) continue;
     slugCollisions += arr.length - 1;
-    arr.forEach((s, i) => { if (i > 0) s.id = `${s.id}-${i + 1}`; });
+    arr.forEach((s, i) => {
+      if (i > 0) s.id = `${s.id}-${i + 1}`;
+    });
   }
 
   const out = [...byKey.values()];
-  const clean = (c: string) => c
-    .replace(/[\u0000-\u001f\u200b-\u200f\ufeff]/g, "")
-    .replace(/[\t\n\r]/g, " ").replace(/\s+/g, " ").trim();
+  const clean = (c: string) =>
+    c
+      // deno-lint-ignore no-control-regex -- strips C0 controls (tab, newline included) from source text
+      .replace(/[\u0000-\u001f\u200b-\u200f\ufeff]/g, "")
+      .replace(/\s+/g, " ").trim();
   const tsv = ["id\ttitle\tdescription\tsources\ttags"];
   for (const s of out) {
     if (!s.id) throw new Error(`empty id: ${s.title}`);
-    tsv.push([s.id, clean(s.title), clean(s.description), s.sources.join(","), s.tags.join(",")].join("\t"));
+    tsv.push(
+      [
+        s.id,
+        clean(s.title),
+        clean(s.description),
+        s.sources.join(","),
+        s.tags.join(","),
+      ].join("\t"),
+    );
   }
   Deno.writeTextFileSync(`${BUILD}/1_skills.tsv`, tsv.join("\n") + "\n");
 
@@ -924,11 +1419,17 @@ function stageList() {
       lightcast: out.filter((s) => s.sources.includes("lightcast")).length,
       opensalt: out.filter((s) => s.sources.includes("opensalt")).length,
     },
-    title_len: { p50: pct(titleLens, 0.5), p95: pct(titleLens, 0.95), max: Math.max(...titleLens) },
+    title_len: {
+      p50: pct(titleLens, 0.5),
+      p95: pct(titleLens, 0.95),
+      max: Math.max(...titleLens),
+    },
     empty_description: out.filter((s) => !s.description).length,
   });
 
-  if (out.length < 20000) throw new Error(`list: suspiciously few rows (${out.length})`);
+  if (out.length < 20000) {
+    throw new Error(`list: suspiciously few rows (${out.length})`);
+  }
 }
 
 // ---------- stage enrich: Ollama infill + summarize + onet-desc ----------
@@ -936,7 +1437,8 @@ function stageList() {
 const OPENSALT_DESC_CACHE = `${BUILD}/1e_opensalt_desc.tsv`;
 
 async function stageEnrich() {
-  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n")
+    .filter((l) => l.length);
   const SUM_MAX = Number(Deno.env.get("SUMMARIZE_MAX_LEN") ?? "120");
   const infillTargets: { id: string; title: string }[] = [];
   const sumTargets: { id: string; title: string }[] = [];
@@ -947,72 +1449,119 @@ async function stageEnrich() {
     const c = lines[i].split("\t");
     const [id, title, desc, sources, tags] = c;
     if (title.length > SUM_MAX) sumTargets.push({ id, title });
-    if (sources.includes("lightcast") && (!desc || tags?.includes("desc:placeholder"))) {
-      if (title.length <= 3 && !SHORT_TECH_WHITELIST.has(title.toLowerCase())) { opaqueSkipped++; }
-      else infillTargets.push({ id, title });
+    if (
+      sources.includes("lightcast") &&
+      (!desc || tags?.includes("desc:placeholder"))
+    ) {
+      if (title.length <= 3 && !SHORT_TECH_WHITELIST.has(title.toLowerCase())) {
+        opaqueSkipped++;
+      } else infillTargets.push({ id, title });
     }
-    if (sources === "onet" && !desc && title.length < 120) onetTargets.push({ id, title });
+    if (sources === "onet" && !desc && title.length < 120) {
+      onetTargets.push({ id, title });
+    }
     // Pass 12 DESC1: route OpenSALT empty-desc skills through LLM infill too.
-    if (sources === "opensalt" && !desc && title.length >= 8 && title.length <= 120) {
+    if (
+      sources === "opensalt" && !desc && title.length >= 8 &&
+      title.length <= 120
+    ) {
       opensaltTargets.push({ id, title });
     }
   }
-  console.log(`[enrich] infill=${infillTargets.length} (opaque=${opaqueSkipped}), summarize=${sumTargets.length}, onet-desc=${onetTargets.length}, opensalt-desc=${opensaltTargets.length}`);
+  console.log(
+    `[enrich] infill=${infillTargets.length} (opaque=${opaqueSkipped}), summarize=${sumTargets.length}, onet-desc=${onetTargets.length}, opensalt-desc=${opensaltTargets.length}`,
+  );
 
   // Pass 12 E2: prepend context for ambiguous names (protege→ontology editor, not mentorship).
-  const LIGHTCAST_CONTEXT = "You are describing entries in a professional labor-market skills taxonomy (Lightcast). When a name is ambiguous between generic English and a specific technical tool/product/standard, assume the technical interpretation. Do not invent organization names, certifications, or statistics.";
+  const LIGHTCAST_CONTEXT =
+    "You are describing entries in a professional labor-market skills taxonomy (Lightcast). When a name is ambiguous between generic English and a specific technical tool/product/standard, assume the technical interpretation. Do not invent organization names, certifications, or statistics.";
 
-  await resumableOllama("enrich:infill", INFILL_CACHE, infillTargets,
+  await resumableOllama(
+    "enrich:infill",
+    INFILL_CACHE,
+    infillTargets,
     // Pass 12 ENR1: tone drift — ban marketing voice.
-    (t) => `${LIGHTCAST_CONTEXT}\n\nWrite a single factual sentence (≤100 chars) defining the skill without marketing language, jargon, or elaboration. Do not begin with the skill name. If unclear, output: SKIP\n\nSkill: ${t.title}\n\nDefinition:`,
+    (t) =>
+      `${LIGHTCAST_CONTEXT}\n\nWrite a single factual sentence (≤100 chars) defining the skill without marketing language, jargon, or elaboration. Do not begin with the skill name. If unclear, output: SKIP\n\nSkill: ${t.title}\n\nDefinition:`,
     // Pass 12 ENR2: raise num_predict from 120 so ~200-char outputs no longer truncate mid-word.
-    { numPredict: 200 });
+    { numPredict: 200 },
+  );
 
-  await resumableOllama("enrich:summarize", SUMMARIZE_CACHE, sumTargets,
+  await resumableOllama(
+    "enrich:summarize",
+    SUMMARIZE_CACHE,
+    sumTargets,
     // Pass 12 ENR4: extract-only constraint — don't add/assume concepts.
-    (t) => `Extract the core skill as a concise 3-7 word noun phrase. Extract only concepts present in the input; do not add or assume. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n\nStandard: ${t.title}\n\nName:`,
-    { numPredict: 60 });
+    (t) =>
+      `Extract the core skill as a concise 3-7 word noun phrase. Extract only concepts present in the input; do not add or assume. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n\nStandard: ${t.title}\n\nName:`,
+    { numPredict: 60 },
+  );
 
-  await resumableOllama("enrich:onet-desc", ONET_DESC_CACHE, onetTargets,
+  await resumableOllama(
+    "enrich:onet-desc",
+    ONET_DESC_CACHE,
+    onetTargets,
     // Pass 12 ENR3: ban "This task involves" template; cap at one sentence, <150 chars.
-    (t) => `Describe this workplace task in one sentence (<150 chars). Start with the action verb. Do not use "This task involves". No preamble, no quotation marks.\n\nTask: ${t.title}\n\nDescription:`,
-    { numPredict: 120 });
+    (t) =>
+      `Describe this workplace task in one sentence (<150 chars). Start with the action verb. Do not use "This task involves". No preamble, no quotation marks.\n\nTask: ${t.title}\n\nDescription:`,
+    { numPredict: 120 },
+  );
 
   // Pass 12 DESC1: OpenSALT standards with empty descriptions — expand to a single factual sentence.
-  await resumableOllama("enrich:opensalt-desc", OPENSALT_DESC_CACHE, opensaltTargets,
-    (t) => `Describe this K-12 academic standard in one sentence (<150 chars) that a teacher would use to explain what a student learns. Start with a noun or verb. Do not use "Students will". No preamble, no quotation marks.\n\nStandard: ${t.title}\n\nDescription:`,
-    { numPredict: 140 });
+  await resumableOllama(
+    "enrich:opensalt-desc",
+    OPENSALT_DESC_CACHE,
+    opensaltTargets,
+    (t) =>
+      `Describe this K-12 academic standard in one sentence (<150 chars) that a teacher would use to explain what a student learns. Start with a noun or verb. Do not use "Students will". No preamble, no quotation marks.\n\nStandard: ${t.title}\n\nDescription:`,
+    { numPredict: 140 },
+  );
 }
 
 // ---------- stage trees: LCSH + DBpedia SKOS broader chains ----------
 
-async function buildTree(label: string, cmd: string[], outPath: string, depth: number, junkRe?: RegExp) {
+async function buildTree(
+  label: string,
+  cmd: string[],
+  outPath: string,
+  depth: number,
+  junkRe?: RegExp,
+) {
   console.log(`[trees] ${label}: streaming…`);
   const labels = new Map<string, string>();
   const parents = new Map<string, string[]>();
   const PREF = "skos/core#prefLabel";
   const BROADER = "skos/core#broader";
-  const rxPref = /^<([^>]+)>\s+<[^>]+prefLabel>\s+"((?:[^"\\]|\\.)*)"(?:@en)?\s*\.$/;
+  const rxPref =
+    /^<([^>]+)>\s+<[^>]+prefLabel>\s+"((?:[^"\\]|\\.)*)"(?:@en)?\s*\.$/;
   const rxBroader = /^<([^>]+)>\s+<[^>]+broader>\s+<([^>]+)>\s*\.$/;
   let n = 0;
   await streamLines(cmd, (line) => {
     n++;
-    if (n % 2000000 === 0) console.log(`  ${label}: ${n} lines, ${labels.size} labels`);
+    if (n % 2000000 === 0) {
+      console.log(`  ${label}: ${n} lines, ${labels.size} labels`);
+    }
     if (line.length < 50 || line[0] !== "<") return;
     if (line.includes(PREF)) {
       const m = rxPref.exec(line);
       if (m) {
         const lbl = m[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-        if (lbl.length >= 2 && lbl.length <= 80 && !lbl.includes("--")) labels.set(m[1], lbl);
+        if (lbl.length >= 2 && lbl.length <= 80 && !lbl.includes("--")) {
+          labels.set(m[1], lbl);
+        }
       }
     } else if (line.includes(BROADER)) {
       const m = rxBroader.exec(line);
       if (m) {
-        const arr = parents.get(m[1]) ?? []; arr.push(m[2]); parents.set(m[1], arr);
+        const arr = parents.get(m[1]) ?? [];
+        arr.push(m[2]);
+        parents.set(m[1], arr);
       }
     }
   });
-  console.log(`[trees] ${label}: ${labels.size} labels, ${parents.size} with parents`);
+  console.log(
+    `[trees] ${label}: ${labels.size} labels, ${parents.size} with parents`,
+  );
 
   const slugToAncestors = new Map<string, string[]>();
   for (const [uri, lbl] of labels) {
@@ -1039,29 +1588,49 @@ async function buildTree(label: string, cmd: string[], outPath: string, depth: n
     }
     if (anc.length) slugToAncestors.set(slug, anc.slice(0, 6));
   }
-  const fh = Deno.openSync(outPath, { create: true, write: true, truncate: true });
+  const fh = Deno.openSync(outPath, {
+    create: true,
+    write: true,
+    truncate: true,
+  });
   const enc = new TextEncoder();
-  for (const [slug, anc] of slugToAncestors) fh.writeSync(enc.encode(`${slug}\t${anc.join(",")}\n`));
+  for (const [slug, anc] of slugToAncestors) {
+    fh.writeSync(enc.encode(`${slug}\t${anc.join(",")}\n`));
+  }
   fh.close();
   console.log(`[trees] ${label}: ${slugToAncestors.size} slugs → ${outPath}`);
   return slugToAncestors.size;
 }
 
 async function stageTrees() {
-  const lcsh = await buildTree("lcsh",
+  const lcsh = await buildTree(
+    "lcsh",
     ["sh", "-c", "gunzip -c data/lcsh/subjects.skosrdf.nt.gz"],
-    `${BUILD}/1j_lcsh_tree.tsv`, 4);
-  const JUNK = /_by_country$|_by_region$|_by_type$|_by_year$|_introduced_in_|_established_in_|_disestablished_in_|_founded_in_|_born_in_|_died_in_|_set_in_|^Category:People_in_|_people$|_in_history$/i;
-  const dbp = await buildTree("dbpedia",
+    `${BUILD}/1j_lcsh_tree.tsv`,
+    4,
+  );
+  const JUNK =
+    /_by_country$|_by_region$|_by_type$|_by_year$|_introduced_in_|_established_in_|_disestablished_in_|_founded_in_|_born_in_|_died_in_|_set_in_|^Category:People_in_|_people$|_in_history$/i;
+  const dbp = await buildTree(
+    "dbpedia",
     ["sh", "-c", "bzcat data/dbpedia/skos_categories_en.ttl.bz2"],
-    `${BUILD}/1k_dbpedia_tree.tsv`, 3, JUNK);
+    `${BUILD}/1k_dbpedia_tree.tsv`,
+    3,
+    JUNK,
+  );
   writeStats("trees", { lcsh_slugs: lcsh, dbpedia_slugs: dbp });
 }
 
 // ---------- stage seed-edges ----------
 
-function loadSkillIndex(): { idSet: Set<string>; titleToId: Map<string, string>; slugToId: Map<string, string> } {
-  const lines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
+function loadSkillIndex(): {
+  idSet: Set<string>;
+  titleToId: Map<string, string>;
+  slugToId: Map<string, string>;
+} {
+  const lines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) =>
+    l.length
+  );
   const idSet = new Set<string>();
   const titleToId = new Map<string, string>();
   const slugToId = new Map<string, string>();
@@ -1080,10 +1649,17 @@ function loadSkillIndex(): { idSet: Set<string>; titleToId: Map<string, string>;
 
 function resolveConcept(
   raw: string,
-  idx: { idSet: Set<string>; titleToId: Map<string, string>; slugToId: Map<string, string> },
+  idx: {
+    idSet: Set<string>;
+    titleToId: Map<string, string>;
+    slugToId: Map<string, string>;
+  },
 ): string | null {
   if (!raw) return null;
-  const cleaned = raw.replace(/_/g, " ").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  const cleaned = raw.replace(/_/g, " ").replace(/\([^)]*\)/g, " ").replace(
+    /\s+/g,
+    " ",
+  ).trim();
   if (!cleaned) return null;
   const lc = cleaned.toLowerCase();
   if (idx.titleToId.has(lc)) return idx.titleToId.get(lc)!;
@@ -1100,15 +1676,23 @@ async function stageSeedEdges() {
   console.log("[seed-edges] collecting…");
   const idx = loadSkillIndex();
   console.log(`[seed-edges] index: ${idx.idSet.size} ids`);
-  type RawPair = { rawSrc: string; rawDst: string; source: string; raw: string };
+  type RawPair = {
+    rawSrc: string;
+    rawDst: string;
+    source: string;
+    raw: string;
+  };
   const rawPairs: RawPair[] = [];
-  const perSource: Record<string, { total: number; resolved: number; holdout: number; fallback: number }> = {};
+  const perSource: Record<
+    string,
+    { total: number; resolved: number; holdout: number; fallback: number }
+  > = {};
   // Pass 10 S2-2/S2-3: normalize labels before emit.
   // AL-CPL uses "Basis_(linear_algebra)" format; Khan has parenthetical "(basic)" variants.
   const normalizeLabel = (lbl: string): string => {
     return lbl
       .replace(/_/g, " ")
-      .replace(/\s*\([^)]*\)/g, "")   // strip parentheticals
+      .replace(/\s*\([^)]*\)/g, "") // strip parentheticals
       .replace(/\s+/g, " ")
       .trim();
   };
@@ -1118,20 +1702,30 @@ async function stageSeedEdges() {
     // Pass 10 S2-1: skip self-loops at emit (~7% of quarantined pairs).
     if (!s || !d || s.toLowerCase() === d.toLowerCase()) return;
     rawPairs.push({ rawSrc: s, rawDst: d, source: src, raw: r });
-    (perSource[src] ??= { total: 0, resolved: 0, holdout: 0, fallback: 0 }).total++;
+    (perSource[src] ??= { total: 0, resolved: 0, holdout: 0, fallback: 0 })
+      .total++;
   };
 
   // Khan Academy
   {
-    const lines = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split("\n").filter((l) => l.length);
+    const lines = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split(
+      "\n",
+    ).filter((l) => l.length);
     const h = lines[0].split("\t");
-    const iName = h.indexOf("Data Name"), iPre = h.indexOf("Prereq(s)"),
-          iCode = h.indexOf("Code"), iDisp = h.indexOf("Display Name");
-    const codeToName = new Map<string, string>(), nameToDisplay = new Map<string, string>();
+    const iName = h.indexOf("Data Name"),
+      iPre = h.indexOf("Prereq(s)"),
+      iCode = h.indexOf("Code"),
+      iDisp = h.indexOf("Display Name");
+    const codeToName = new Map<string, string>(),
+      nameToDisplay = new Map<string, string>();
     for (let i = 1; i < lines.length; i++) {
       const c = lines[i].split("\t");
-      if (c[iCode] && c[iName]) codeToName.set(c[iCode].trim(), c[iName].trim());
-      if (c[iName] && c[iDisp]) nameToDisplay.set(c[iName].trim(), c[iDisp].trim());
+      if (c[iCode] && c[iName]) {
+        codeToName.set(c[iCode].trim(), c[iName].trim());
+      }
+      if (c[iName] && c[iDisp]) {
+        nameToDisplay.set(c[iName].trim(), c[iDisp].trim());
+      }
     }
     for (let i = 1; i < lines.length; i++) {
       const c = lines[i].split("\t");
@@ -1151,16 +1745,26 @@ async function stageSeedEdges() {
   // The second concept (2nd column) is a prerequisite of the first concept (1st column)."
   for (const domain of ["data_mining", "geometry", "physics", "precalculus"]) {
     let text: string;
-    try { text = Deno.readTextFileSync(`data/al-cpl/data/${domain}.preqs`); } catch { continue; }
+    try {
+      text = Deno.readTextFileSync(`data/al-cpl/data/${domain}.preqs`);
+    } catch {
+      continue;
+    }
     for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
       const [dependent, prereq] = line.split(",");
-      if (dependent && prereq) addRaw(prereq, dependent, `alcpl_${domain}`, line);
+      if (dependent && prereq) {
+        addRaw(prereq, dependent, `alcpl_${domain}`, line);
+      }
     }
   }
 
   // Metacademy — Wikipedia-mapped CSV
   {
-    const rows = parseCsv(Deno.readTextFileSync("data/metacademy/Metacademy-prerequisite-pairs-transformed-to-wikipedia.csv"));
+    const rows = parseCsv(
+      Deno.readTextFileSync(
+        "data/metacademy/Metacademy-prerequisite-pairs-transformed-to-wikipedia.csv",
+      ),
+    );
     for (let i = 1; i < rows.length; i++) {
       const pre = rows[i][0], tgt = rows[i][3];
       if (pre && tgt) addRaw(pre, tgt, "metacademy", `${pre}->${tgt}`);
@@ -1176,10 +1780,20 @@ async function stageSeedEdges() {
       for (const f of Deno.readDirSync(CONCEPTS)) {
         if (!f.isDirectory || f.name === "ANNOTATED_EXAMPLE") continue;
         dirs.push(f.name);
-        try { titleByDir.set(f.name, Deno.readTextFileSync(`${CONCEPTS}/${f.name}/title.txt`).trim()); }
-        catch { /* title missing — fall back to dir name below */ }
+        try {
+          titleByDir.set(
+            f.name,
+            Deno.readTextFileSync(`${CONCEPTS}/${f.name}/title.txt`).trim(),
+          );
+        } catch { /* title missing — fall back to dir name below */ }
       }
-    } catch (e) { console.warn(`[seed-edges] WARN: Metacademy concepts dir unavailable — ${(e as Error).message}`); }
+    } catch (e) {
+      console.warn(
+        `[seed-edges] WARN: Metacademy concepts dir unavailable — ${
+          (e as Error).message
+        }`,
+      );
+    }
     const resolveTag = (tag: string): string => {
       const t = tag.trim();
       if (!t) return "";
@@ -1195,79 +1809,199 @@ async function stageSeedEdges() {
     for (const dir of dirs) {
       const target = titleByDir.get(dir) || dir.replace(/_/g, " ");
       let deps: string;
-      try { deps = Deno.readTextFileSync(`${CONCEPTS}/${dir}/dependencies.txt`); } catch { continue; }
+      try {
+        deps = Deno.readTextFileSync(`${CONCEPTS}/${dir}/dependencies.txt`);
+      } catch {
+        continue;
+      }
       for (const line of deps.split("\n")) {
         const m = line.match(/^\s*tag:\s*(\S+)\s*$/);
         if (!m) continue;
         const pre = resolveTag(m[1]);
-        if (pre && target) { addRaw(pre, target, "metacademy_raw", `${m[1]}->${dir}`); emitted++; }
+        if (pre && target) {
+          addRaw(pre, target, "metacademy_raw", `${m[1]}->${dir}`);
+          emitted++;
+        }
       }
     }
-    console.log(`[seed-edges] metacademy_raw: ${emitted} pairs from ${dirs.length} concept dirs`);
+    console.log(
+      `[seed-edges] metacademy_raw: ${emitted} pairs from ${dirs.length} concept dirs`,
+    );
   }
 
   // MOOCCubeX
   const translations: Record<string, string> = (() => {
-    try { return JSON.parse(Deno.readTextFileSync("data/mooccubex/translations.json")); }
-    catch (e) {
-      console.warn(`[seed-edges] WARN: data/mooccubex/translations.json missing — Chinese labels will pass through untranslated (${(e as Error).message})`);
+    try {
+      return JSON.parse(
+        Deno.readTextFileSync("data/mooccubex/translations.json"),
+      );
+    } catch (e) {
+      console.warn(
+        `[seed-edges] WARN: data/mooccubex/translations.json missing — Chinese labels will pass through untranslated (${
+          (e as Error).message
+        })`,
+      );
       return {};
     }
   })();
   for (const domain of ["cs", "math", "psy"]) {
     let bytes: Uint8Array;
-    try { bytes = Deno.readFileSync(`data/mooccubex/${domain}.json.gz`); }
-    catch (e) { console.warn(`[seed-edges] WARN: skipping MOOCCubeX ${domain} — ${(e as Error).message}`); continue; }
-    const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream("gzip"));
+    try {
+      bytes = Deno.readFileSync(`data/mooccubex/${domain}.json.gz`);
+    } catch (e) {
+      console.warn(
+        `[seed-edges] WARN: skipping MOOCCubeX ${domain} — ${
+          (e as Error).message
+        }`,
+      );
+      continue;
+    }
+    const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(
+      new DecompressionStream("gzip"),
+    );
     const text = await new Response(stream).text();
     let parseFails = 0;
     for (const line of text.split("\n")) {
       if (!line) continue;
       let obj: { c1?: string; c2?: string; ground_truth?: number };
-      try { obj = JSON.parse(line); } catch { parseFails++; continue; }
+      try {
+        obj = JSON.parse(line);
+      } catch {
+        parseFails++;
+        continue;
+      }
       if (obj.ground_truth !== 1 || !obj.c1 || !obj.c2) continue;
-      addRaw(translations[obj.c1] || obj.c1, translations[obj.c2] || obj.c2,
-        `moocx_${domain}`, `${obj.c1}->${obj.c2}`);
+      addRaw(
+        translations[obj.c1] || obj.c1,
+        translations[obj.c2] || obj.c2,
+        `moocx_${domain}`,
+        `${obj.c1}->${obj.c2}`,
+      );
     }
-    if (parseFails > 0) console.warn(`[seed-edges] WARN: MOOCCubeX ${domain} dropped ${parseFails} malformed JSON lines`);
+    if (parseFails > 0) {
+      console.warn(
+        `[seed-edges] WARN: MOOCCubeX ${domain} dropped ${parseFails} malformed JSON lines`,
+      );
+    }
   }
 
   // OpenSALT precedes
   {
     for (const f of Deno.readDirSync("data/opensalt")) {
       if (!f.name.endsWith(".json") || f.name === "index.json") continue;
-      let doc: { CFItems?: { identifier: string; humanCodingScheme?: string; fullStatement?: string }[];
-        CFAssociations?: { associationType?: string; originNodeURI?: { identifier?: string; title?: string }; destinationNodeURI?: { identifier?: string; title?: string } }[] };
-      try { doc = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`)); }
-      catch (e) { console.warn(`[seed-edges] WARN: skipping OpenSALT framework ${f.name} — ${(e as Error).message}`); continue; }
+      let doc: {
+        CFItems?: {
+          identifier: string;
+          humanCodingScheme?: string;
+          fullStatement?: string;
+        }[];
+        CFAssociations?: {
+          associationType?: string;
+          originNodeURI?: { identifier?: string; title?: string };
+          destinationNodeURI?: { identifier?: string; title?: string };
+        }[];
+      };
+      try {
+        doc = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`));
+      } catch (e) {
+        console.warn(
+          `[seed-edges] WARN: skipping OpenSALT framework ${f.name} — ${
+            (e as Error).message
+          }`,
+        );
+        continue;
+      }
       const itemMap = new Map<string, { code: string; statement: string }>();
       for (const it of doc.CFItems || []) {
-        itemMap.set(it.identifier, { code: it.humanCodingScheme || "", statement: it.fullStatement || "" });
+        itemMap.set(it.identifier, {
+          code: it.humanCodingScheme || "",
+          statement: it.fullStatement || "",
+        });
       }
       for (const a of doc.CFAssociations || []) {
         if ((a.associationType || "").toLowerCase() !== "precedes") continue;
         const o = a.originNodeURI || {}, d = a.destinationNodeURI || {};
         const lbl = (x: { identifier?: string; title?: string }) => {
           if (x.identifier && itemMap.has(x.identifier)) {
-            return itemMap.get(x.identifier)!.statement || x.title || x.identifier || "";
+            return itemMap.get(x.identifier)!.statement || x.title ||
+              x.identifier || "";
           }
           return x.title || x.identifier || "";
         };
-        addRaw(lbl(o), lbl(d), "opensalt_precedes", `${o.identifier || o.title}->${d.identifier || d.title}`);
+        addRaw(
+          lbl(o),
+          lbl(d),
+          "opensalt_precedes",
+          `${o.identifier || o.title}->${d.identifier || d.title}`,
+        );
       }
     }
   }
 
   // OpenSALT within-framework grade ordering
   {
-    const STOPT = new Set(["the","a","an","of","in","on","for","to","and","or","is","at","by","with","from","as","be","that","this","which","can","will","should","about","each","student","students","their","they","them","are","use","uses"]);
-    const sigT = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length >= 4 && !STOPT.has(w)));
+    const STOPT = new Set([
+      "the",
+      "a",
+      "an",
+      "of",
+      "in",
+      "on",
+      "for",
+      "to",
+      "and",
+      "or",
+      "is",
+      "at",
+      "by",
+      "with",
+      "from",
+      "as",
+      "be",
+      "that",
+      "this",
+      "which",
+      "can",
+      "will",
+      "should",
+      "about",
+      "each",
+      "student",
+      "students",
+      "their",
+      "they",
+      "them",
+      "are",
+      "use",
+      "uses",
+    ]);
+    const sigT = (s: string) =>
+      new Set(
+        s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) =>
+          w.length >= 4 && !STOPT.has(w)
+        ),
+      );
     let emitted = 0;
     outer: for (const f of Deno.readDirSync("data/opensalt")) {
       if (!f.name.endsWith(".json") || f.name === "index.json") continue;
-      let doc: { CFItems?: { identifier: string; humanCodingScheme?: string; fullStatement?: string; educationLevel?: string[] }[] };
-      try { doc = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`)); }
-      catch (e) { console.warn(`[seed-edges] WARN: skipping OpenSALT grade ${f.name} — ${(e as Error).message}`); continue; }
+      let doc: {
+        CFItems?: {
+          identifier: string;
+          humanCodingScheme?: string;
+          fullStatement?: string;
+          educationLevel?: string[];
+        }[];
+      };
+      try {
+        doc = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`));
+      } catch (e) {
+        console.warn(
+          `[seed-edges] WARN: skipping OpenSALT grade ${f.name} — ${
+            (e as Error).message
+          }`,
+        );
+        continue;
+      }
       type Node = { label: string; grade: number; code: string };
       const nodes: Node[] = [];
       for (const it of doc.CFItems || []) {
@@ -1282,7 +2016,11 @@ async function stageSeedEdges() {
         if (!grades.length) continue;
         const minG = Math.min(...grades);
         if (minG < 0 || minG > 12) continue;
-        nodes.push({ label: it.fullStatement.slice(0, 120), grade: minG, code: it.humanCodingScheme || "" });
+        nodes.push({
+          label: it.fullStatement.slice(0, 120),
+          grade: minG,
+          code: it.humanCodingScheme || "",
+        });
       }
       if (nodes.length < 10) continue;
       nodes.sort((a, b) => a.grade - b.grade);
@@ -1294,7 +2032,11 @@ async function stageSeedEdges() {
         if (ta.size < 3) continue;
         for (let j = i + 1; j < nodes.length; j++) {
           const aj = nodes[j];
-          if (aj.grade <= ai.grade || aj.grade > ai.grade + 3) { if (aj.grade > ai.grade + 3) break; else continue; }
+          if (aj.grade <= ai.grade || aj.grade > ai.grade + 3) {
+            if (aj.grade > ai.grade + 3) {
+              break;
+            } else continue;
+          }
           const tb = sigT(aj.label);
           let overlap = 0;
           for (const t of ta) if (tb.has(t)) overlap++;
@@ -1307,7 +2049,12 @@ async function stageSeedEdges() {
           const c = perGradePair.get(k) ?? 0;
           if (c >= PAIR_CAP) continue;
           perGradePair.set(k, c + 1);
-          addRaw(ai.label, aj.label, "opensalt_grade", `${ai.code || "c"}_g${ai.grade}->${aj.code || "c"}_g${aj.grade}`);
+          addRaw(
+            ai.label,
+            aj.label,
+            "opensalt_grade",
+            `${ai.code || "c"}_g${ai.grade}->${aj.code || "c"}_g${aj.grade}`,
+          );
           emitted++;
           if (emitted > 50000) break outer;
         }
@@ -1332,7 +2079,15 @@ async function stageSeedEdges() {
         if (!preTitle) continue;
         if (e.dependent) {
           const dTitle = foundationTitles.get(e.dependent);
-          if (dTitle) { addRaw(preTitle, dTitle, "foundation", `${e.prereq}->${e.dependent}`); n++; }
+          if (dTitle) {
+            addRaw(
+              preTitle,
+              dTitle,
+              "foundation",
+              `${e.prereq}->${e.dependent}`,
+            );
+            n++;
+          }
         } else if (e.dependent_pattern) {
           const re = new RegExp(e.dependent_pattern);
           for (const id of idx.idSet) {
@@ -1345,7 +2100,11 @@ async function stageSeedEdges() {
         }
       }
       console.log(`[seed-edges] foundation wiring: ${n} pairs`);
-    } catch (e) { console.warn(`[seed-edges] foundation wiring skipped: ${(e as Error).message}`); }
+    } catch (e) {
+      console.warn(
+        `[seed-edges] foundation wiring skipped: ${(e as Error).message}`,
+      );
+    }
   }
 
   // Pass 15 K2: Khan-to-OpenSALT-Khan crosswalk via humanCodingScheme.
@@ -1369,21 +2128,50 @@ async function stageSeedEdges() {
     if (!resolveExact(p.rawSrc)) unresolved.add(p.rawSrc);
     if (!resolveExact(p.rawDst)) unresolved.add(p.rawDst);
   }
-  console.log(`[seed-edges] pass 1: ${labelToId.size - unresolved.size}/${labelToId.size} resolved exactly`);
+  console.log(
+    `[seed-edges] pass 1: ${
+      labelToId.size - unresolved.size
+    }/${labelToId.size} resolved exactly`,
+  );
 
   // Pass 2: embedding fallback
   const FALLBACK = Number(Deno.env.get("SEED_FALLBACK_COS") ?? "0.90");
-  const STOP = new Set(["the","a","an","of","in","on","for","to","and","or","is","at","by","with","from","as","be","that","this"]);
+  const STOP = new Set([
+    "the",
+    "a",
+    "an",
+    "of",
+    "in",
+    "on",
+    "for",
+    "to",
+    "and",
+    "or",
+    "is",
+    "at",
+    "by",
+    "with",
+    "from",
+    "as",
+    "be",
+    "that",
+    "this",
+  ]);
   const sigTokens = (s: string): Set<string> => {
     const out = new Set<string>();
-    for (const t of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean)) {
+    for (
+      const t of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+        .filter(Boolean)
+    ) {
       if (t.length >= 3 && !STOP.has(t)) out.add(t);
     }
     return out;
   };
   const titleById = new Map<string, string>();
   {
-    const tlines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
+    const tlines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((
+      l,
+    ) => l.length);
     for (let i = 1; i < tlines.length; i++) {
       const [id, title] = tlines[i].split("\t");
       if (id) titleById.set(id, title || "");
@@ -1395,22 +2183,35 @@ async function stageSeedEdges() {
     const { ids: embIds } = loadRawEmbeddings();
     const matIds = embIds.filter((id) => idx.idSet.has(id));
     const mat = normalizedEmbeddingsForSkills(matIds);
-    console.log(`[seed-edges] active vectors: ${matIds.length}/${embIds.length}`);
+    console.log(
+      `[seed-edges] active vectors: ${matIds.length}/${embIds.length}`,
+    );
     const labels = [...unresolved];
     const labelVecs = new Float32Array(labels.length * EMBED_DIM);
     const embedOk = new Uint8Array(labels.length);
     const CONC = 16;
-    const embedWithRetry = async (lbl: string): Promise<Float32Array | null> => {
+    const embedWithRetry = async (
+      lbl: string,
+    ): Promise<Float32Array | null> => {
       let lastErr: unknown = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        try { return await embedOne(lbl); }
-        catch (e) {
+        try {
+          return await embedOne(lbl);
+        } catch (e) {
           lastErr = e;
-          if (attempt < 2) await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+          }
         }
       }
       embedErrors++;
-      if (embedErrors <= 5) console.warn(`[seed-edges] embed failed after 3 tries: ${lbl.slice(0, 60)} — ${(lastErr as Error).message}`);
+      if (embedErrors <= 5) {
+        console.warn(
+          `[seed-edges] embed failed after 3 tries: ${lbl.slice(0, 60)} — ${
+            (lastErr as Error).message
+          }`,
+        );
+      }
       return null;
     };
     let done = 0;
@@ -1428,21 +2229,34 @@ async function stageSeedEdges() {
       done += batch.length;
       if (done % 500 === 0 || done === labels.length) {
         const rate = done / ((performance.now() - t0) / 1000);
-        console.log(`[seed-edges] embedded ${done}/${labels.length} (${rate.toFixed(1)}/s)`);
+        console.log(
+          `[seed-edges] embedded ${done}/${labels.length} (${
+            rate.toFixed(1)
+          }/s)`,
+        );
       }
     }
     let matched = 0;
     for (let li = 0; li < labels.length; li++) {
-      if (!embedOk[li]) { dropReason.set(labels[li], "embed-failed"); continue; }
+      if (!embedOk[li]) {
+        dropReason.set(labels[li], "embed-failed");
+        continue;
+      }
       const lv = labelVecs.subarray(li * EMBED_DIM, (li + 1) * EMBED_DIM);
       let best = -1, bestScore = FALLBACK;
       for (let si = 0; si < matIds.length; si++) {
         const sv = mat.subarray(si * EMBED_DIM, (si + 1) * EMBED_DIM);
         let dot = 0;
         for (let k = 0; k < EMBED_DIM; k++) dot += lv[k] * sv[k];
-        if (dot > bestScore) { bestScore = dot; best = si; }
+        if (dot > bestScore) {
+          bestScore = dot;
+          best = si;
+        }
       }
-      if (best < 0) { dropReason.set(labels[li], `below-cos-${FALLBACK}`); continue; }
+      if (best < 0) {
+        dropReason.set(labels[li], `below-cos-${FALLBACK}`);
+        continue;
+      }
       const lt = sigTokens(labels[li]);
       const tt = sigTokens(titleById.get(matIds[best]) || matIds[best]);
       let overlap = 0;
@@ -1454,13 +2268,26 @@ async function stageSeedEdges() {
       labelToId.set(labels[li], matIds[best]);
       matched++;
     }
-    console.log(`[seed-edges] fallback matched ${matched}/${labels.length} @ cos≥${FALLBACK}${embedErrors ? `, ${embedErrors} embed errors` : ""}`);
+    console.log(
+      `[seed-edges] fallback matched ${matched}/${labels.length} @ cos≥${FALLBACK}${
+        embedErrors ? `, ${embedErrors} embed errors` : ""
+      }`,
+    );
   }
 
   // Pass 3: emit (and quarantine unresolved)
-  type Edge = { src: string; dst: string; source: string; confidence: number; holdout: boolean; fallback: boolean };
+  type Edge = {
+    src: string;
+    dst: string;
+    source: string;
+    confidence: number;
+    holdout: boolean;
+    fallback: boolean;
+  };
   const edges: Edge[] = [];
-  const quarantine: string[] = ["rawSrc\trawDst\tsource\traw\tsrc_reason\tdst_reason"];
+  const quarantine: string[] = [
+    "rawSrc\trawDst\tsource\traw\tsrc_reason\tdst_reason",
+  ];
   const dropPerSource: Record<string, number> = {};
   const labelReason = (lbl: string): string => {
     if (labelToId.get(lbl)) return "ok";
@@ -1474,21 +2301,41 @@ async function stageSeedEdges() {
     if (!src || !dst || src === dst) {
       const reason = src === dst && src ? "self-loop" : "unresolved";
       dropPerSource[p.source] = (dropPerSource[p.source] ?? 0) + 1;
-      quarantine.push(`${p.rawSrc}\t${p.rawDst}\t${p.source}\t${p.raw}\t${src ? "ok" : labelReason(p.rawSrc)}\t${dst ? "ok" : labelReason(p.rawDst)}${reason === "self-loop" ? " (self-loop)" : ""}`);
+      quarantine.push(
+        `${p.rawSrc}\t${p.rawDst}\t${p.source}\t${p.raw}\t${
+          src ? "ok" : labelReason(p.rawSrc)
+        }\t${dst ? "ok" : labelReason(p.rawDst)}${
+          reason === "self-loop" ? " (self-loop)" : ""
+        }`,
+      );
       continue;
     }
     const srcExact = resolveConcept(p.rawSrc, idx) === src;
     const dstExact = resolveConcept(p.rawDst, idx) === dst;
     const fallback = !(srcExact && dstExact);
     const holdout = (h32(p.source + "|" + p.raw) % 5) === 0;
-    edges.push({ src, dst, source: p.source, confidence: fallback ? 0.85 : 1.0, holdout, fallback });
+    edges.push({
+      src,
+      dst,
+      source: p.source,
+      confidence: fallback ? 0.85 : 1.0,
+      holdout,
+      fallback,
+    });
     const s = perSource[p.source];
     s.resolved++;
     if (holdout) s.holdout++;
     if (fallback) s.fallback++;
   }
-  Deno.writeTextFileSync(`${BUILD}/1e_unresolved.tsv`, quarantine.join("\n") + "\n");
-  console.log(`[seed-edges] quarantine: ${quarantine.length - 1} pairs dropped, written to build/1e_unresolved.tsv`);
+  Deno.writeTextFileSync(
+    `${BUILD}/1e_unresolved.tsv`,
+    quarantine.join("\n") + "\n",
+  );
+  console.log(
+    `[seed-edges] quarantine: ${
+      quarantine.length - 1
+    } pairs dropped, written to build/1e_unresolved.tsv`,
+  );
   const seen = new Map<string, Edge>();
   for (const e of edges) {
     const k = `${e.src}\t${e.dst}\t${e.source}`;
@@ -1497,7 +2344,13 @@ async function stageSeedEdges() {
   }
   const uniq = [...seen.values()];
   const out = ["src_id\tdst_id\tsource\tconfidence\tholdout\tfallback"];
-  for (const e of uniq) out.push(`${e.src}\t${e.dst}\t${e.source}\t${e.confidence.toFixed(2)}\t${e.holdout ? "1" : "0"}\t${e.fallback ? "1" : "0"}`);
+  for (const e of uniq) {
+    out.push(
+      `${e.src}\t${e.dst}\t${e.source}\t${e.confidence.toFixed(2)}\t${
+        e.holdout ? "1" : "0"
+      }\t${e.fallback ? "1" : "0"}`,
+    );
+  }
   Deno.writeTextFileSync(`${BUILD}/1e_seed_edges.tsv`, out.join("\n") + "\n");
 
   writeStats("seed-edges", {
@@ -1522,7 +2375,9 @@ function buildEmbedContent(title: string, desc: string, tags: string): string {
   const base = desc ? `${title}\n${desc}` : title;
   if (base.length >= 40) return base;
   const tagHint = tags ? tags.replace(/,/g, " ").slice(0, 300) : "";
-  return tagHint ? `${base}. ${tagHint}` : `${base}. Skill: ${title}. ${title}.`;
+  return tagHint
+    ? `${base}. ${tagHint}`
+    : `${base}. Skill: ${title}. ${title}.`;
 }
 
 function paddedEmbedContent(title: string, desc: string, tags: string): string {
@@ -1538,8 +2393,15 @@ function embedSignature(v: Float32Array): string {
 }
 
 async function stageEmbed() {
-  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
-  const skills: { id: string; title: string; description: string; tags: string; content: string }[] = [];
+  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n")
+    .filter((l) => l.length);
+  const skills: {
+    id: string;
+    title: string;
+    description: string;
+    tags: string;
+    content: string;
+  }[] = [];
   for (let i = 1; i < lines.length; i++) {
     const c = lines[i].split("\t");
     skills.push({
@@ -1551,7 +2413,10 @@ async function stageEmbed() {
     });
   }
   if (Deno.env.get("SKILL_LIMIT")) {
-    skills.length = Math.min(skills.length, Number(Deno.env.get("SKILL_LIMIT")));
+    skills.length = Math.min(
+      skills.length,
+      Number(Deno.env.get("SKILL_LIMIT")),
+    );
   }
   console.log(`[embed] ${skills.length} skills`);
 
@@ -1564,10 +2429,15 @@ async function stageEmbed() {
   for (let i = 0; i < vecs.length; i++) {
     const sig = embedSignature(vecs[i]);
     const arr = bucket.get(sig);
-    if (arr) arr.push(i); else bucket.set(sig, [i]);
+    if (arr) arr.push(i);
+    else bucket.set(sig, [i]);
   }
-  const dupGroupsInitial = [...bucket.values()].filter((idxs) => idxs.length > 5);
-  console.log(`[embed] ${dupGroupsInitial.length} duplicate-vector groups before retry`);
+  const dupGroupsInitial = [...bucket.values()].filter((idxs) =>
+    idxs.length > 5
+  );
+  console.log(
+    `[embed] ${dupGroupsInitial.length} duplicate-vector groups before retry`,
+  );
 
   let retried = 0;
   if (dupGroupsInitial.length > 0) {
@@ -1576,11 +2446,19 @@ async function stageEmbed() {
     for (const idxs of dupGroupsInitial) {
       for (const i of idxs) {
         retryIdxs.push(i);
-        retryContents.push(paddedEmbedContent(skills[i].title, skills[i].description, skills[i].tags));
+        retryContents.push(
+          paddedEmbedContent(
+            skills[i].title,
+            skills[i].description,
+            skills[i].tags,
+          ),
+        );
       }
     }
     const retriedVecs = await embedBatch(retryContents, "embed-retry");
-    for (let k = 0; k < retryIdxs.length; k++) vecs[retryIdxs[k]] = retriedVecs[k];
+    for (let k = 0; k < retryIdxs.length; k++) {
+      vecs[retryIdxs[k]] = retriedVecs[k];
+    }
     retried = retryIdxs.length;
   }
 
@@ -1589,16 +2467,21 @@ async function stageEmbed() {
   for (let i = 0; i < vecs.length; i++) {
     const sig = embedSignature(vecs[i]);
     const arr = bucket.get(sig);
-    if (arr) arr.push(i); else bucket.set(sig, [i]);
+    if (arr) arr.push(i);
+    else bucket.set(sig, [i]);
   }
   const dupGroupsFinal = [...bucket.values()].filter((idxs) => idxs.length > 5);
   const pathological: string[] = [];
-  for (const idxs of dupGroupsFinal) for (const i of idxs) pathological.push(skills[i].id);
+  for (const idxs of dupGroupsFinal) {
+    for (const i of idxs) pathological.push(skills[i].id);
+  }
   Deno.writeTextFileSync(
     `${BUILD}/2_pathological.tsv`,
     pathological.length ? pathological.join("\n") + "\n" : "",
   );
-  console.log(`[embed] ${dupGroupsFinal.length} duplicate-vector groups after retry; ${pathological.length} pathological skills`);
+  console.log(
+    `[embed] ${dupGroupsFinal.length} duplicate-vector groups after retry; ${pathological.length} pathological skills`,
+  );
 
   const bin = new Float32Array(skills.length * EMBED_DIM);
   let nans = 0;
@@ -1608,7 +2491,10 @@ async function stageEmbed() {
     bin.set(v, i * EMBED_DIM);
   }
   Deno.writeFileSync(`${BUILD}/2_embeddings.bin`, new Uint8Array(bin.buffer));
-  Deno.writeTextFileSync(`${BUILD}/2_ids.tsv`, skills.map((s) => s.id).join("\n") + "\n");
+  Deno.writeTextFileSync(
+    `${BUILD}/2_ids.tsv`,
+    skills.map((s) => s.id).join("\n") + "\n",
+  );
 
   writeStats(2, {
     total: skills.length,
@@ -1637,22 +2523,32 @@ function parseOccupationRefs(): { label: string; desc: string }[] {
     refs.push({ label, desc: desc.trim() });
   };
   const esco = parseCsv(Deno.readTextFileSync("data/esco/occupations_en.csv"));
-  const eh = esco[0], el = eh.indexOf("preferredLabel"), ed = eh.indexOf("description");
-  for (let i = 1; i < esco.length; i++) push(esco[i][el] || "", esco[i][ed] || "");
+  const eh = esco[0],
+    el = eh.indexOf("preferredLabel"),
+    ed = eh.indexOf("description");
+  for (let i = 1; i < esco.length; i++) {
+    push(esco[i][el] || "", esco[i][ed] || "");
+  }
   const onet = parseTsv(Deno.readTextFileSync("data/onet/Occupation Data.txt"));
   const oh = onet[0], ot = oh.indexOf("Title"), od = oh.indexOf("Description");
-  for (let i = 1; i < onet.length; i++) push(onet[i][ot] || "", onet[i][od] || "");
+  for (let i = 1; i < onet.length; i++) {
+    push(onet[i][ot] || "", onet[i][od] || "");
+  }
   console.log(`[tag] occupation refs: ${refs.length}`);
   return refs;
 }
 
 // Drop geographic/temporal/biographical categories — they provide zero signal for skills
 // and cause false positives like polyline → "railway-lines-in-europe".
-const TOPIC_BADCAT2 = /(\b(in|of|from|by|for)\b\s+(Europe|Asia|Africa|America|Oceania|Antarctica|England|France|Germany|China|Japan|India|Russia|USSR|USA|Britain|Scotland|Ireland|Italy|Spain|Canada|Australia|Mexico|Brazil|Argentina|Iran|Iraq|Egypt|Turkey|Greece))|(\bcentury|centuries|\bdecade|\b\d{4}s\b|\b\d{3,4}\s*(BC|AD|BCE|CE)\b)|(\bpeople\b|\bbiography|\bbiographies|\bdeaths\b|\bbirths\b|\bmarriage|\bfamily\b)|(\bdisasters|\bincidents|\baccidents|\bwars\b|\bbattles|\belections)|^(19|20)\d{2}s?\b|^\d{1,2}(st|nd|rd|th)\s*(century|millennium)/i;
+const TOPIC_BADCAT2 =
+  /(\b(in|of|from|by|for)\b\s+(Europe|Asia|Africa|America|Oceania|Antarctica|England|France|Germany|China|Japan|India|Russia|USSR|USA|Britain|Scotland|Ireland|Italy|Spain|Canada|Australia|Mexico|Brazil|Argentina|Iran|Iraq|Egypt|Turkey|Greece))|(\bcentury|centuries|\bdecade|\b\d{4}s\b|\b\d{3,4}\s*(BC|AD|BCE|CE)\b)|(\bpeople\b|\bbiography|\bbiographies|\bdeaths\b|\bbirths\b|\bmarriage|\bfamily\b)|(\bdisasters|\bincidents|\baccidents|\bwars\b|\bbattles|\belections)|^(19|20)\d{2}s?\b|^\d{1,2}(st|nd|rd|th)\s*(century|millennium)/i;
 
-async function parseTopicRefs(perSource: number): Promise<{ label: string; desc: string }[]> {
-  const BADCAT = /^(Wikipedia|Lists of|List of|Categories |Redirects|Articles |Stubs|Templates|Commons|Set indices)/i;
-  const topSource = async (name: string, cmd: string[]) => {
+async function parseTopicRefs(
+  perSource: number,
+): Promise<{ label: string; desc: string }[]> {
+  const BADCAT =
+    /^(Wikipedia|Lists of|List of|Categories |Redirects|Articles |Stubs|Templates|Commons|Set indices)/i;
+  const topSource = async (cmd: string[]) => {
     const BROADER = "skos/core#broader", PREF = "skos/core#prefLabel";
     const inDeg = new Map<string, number>();
     await streamLines(cmd, (line) => {
@@ -1661,14 +2557,19 @@ async function parseTopicRefs(perSource: number): Promise<{ label: string; desc:
       const m = line.match(/^<[^>]+>\s+<[^>]+>\s+<([^>]+)>\s*\.$/);
       if (m) inDeg.set(m[1], (inDeg.get(m[1]) ?? 0) + 1);
     });
-    const top = [...inDeg.entries()].sort((a, b) => b[1] - a[1]).slice(0, perSource * 5);
+    const top = [...inDeg.entries()].sort((a, b) => b[1] - a[1]).slice(
+      0,
+      perSource * 5,
+    );
     const topSet = new Map(top.map(([uri, d]) => [uri, d]));
     inDeg.clear();
     const labels = new Map<string, string>();
     await streamLines(cmd, (line) => {
       if (line.length < 40 || line[0] === "#") return;
       if (!line.includes(PREF)) return;
-      const m = line.match(/^<([^>]+)>\s+<[^>]+>\s+"((?:[^"\\]|\\.)*)"(?:@en)?\s*\.$/);
+      const m = line.match(
+        /^<([^>]+)>\s+<[^>]+>\s+"((?:[^"\\]|\\.)*)"(?:@en)?\s*\.$/,
+      );
       if (!m || !topSet.has(m[1])) return;
       const lbl = m[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
       if (lbl.length < 2 || lbl.length > 50) return;
@@ -1679,12 +2580,22 @@ async function parseTopicRefs(perSource: number): Promise<{ label: string; desc:
       labels.set(m[1], lbl);
     });
     const scored: { uri: string; label: string; inDeg: number }[] = [];
-    for (const [uri, label] of labels) scored.push({ uri, label, inDeg: topSet.get(uri)! });
+    for (const [uri, label] of labels) {
+      scored.push({ uri, label, inDeg: topSet.get(uri)! });
+    }
     scored.sort((a, b) => b.inDeg - a.inDeg);
     return scored.slice(0, perSource);
   };
-  const tL = await topSource("lcsh", ["sh", "-c", "gunzip -c data/lcsh/subjects.skosrdf.nt.gz"]);
-  const tD = await topSource("dbpedia", ["sh", "-c", "bzcat data/dbpedia/skos_categories_en.ttl.bz2"]);
+  const tL = await topSource([
+    "sh",
+    "-c",
+    "gunzip -c data/lcsh/subjects.skosrdf.nt.gz",
+  ]);
+  const tD = await topSource([
+    "sh",
+    "-c",
+    "bzcat data/dbpedia/skos_categories_en.ttl.bz2",
+  ]);
   const refs: { label: string; desc: string }[] = [];
   const seen = new Set<string>();
   for (const r of [...tL, ...tD]) {
@@ -1698,18 +2609,34 @@ async function parseTopicRefs(perSource: number): Promise<{ label: string; desc:
 }
 
 function parseEscoSkillTopics(): Map<string, string[]> {
-  const rows = parseCsv(Deno.readTextFileSync("data/esco/broaderRelationsSkillPillar_en.csv"));
+  const rows = parseCsv(
+    Deno.readTextFileSync("data/esco/broaderRelationsSkillPillar_en.csv"),
+  );
   const h = rows[0];
-  const iC = h.indexOf("conceptLabel"), iCu = h.indexOf("conceptUri"),
-        iB = h.indexOf("broaderLabel"), iBu = h.indexOf("broaderUri");
-  const label = new Map<string, string>(), parents = new Map<string, string[]>();
+  const iC = h.indexOf("conceptLabel"),
+    iCu = h.indexOf("conceptUri"),
+    iB = h.indexOf("broaderLabel"),
+    iBu = h.indexOf("broaderUri");
+  const label = new Map<string, string>(),
+    parents = new Map<string, string[]>();
   for (let i = 1; i < rows.length; i++) {
-    const cU = rows[i][iCu], cL = rows[i][iC], pU = rows[i][iBu], pL = rows[i][iB];
+    const cU = rows[i][iCu],
+      cL = rows[i][iC],
+      pU = rows[i][iBu],
+      pL = rows[i][iB];
     if (cU && cL) label.set(cU, cL);
     if (pU && pL) label.set(pU, pL);
-    if (cU && pU) { const arr = parents.get(cU) ?? []; arr.push(pU); parents.set(cU, arr); }
+    if (cU && pU) {
+      const arr = parents.get(cU) ?? [];
+      arr.push(pU);
+      parents.set(cU, arr);
+    }
   }
-  const GENERIC = new Set(["knowledge", "skill", "generic programmes and qualifications"]);
+  const GENERIC = new Set([
+    "knowledge",
+    "skill",
+    "generic programmes and qualifications",
+  ]);
   const out = new Map<string, string[]>();
   for (const [uri, lbl] of label) {
     const topics: string[] = [];
@@ -1721,7 +2648,9 @@ function parseEscoSkillTopics(): Map<string, string[]> {
       if (!ps || !ps.length) break;
       for (const p of ps) {
         const pl = label.get(p);
-        if (pl && !GENERIC.has(pl.toLowerCase()) && topics.indexOf(pl) < 0) topics.push(pl);
+        if (pl && !GENERIC.has(pl.toLowerCase()) && topics.indexOf(pl) < 0) {
+          topics.push(pl);
+        }
       }
       cursor = ps[0];
     }
@@ -1732,17 +2661,28 @@ function parseEscoSkillTopics(): Map<string, string[]> {
 
 function parseOnetSkillOccupations(): Map<string, string[]> {
   const occTitles = new Map<string, string>();
-  for (const r of parseTsv(Deno.readTextFileSync("data/onet/Occupation Data.txt")).slice(1))
+  for (
+    const r of parseTsv(Deno.readTextFileSync("data/onet/Occupation Data.txt"))
+      .slice(1)
+  ) {
     if (r[0] && r[1]) occTitles.set(r[0], r[1]);
+  }
   const cmr = new Map<string, string>();
-  for (const r of parseTsv(Deno.readTextFileSync("data/onet/Content Model Reference.txt")).slice(1))
+  for (
+    const r of parseTsv(
+      Deno.readTextFileSync("data/onet/Content Model Reference.txt"),
+    ).slice(1)
+  ) {
     if (r[0] && r[1]) cmr.set(r[0], r[1]);
+  }
   const bySkill = new Map<string, Map<string, number>>();
   for (const fname of ["Skills.txt", "Knowledge.txt", "Abilities.txt"]) {
     const rows = parseTsv(Deno.readTextFileSync(`data/onet/${fname}`));
     const h = rows[0];
-    const iS = h.indexOf("O*NET-SOC Code"), iE = h.indexOf("Element ID"),
-          iSc = h.indexOf("Scale ID"), iV = h.indexOf("Data Value");
+    const iS = h.indexOf("O*NET-SOC Code"),
+      iE = h.indexOf("Element ID"),
+      iSc = h.indexOf("Scale ID"),
+      iV = h.indexOf("Data Value");
     for (let i = 1; i < rows.length; i++) {
       if (rows[i][iSc] !== "IM") continue;
       const name = cmr.get(rows[i][iE]);
@@ -1752,21 +2692,31 @@ function parseOnetSkillOccupations(): Map<string, string[]> {
       if (!Number.isFinite(v)) continue;
       const key = slugify(name);
       let m = bySkill.get(key);
-      if (!m) { m = new Map(); bySkill.set(key, m); }
+      if (!m) {
+        m = new Map();
+        bySkill.set(key, m);
+      }
       m.set(occ, Math.max(m.get(occ) ?? 0, v));
     }
   }
   const out = new Map<string, string[]>();
   for (const [key, m] of bySkill) {
-    out.set(key, [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k));
+    out.set(
+      key,
+      [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k),
+    );
   }
   return out;
 }
 
 function parseEscoSkillOccupations(): Map<string, string[]> {
-  const rows = parseCsv(Deno.readTextFileSync("data/esco/occupationSkillRelations_en.csv"));
+  const rows = parseCsv(
+    Deno.readTextFileSync("data/esco/occupationSkillRelations_en.csv"),
+  );
   const h = rows[0];
-  const iO = h.indexOf("occupationLabel"), iS = h.indexOf("skillLabel"), iT = h.indexOf("relationType");
+  const iO = h.indexOf("occupationLabel"),
+    iS = h.indexOf("skillLabel"),
+    iT = h.indexOf("relationType");
   const m = new Map<string, Set<string>>();
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][iT] !== "essential") continue;
@@ -1774,7 +2724,10 @@ function parseEscoSkillOccupations(): Map<string, string[]> {
     const occ = rows[i][iO];
     if (!slug || !occ) continue;
     let s = m.get(slug);
-    if (!s) { s = new Set(); m.set(slug, s); }
+    if (!s) {
+      s = new Set();
+      m.set(slug, s);
+    }
     s.add(occ);
   }
   const out = new Map<string, string[]>();
@@ -1783,27 +2736,44 @@ function parseEscoSkillOccupations(): Map<string, string[]> {
 }
 
 async function stageTag() {
-  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n")
+    .filter((l) => l.length);
   const skills = lines.slice(1).map((l) => {
     const c = l.split("\t");
-    return { id: c[0], title: c[1], description: c[2], sources: c[3], tags: c[4] };
+    return {
+      id: c[0],
+      title: c[1],
+      description: c[2],
+      sources: c[3],
+      tags: c[4],
+    };
   });
   const DIM = EMBED_DIM;
   const skillVecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
 
   const occRefs = parseOccupationRefs();
-  const topicRefs = await parseTopicRefs(Number(Deno.env.get("TOPIC_PER_SOURCE") ?? "5000"));
+  const topicRefs = await parseTopicRefs(
+    Number(Deno.env.get("TOPIC_PER_SOURCE") ?? "5000"),
+  );
   // Retroactively filter topic refs by geographic/temporal patterns. Their embeddings are
   // already in the cache, so we keep them in-place but mark them as "poisoned" so they
   // are never matched.
   const topicPoisoned = new Uint8Array(topicRefs.length);
   let topicDropped = 0;
   for (let i = 0; i < topicRefs.length; i++) {
-    if (TOPIC_BADCAT2.test(topicRefs[i].label)) { topicPoisoned[i] = 1; topicDropped++; }
+    if (TOPIC_BADCAT2.test(topicRefs[i].label)) {
+      topicPoisoned[i] = 1;
+      topicDropped++;
+    }
   }
-  console.log(`[tag] poisoned ${topicDropped}/${topicRefs.length} topic refs (geographic/temporal)`);
+  console.log(
+    `[tag] poisoned ${topicDropped}/${topicRefs.length} topic refs (geographic/temporal)`,
+  );
   const occVecs = await embedBatch(occRefs.map((r) => r.label), "tag:occ");
-  const topicVecs = await embedBatch(topicRefs.map((r) => r.label), "tag:topic");
+  const topicVecs = await embedBatch(
+    topicRefs.map((r) => r.label),
+    "tag:topic",
+  );
 
   const packNorm = (vecs: Float32Array[]) => {
     const buf = new Float32Array(vecs.length * DIM);
@@ -1821,21 +2791,90 @@ async function stageTag() {
   const LEXICAL_GUARD = Deno.env.get("TAG_LEXICAL_GUARD") !== "0";
 
   const TAG_STOP = new Set([
-    "the","a","an","and","or","of","to","for","in","on","at","by","with","from","as","is","are","be",
-    "that","this","these","those","their","its","into","such","than","then","also","over","under",
-    "about","above","below","between","through","during","after","before","because","while","other","which",
-    "where","when","what","each","both","some","most","many","much","more","less","only","very","just",
-    "can","should","would","could","may","might","will","shall","does","did","done","has","have","had",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "to",
+    "for",
+    "in",
+    "on",
+    "at",
+    "by",
+    "with",
+    "from",
+    "as",
+    "is",
+    "are",
+    "be",
+    "that",
+    "this",
+    "these",
+    "those",
+    "their",
+    "its",
+    "into",
+    "such",
+    "than",
+    "then",
+    "also",
+    "over",
+    "under",
+    "about",
+    "above",
+    "below",
+    "between",
+    "through",
+    "during",
+    "after",
+    "before",
+    "because",
+    "while",
+    "other",
+    "which",
+    "where",
+    "when",
+    "what",
+    "each",
+    "both",
+    "some",
+    "most",
+    "many",
+    "much",
+    "more",
+    "less",
+    "only",
+    "very",
+    "just",
+    "can",
+    "should",
+    "would",
+    "could",
+    "may",
+    "might",
+    "will",
+    "shall",
+    "does",
+    "did",
+    "done",
+    "has",
+    "have",
+    "had",
   ]);
   const tokenize = (s: string): Set<string> => {
     const out = new Set<string>();
-    const norm = s.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(Boolean);
+    const norm = s.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/)
+      .filter(Boolean);
     for (const w of norm) {
       if (w.length < 4) continue;
       if (TAG_STOP.has(w)) continue;
       out.add(w);
       // singular/plural normalization: add stem without trailing s
-      if (w.length >= 5 && w.endsWith("s") && !w.endsWith("ss")) out.add(w.slice(0, -1));
+      if (w.length >= 5 && w.endsWith("s") && !w.endsWith("ss")) {
+        out.add(w.slice(0, -1));
+      }
     }
     return out;
   };
@@ -1843,11 +2882,21 @@ async function stageTag() {
   // Build a corpus-frequency table so "common" words (line, data, system, device…) don't
   // satisfy the lexical guard on their own.
   const docFreq = new Map<string, number>();
-  for (const toks of skillToks) for (const t of toks) docFreq.set(t, (docFreq.get(t) ?? 0) + 1);
+  for (const toks of skillToks) {
+    for (const t of toks) docFreq.set(t, (docFreq.get(t) ?? 0) + 1);
+  }
   const COMMON_CUTOFF = Math.max(500, Math.floor(skills.length * 0.01));
-  const commonWord = (t: string): boolean => (docFreq.get(t) ?? 0) > COMMON_CUTOFF;
+  const commonWord = (t: string): boolean =>
+    (docFreq.get(t) ?? 0) > COMMON_CUTOFF;
 
-  const oversamplePass = (refMat: Float32Array, refCount: number, refs: { label: string }[], keep: number, th: number, poisoned?: Uint8Array) => {
+  const oversamplePass = (
+    refMat: Float32Array,
+    refCount: number,
+    refs: { label: string }[],
+    keep: number,
+    th: number,
+    poisoned?: Uint8Array,
+  ) => {
     const out: { idx: number; score: number }[][] = new Array(skills.length);
     const refHits = new Int32Array(refCount);
     const refToks = refs.map((r) => tokenize(r.label));
@@ -1869,7 +2918,9 @@ async function stageTag() {
         }
         let s = 0;
         const rOff = r * DIM;
-        for (let d = 0; d < DIM; d++) s += skillVecs[sOff + d] * refMat[rOff + d];
+        for (let d = 0; d < DIM; d++) {
+          s += skillVecs[sOff + d] * refMat[rOff + d];
+        }
         if (s < th) continue;
         if (top.length < keep) {
           top.push({ idx: r, score: s });
@@ -1887,7 +2938,11 @@ async function stageTag() {
     return { out, refHits };
   };
 
-  const pruneMask = (refHits: Int32Array, refs: { label: string }[], label: string): Uint8Array => {
+  const pruneMask = (
+    refHits: Int32Array,
+    refs: { label: string }[],
+    label: string,
+  ): Uint8Array => {
     const maxHits = Math.floor(skills.length * IDF_MAX);
     const mask = new Uint8Array(refs.length);
     let dropped = 0;
@@ -1895,16 +2950,35 @@ async function stageTag() {
       if (refHits[r] > maxHits) dropped++;
       else mask[r] = 1;
     }
-    console.log(`[tag] ${label}: pruned ${dropped}/${refs.length} refs (>${maxHits} hits)`);
+    console.log(
+      `[tag] ${label}: pruned ${dropped}/${refs.length} refs (>${maxHits} hits)`,
+    );
     return mask;
   };
 
   const OVERSAMPLE = 5;
-  console.log(`[tag] matching ${skills.length}×${occRefs.length} occs (lexical_guard=${LEXICAL_GUARD})`);
-  const occPass = oversamplePass(occMat, occRefs.length, occRefs, OCC_K * OVERSAMPLE, OCC_TH);
+  console.log(
+    `[tag] matching ${skills.length}×${occRefs.length} occs (lexical_guard=${LEXICAL_GUARD})`,
+  );
+  const occPass = oversamplePass(
+    occMat,
+    occRefs.length,
+    occRefs,
+    OCC_K * OVERSAMPLE,
+    OCC_TH,
+  );
   const occMask = pruneMask(occPass.refHits, occRefs, "occ");
-  console.log(`[tag] matching ${skills.length}×${topicRefs.length} topics (lexical_guard=${LEXICAL_GUARD})`);
-  const topicPass = oversamplePass(topicMat, topicRefs.length, topicRefs, TOPIC_K * OVERSAMPLE, TOPIC_TH, topicPoisoned);
+  console.log(
+    `[tag] matching ${skills.length}×${topicRefs.length} topics (lexical_guard=${LEXICAL_GUARD})`,
+  );
+  const topicPass = oversamplePass(
+    topicMat,
+    topicRefs.length,
+    topicRefs,
+    TOPIC_K * OVERSAMPLE,
+    TOPIC_TH,
+    topicPoisoned,
+  );
   const topicMask = pruneMask(topicPass.refHits, topicRefs, "topic");
 
   const directEsco = parseEscoSkillOccupations();
@@ -1915,11 +2989,15 @@ async function stageTag() {
   const frameworkTopic = (tagString: string): string | null => {
     const m = tagString.match(/framework:([^,]+)/);
     if (!m) return null;
-    return m[1].replace(/^(ui-|gcps-aks-|pcg-|ccs-|chicago-public-schools-illinois-|western-and-northern-canadian-protocol-)/, "");
+    return m[1].replace(
+      /^(ui-|gcps-aks-|pcg-|ccs-|chicago-public-schools-illinois-|western-and-northern-canadian-protocol-)/,
+      "",
+    );
   };
 
   // Pass 11 O1/O3: manager/director occupation cosine threshold (0.60→0.95).
-  const MANAGER_RE = /-manager$|-manager-|-director$|-director-|-supervisor$|-supervisor-/;
+  const MANAGER_RE =
+    /-manager$|-manager-|-director$|-director-|-supervisor$|-supervisor-/;
   // Pass 11 O1: hex-suffix occupation slugs are overflow-hashed ESCO titles (noise).
   const HEX_SUFFIX_RE = /-[a-f0-9]{6}$/;
 
@@ -1938,10 +3016,12 @@ async function stageTag() {
       }
     }
     const maxGrade = grades.length ? Math.max(...grades) : -1;
-    const isKhanContent = /framework:content-khan-academy/.test(s.tags) || s.tags.includes("framework:content-khan-academy");
-    const khanSlug = /^khan-|-khan-|-khan$/.test(s.id) || s.title.toLowerCase().startsWith("khan");
-    const lowGradeOnly = maxGrade >= 0 && maxGrade <= 9  // diff 9 = grade 8
-      && !s.sources.includes("onet") && !s.sources.includes("esco");
+    const isKhanContent = /framework:content-khan-academy/.test(s.tags) ||
+      s.tags.includes("framework:content-khan-academy");
+    const khanSlug = /^khan-|-khan-|-khan$/.test(s.id) ||
+      s.title.toLowerCase().startsWith("khan");
+    const lowGradeOnly = maxGrade >= 0 && maxGrade <= 9 && // diff 9 = grade 8
+      !s.sources.includes("onet") && !s.sources.includes("esco");
     const skipOccs = isKhanContent || khanSlug || lowGradeOnly;
 
     let occs: Picked[] = skipOccs ? [] : occPass.out[i]
@@ -1951,7 +3031,9 @@ async function stageTag() {
       .filter((p) => !MANAGER_RE.test(p.slug) || p.score >= 0.95);
     {
       const seen = new Map<string, number>();
-      for (const p of occs) seen.set(p.slug, Math.max(seen.get(p.slug) ?? 0, p.score));
+      for (const p of occs) {
+        seen.set(p.slug, Math.max(seen.get(p.slug) ?? 0, p.score));
+      }
       occs = [...seen.entries()].map(([slug, score]) => ({ slug, score }))
         .sort((a, b) => b.score - a.score).slice(0, OCC_K);
     }
@@ -1964,15 +3046,21 @@ async function stageTag() {
     // Pass 13 CR4: for ≤2-word titles, require ≥1 shared significant token with topic.
     const wordCount = s.title.split(/\s+/).filter((w) => w.length > 1).length;
     if (wordCount <= 2) {
-      const titleToks = new Set(slugify(s.title).split("-").filter((w) => w.length >= 4));
+      const titleToks = new Set(
+        slugify(s.title).split("-").filter((w) => w.length >= 4),
+      );
       topics = topics.filter((p) => {
-        for (const tok of p.slug.split("-")) if (tok.length >= 4 && titleToks.has(tok)) return true;
+        for (const tok of p.slug.split("-")) {
+          if (tok.length >= 4 && titleToks.has(tok)) return true;
+        }
         return false;
       });
     }
     {
       const seen = new Map<string, number>();
-      for (const p of topics) seen.set(p.slug, Math.max(seen.get(p.slug) ?? 0, p.score));
+      for (const p of topics) {
+        seen.set(p.slug, Math.max(seen.get(p.slug) ?? 0, p.score));
+      }
       topics = [...seen.entries()].map(([slug, score]) => ({ slug, score }))
         .sort((a, b) => b.score - a.score).slice(0, TOPIC_K);
     }
@@ -1983,14 +3071,27 @@ async function stageTag() {
         const direct = dOcc.slice(0, DIRECT_OCC_CAP).map((o) => slugify(o))
           .filter((sl) => sl && !HEX_SUFFIX_RE.test(sl));
         const existing = new Set(occs.map((p) => p.slug));
-        const merged: Picked[] = [...direct.filter((sl) => !existing.has(sl)).map((sl) => ({ slug: sl, score: 1.0 })), ...occs];
+        const merged: Picked[] = [
+          ...direct.filter((sl) => !existing.has(sl)).map((sl) => ({
+            slug: sl,
+            score: 1.0,
+          })),
+          ...occs,
+        ];
         occs = merged.slice(0, DIRECT_OCC_CAP);
       }
       const dTopic = directEscoTopics.get(s.id);
       if (dTopic?.length) {
-        const direct = dTopic.slice(0, DIRECT_TOPIC_CAP).map((t) => slugify(t)).filter(Boolean);
+        const direct = dTopic.slice(0, DIRECT_TOPIC_CAP).map((t) => slugify(t))
+          .filter(Boolean);
         const existing = new Set(topics.map((p) => p.slug));
-        const merged: Picked[] = [...direct.filter((sl) => !existing.has(sl)).map((sl) => ({ slug: sl, score: 1.0 })), ...topics];
+        const merged: Picked[] = [
+          ...direct.filter((sl) => !existing.has(sl)).map((sl) => ({
+            slug: sl,
+            score: 1.0,
+          })),
+          ...topics,
+        ];
         topics = merged.slice(0, DIRECT_TOPIC_CAP);
       }
     }
@@ -2000,7 +3101,13 @@ async function stageTag() {
         const direct = dOcc.slice(0, DIRECT_OCC_CAP).map((o) => slugify(o))
           .filter((sl) => sl && !HEX_SUFFIX_RE.test(sl));
         const existing = new Set(occs.map((p) => p.slug));
-        const merged: Picked[] = [...direct.filter((sl) => !existing.has(sl)).map((sl) => ({ slug: sl, score: 1.0 })), ...occs];
+        const merged: Picked[] = [
+          ...direct.filter((sl) => !existing.has(sl)).map((sl) => ({
+            slug: sl,
+            score: 1.0,
+          })),
+          ...occs,
+        ];
         occs = merged.slice(0, DIRECT_OCC_CAP);
       }
     }
@@ -2008,7 +3115,9 @@ async function stageTag() {
       const ft = frameworkTopic(s.tags);
       if (ft) {
         const existing = new Set(topics.map((p) => p.slug));
-        const merged: Picked[] = existing.has(ft) ? topics : [{ slug: ft, score: 1.0 }, ...topics];
+        const merged: Picked[] = existing.has(ft)
+          ? topics
+          : [{ slug: ft, score: 1.0 }, ...topics];
         topics = merged.slice(0, DIRECT_TOPIC_CAP);
       }
     }
@@ -2022,7 +3131,10 @@ async function stageTag() {
   for (let i = 0; i < skills.length; i++) {
     for (const p of pickedOccs[i]) {
       let arr = occToSkills.get(p.slug);
-      if (!arr) { arr = []; occToSkills.set(p.slug, arr); }
+      if (!arr) {
+        arr = [];
+        occToSkills.set(p.slug, arr);
+      }
       arr.push({ i, score: p.score });
     }
   }
@@ -2033,32 +3145,56 @@ async function stageTag() {
     arr.sort((a, b) => b.score - a.score);
     for (let k = OCC_FREQ_CAP; k < arr.length; k++) {
       let set = freqDrops.get(arr[k].i);
-      if (!set) { set = new Set(); freqDrops.set(arr[k].i, set); }
+      if (!set) {
+        set = new Set();
+        freqDrops.set(arr[k].i, set);
+      }
       set.add(slug);
       freqCapped++;
     }
   }
-  if (freqCapped > 0) console.log(`[tag] occupation freq cap dropped ${freqCapped} assignments (cap=${OCC_FREQ_CAP})`);
+  if (freqCapped > 0) {
+    console.log(
+      `[tag] occupation freq cap dropped ${freqCapped} assignments (cap=${OCC_FREQ_CAP})`,
+    );
+  }
 
-  const rows: string[] = ["id\ttitle\tdescription\tsources\ttags\toccupations\ttopics"];
+  const rows: string[] = [
+    "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+  ];
   const occCount = new Map<string, number>();
   const topicCount = new Map<string, number>();
   const occPer: number[] = [], topicPer: number[] = [];
   for (let i = 0; i < skills.length; i++) {
     const s = skills[i];
     const dropSet = freqDrops.get(i);
-    const occSlugs = pickedOccs[i].filter((p) => !(dropSet?.has(p.slug))).map((p) => p.slug);
+    const occSlugs = pickedOccs[i].filter((p) => !(dropSet?.has(p.slug))).map((
+      p,
+    ) => p.slug);
     const topicSlugs = pickedTopics[i].map((p) => p.slug);
     for (const x of occSlugs) occCount.set(x, (occCount.get(x) ?? 0) + 1);
     for (const x of topicSlugs) topicCount.set(x, (topicCount.get(x) ?? 0) + 1);
     occPer.push(occSlugs.length);
     topicPer.push(topicSlugs.length);
-    rows.push([s.id, s.title, s.description, s.sources, s.tags, occSlugs.join(","), topicSlugs.join(",")].join("\t"));
+    rows.push(
+      [
+        s.id,
+        s.title,
+        s.description,
+        s.sources,
+        s.tags,
+        occSlugs.join(","),
+        topicSlugs.join(","),
+      ].join("\t"),
+    );
   }
   Deno.writeTextFileSync(`${BUILD}/3_tagged.tsv`, rows.join("\n") + "\n");
-  try { Deno.removeSync(`${BUILD}/3b_tagged_deduped.tsv`); } catch { /* ignore */ }
+  try {
+    Deno.removeSync(`${BUILD}/3b_tagged_deduped.tsv`);
+  } catch { /* ignore */ }
 
-  const topN = (m: Map<string, number>, n: number) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+  const topN = (m: Map<string, number>, n: number) =>
+    [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
   writeStats(3, {
     skills: skills.length,
     occ_refs: occRefs.length,
@@ -2077,12 +3213,29 @@ async function stageTag() {
 // ---------- stage dedupe ----------
 
 function stageDedupe() {
-  const lines = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n")
+    .filter((l) => l.length);
   const hdr = lines[0];
-  type Row = { id: string; title: string; description: string; sources: string; tags: string; occupations: string; topics: string };
+  type Row = {
+    id: string;
+    title: string;
+    description: string;
+    sources: string;
+    tags: string;
+    occupations: string;
+    topics: string;
+  };
   const rows: Row[] = lines.slice(1).map((l) => {
     const c = l.split("\t");
-    return { id: c[0], title: c[1], description: c[2], sources: c[3], tags: c[4], occupations: c[5], topics: c[6] };
+    return {
+      id: c[0],
+      title: c[1],
+      description: c[2],
+      sources: c[3],
+      tags: c[4],
+      occupations: c[5],
+      topics: c[6],
+    };
   });
   const DIM = EMBED_DIM;
   const vecs = normalizedEmbeddingsForSkills(rows.map((r) => r.id));
@@ -2092,34 +3245,43 @@ function stageDedupe() {
   // When A and B share all other tokens but one is in one group and the other is in another,
   // we treat them as distinct concepts.
   const ANTONYM_GROUPS: string[][] = [
-    ["theoretical","practical","applied"],
-    ["commercial","industrial","residential","military","civil","consumer"],
-    ["1d","2d","3d","4d"],
-    ["first","second","third","fourth","fifth"],
-    ["introductory","advanced","intermediate","beginner","basic"],
-    ["micro","macro","nano","mini","mega"],
-    ["pre","post","anti","pro","non","sub","super"],
-    ["internal","external"],
-    ["public","private"],
-    ["input","output"],
-    ["front","back","side","top","bottom"],
-    ["positive","negative","neutral"],
-    ["online","offline"],
-    ["qualitative","quantitative"],
-    ["domestic","international","foreign"],
-    ["static","dynamic"],
-    ["manual","automatic","automated"],
-    ["wired","wireless"],
-    ["analog","digital"],
-    ["primary","secondary","tertiary"],
-    ["open","closed"],
-    ["augmented","mixed","virtual"],
+    ["theoretical", "practical", "applied"],
+    [
+      "commercial",
+      "industrial",
+      "residential",
+      "military",
+      "civil",
+      "consumer",
+    ],
+    ["1d", "2d", "3d", "4d"],
+    ["first", "second", "third", "fourth", "fifth"],
+    ["introductory", "advanced", "intermediate", "beginner", "basic"],
+    ["micro", "macro", "nano", "mini", "mega"],
+    ["pre", "post", "anti", "pro", "non", "sub", "super"],
+    ["internal", "external"],
+    ["public", "private"],
+    ["input", "output"],
+    ["front", "back", "side", "top", "bottom"],
+    ["positive", "negative", "neutral"],
+    ["online", "offline"],
+    ["qualitative", "quantitative"],
+    ["domestic", "international", "foreign"],
+    ["static", "dynamic"],
+    ["manual", "automatic", "automated"],
+    ["wired", "wireless"],
+    ["analog", "digital"],
+    ["primary", "secondary", "tertiary"],
+    ["open", "closed"],
+    ["augmented", "mixed", "virtual"],
     // Pass 10 S3-1 additions
-    ["ac","dc"],
-    ["z","c","bash","fish","ksh","zsh"],
+    ["ac", "dc"],
+    ["z", "c", "bash", "fish", "ksh", "zsh"],
   ];
   const antonymGroupOf = new Map<string, number>();
-  ANTONYM_GROUPS.forEach((g, gi) => g.forEach((w) => antonymGroupOf.set(w, gi)));
+  ANTONYM_GROUPS.forEach((g, gi) =>
+    g.forEach((w) => antonymGroupOf.set(w, gi))
+  );
   const antonymClash = (titleA: string, titleB: string): boolean => {
     const tA = titleA.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
     const tB = titleB.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
@@ -2141,13 +3303,19 @@ function stageDedupe() {
       const setB = groupsB.get(g);
       if (!setB) continue;
       let sameWord = false;
-      for (const w of setA) if (setB.has(w)) { sameWord = true; break; }
+      for (const w of setA) {
+        if (setB.has(w)) {
+          sameWord = true;
+          break;
+        }
+      }
       if (!sameWord) return true; // different antonym word in same group
     }
     for (const [g, setB] of groupsB) {
       if (!groupsA.has(g)) continue;
       // Already handled above.
-      void g; void setB;
+      void g;
+      void setB;
     }
     return false;
   };
@@ -2159,13 +3327,21 @@ function stageDedupe() {
 
   const parent = new Int32Array(rows.length);
   for (let i = 0; i < rows.length; i++) parent[i] = i;
-  function find(i: number): number { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
+  function find(i: number): number {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  }
   // Pass 10 S3-1: token-subset guard. If one title's tokens are a strict subset
   // of the other's, the longer is a specialization (e.g. "power" vs "power-bi")
   // and should not be merged into the shorter. Blocks ui-ux-writing → writing.
   const titleTokSet = (s: string): Set<string> => {
     const out = new Set<string>();
-    for (const w of s.toLowerCase().split(/[^a-z0-9]+/)) if (w.length >= 3 && !SIG_STOP.has(w)) out.add(w);
+    for (const w of s.toLowerCase().split(/[^a-z0-9]+/)) {
+      if (w.length >= 3 && !SIG_STOP.has(w)) out.add(w);
+    }
     return out;
   };
   function union(a: number, b: number): boolean {
@@ -2181,9 +3357,19 @@ function stageDedupe() {
       // Falls back to shortest title when neither is a proper subset.
       const tA = titleTokSet(rows[ra].title), tB = titleTokSet(rows[rb].title);
       let aSubsetB = tA.size > 0 && tA.size < tB.size;
-      for (const t of tA) if (!tB.has(t)) { aSubsetB = false; break; }
+      for (const t of tA) {
+        if (!tB.has(t)) {
+          aSubsetB = false;
+          break;
+        }
+      }
       let bSubsetA = tB.size > 0 && tB.size < tA.size;
-      for (const t of tB) if (!tA.has(t)) { bSubsetA = false; break; }
+      for (const t of tB) {
+        if (!tA.has(t)) {
+          bSubsetA = false;
+          break;
+        }
+      }
       if (aSubsetB && !bSubsetA) keep = rb;
       else if (bSubsetA && !aSubsetB) keep = ra;
       else keep = rows[ra].title.length <= rows[rb].title.length ? ra : rb;
@@ -2193,9 +3379,36 @@ function stageDedupe() {
   }
 
   // Token-sort signature merge
-  const SIG_STOP = new Set(["a","an","the","of","to","for","in","on","at","by","with","is","are","be","or","and","from","as","their","its","this","that","these","those"]);
+  const SIG_STOP = new Set([
+    "a",
+    "an",
+    "the",
+    "of",
+    "to",
+    "for",
+    "in",
+    "on",
+    "at",
+    "by",
+    "with",
+    "is",
+    "are",
+    "be",
+    "or",
+    "and",
+    "from",
+    "as",
+    "their",
+    "its",
+    "this",
+    "that",
+    "these",
+    "those",
+  ]);
   const tokenSig = (title: string): string => {
-    const toks = title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/)
+    const toks = title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(
+      /\s+/,
+    )
       .filter((w) => w.length >= 2 && !SIG_STOP.has(w))
       .filter((w) => w.length >= 3 || /[0-9]/.test(w));
     toks.sort();
@@ -2205,7 +3418,9 @@ function stageDedupe() {
   for (let i = 0; i < rows.length; i++) {
     const sig = tokenSig(rows[i].title);
     if (!sig) continue;
-    const arr = sigBuckets.get(sig) ?? []; arr.push(i); sigBuckets.set(sig, arr);
+    const arr = sigBuckets.get(sig) ?? [];
+    arr.push(i);
+    sigBuckets.set(sig, arr);
   }
   let sigMerges = 0, sigBlocked = 0;
   for (const idxs of sigBuckets.values()) {
@@ -2215,18 +3430,25 @@ function stageDedupe() {
       else sigBlocked++;
     }
   }
-  console.log(`[dedupe] token-sort merges: ${sigMerges} (blocked ${sigBlocked} antonym-clash)`);
+  console.log(
+    `[dedupe] token-sort merges: ${sigMerges} (blocked ${sigBlocked} antonym-clash)`,
+  );
 
   // Topic-bucket merge with jaccard + cosine
   const buckets = new Map<string, number[]>();
   for (let i = 0; i < rows.length; i++) {
     const topic = rows[i].topics.split(",")[0] || "_notopic";
-    const arr = buckets.get(topic) ?? []; arr.push(i); buckets.set(topic, arr);
+    const arr = buckets.get(topic) ?? [];
+    arr.push(i);
+    buckets.set(topic, arr);
   }
   const wordSet = (s: string): Set<string> => {
     const out = new Set<string>();
     for (const w of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)) {
-      if (w.length >= 2 && !/^(the|a|an|of|for|and|to|in|on|at|by|with|is|are|be|or)$/.test(w)) out.add(w);
+      if (
+        w.length >= 2 &&
+        !/^(the|a|an|of|for|and|to|in|on|at|by|with|is|are|be|or)$/.test(w)
+      ) out.add(w);
     }
     return out;
   };
@@ -2240,8 +3462,9 @@ function stageDedupe() {
   const wordSets = rows.map((r) => wordSet(r.title));
   const sigTokens = (s: string): Set<string> => {
     const out = new Set<string>();
-    for (const w of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/))
+    for (const w of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)) {
       if (w.length >= 3 && !SIG_STOP.has(w)) out.add(w);
+    }
     return out;
   };
   const sigSets = rows.map((r) => sigTokens(r.title));
@@ -2249,10 +3472,15 @@ function stageDedupe() {
   let merged = 0, skippedHuge = 0, cosBlocked = 0;
   for (const idxs of buckets.values()) {
     if (idxs.length < 2) continue;
-    if (idxs.length > 1500) { skippedHuge++; continue; }
+    if (idxs.length > 1500) {
+      skippedHuge++;
+      continue;
+    }
     for (let a = 0; a < idxs.length; a++) {
       for (let b = a + 1; b < idxs.length; b++) {
-        if (jaccard(wordSets[idxs[a]], wordSets[idxs[b]]) < JACCARD_MIN) continue;
+        if (jaccard(wordSets[idxs[a]], wordSets[idxs[b]]) < JACCARD_MIN) {
+          continue;
+        }
         const la = rows[idxs[a]].title.length, lb = rows[idxs[b]].title.length;
         if (Math.max(la, lb) / Math.max(1, Math.min(la, lb)) > 3) continue;
         const sa = sigSets[idxs[a]], sb = sigSets[idxs[b]];
@@ -2270,45 +3498,82 @@ function stageDedupe() {
       }
     }
   }
-  console.log(`[dedupe] cosine+jaccard merges: ${merged} (blocked ${cosBlocked} antonym, skipped ${skippedHuge} oversize buckets)`);
+  console.log(
+    `[dedupe] cosine+jaccard merges: ${merged} (blocked ${cosBlocked} antonym, skipped ${skippedHuge} oversize buckets)`,
+  );
 
   const alias = new Map<string, string>();
   let survivors = 0, dropped = 0;
   for (let i = 0; i < rows.length; i++) {
     const c = find(i);
     if (c === i) survivors++;
-    else { alias.set(rows[i].id, rows[c].id); dropped++; }
+    else {
+      alias.set(rows[i].id, rows[c].id);
+      dropped++;
+    }
   }
   console.log(`[dedupe] survivors=${survivors}, dropped=${dropped}`);
 
   const groupBy = new Map<number, number[]>();
   for (let i = 0; i < rows.length; i++) {
     const c = find(i);
-    const arr = groupBy.get(c) ?? []; arr.push(i); groupBy.set(c, arr);
+    const arr = groupBy.get(c) ?? [];
+    arr.push(i);
+    groupBy.set(c, arr);
   }
-  type Canon = { idx: number; occs: string[]; topics: string[]; allTags: string[] };
+  type Canon = {
+    idx: number;
+    occs: string[];
+    topics: string[];
+    allTags: string[];
+  };
   const canons: Canon[] = [];
   for (const [cIdx, gIdxs] of groupBy) {
     const canonical = rows[cIdx];
     const occs = new Set<string>(), topics = new Set<string>();
     const allTags = new Set<string>(canonical.tags.split(",").filter(Boolean));
     for (const i of gIdxs) {
-      for (const o of rows[i].occupations.split(",").filter(Boolean)) occs.add(o);
+      for (const o of rows[i].occupations.split(",").filter(Boolean)) {
+        occs.add(o);
+      }
       for (const t of rows[i].topics.split(",").filter(Boolean)) topics.add(t);
       for (const tg of rows[i].tags.split(",").filter(Boolean)) allTags.add(tg);
     }
-    canons.push({ idx: cIdx, occs: [...occs].slice(0, 3), topics: [...topics].slice(0, 3), allTags: [...allTags] });
+    canons.push({
+      idx: cIdx,
+      occs: [...occs].slice(0, 3),
+      topics: [...topics].slice(0, 3),
+      allTags: [...allTags],
+    });
   }
 
   // Backfill tags for untagged canonicals
-  const BF_STOP = new Set(["a","an","the","of","to","for","in","on","and","or","with","at","by","from","as"]);
+  const BF_STOP = new Set([
+    "a",
+    "an",
+    "the",
+    "of",
+    "to",
+    "for",
+    "in",
+    "on",
+    "and",
+    "or",
+    "with",
+    "at",
+    "by",
+    "from",
+    "as",
+  ]);
   const titleToks = (s: string): string[] =>
     s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/)
       .filter((w) => w.length >= 4 && !BF_STOP.has(w));
   const tokToCanons = new Map<string, number[]>();
   for (let k = 0; k < canons.length; k++) {
     for (const tok of titleToks(rows[canons[k].idx].title)) {
-      const arr = tokToCanons.get(tok) ?? []; arr.push(k); tokToCanons.set(tok, arr);
+      const arr = tokToCanons.get(tok) ?? [];
+      arr.push(k);
+      tokToCanons.set(tok, arr);
     }
   }
   let bfTopics = 0, bfOccs = 0, bfLcsh = 0;
@@ -2334,7 +3599,10 @@ function stageDedupe() {
     const scored: [number, number][] = [];
     for (const i of pool) {
       const other = canons[i];
-      if (needTopics && other.topics.length === 0 && (!needOccs || other.occs.length === 0)) continue;
+      if (
+        needTopics && other.topics.length === 0 &&
+        (!needOccs || other.occs.length === 0)
+      ) continue;
       if (!needTopics && needOccs && other.occs.length === 0) continue;
       let sc = 0;
       const oOff = other.idx * DIM;
@@ -2344,27 +3612,45 @@ function stageDedupe() {
     if (scored.length < 3) continue;
     scored.sort((a, b) => b[1] - a[1]);
     const top = scored.slice(0, 10);
-    const topicVotes = new Map<string, number>(), occVotes = new Map<string, number>();
+    const topicVotes = new Map<string, number>(),
+      occVotes = new Map<string, number>();
     for (const [i, w] of top) {
-      for (const t of canons[i].topics) topicVotes.set(t, (topicVotes.get(t) ?? 0) + w);
-      for (const o of canons[i].occs) occVotes.set(o, (occVotes.get(o) ?? 0) + w);
+      for (const t of canons[i].topics) {
+        topicVotes.set(t, (topicVotes.get(t) ?? 0) + w);
+      }
+      for (const o of canons[i].occs) {
+        occVotes.set(o, (occVotes.get(o) ?? 0) + w);
+      }
     }
-    const pickTop = (m: Map<string, number>, minV: number, cap: number): string[] =>
-      [...m.entries()].filter(([, v]) => v >= minV).sort((a, b) => b[1] - a[1]).slice(0, cap).map(([k]) => k);
+    const pickTop = (
+      m: Map<string, number>,
+      minV: number,
+      cap: number,
+    ): string[] =>
+      [...m.entries()].filter(([, v]) => v >= minV).sort((a, b) => b[1] - a[1])
+        .slice(0, cap).map(([k]) => k);
     const minW = 3 * threshold;
     if (needTopics) {
       const nt = pickTop(topicVotes, minW, 3);
-      if (nt.length) { c.topics = nt; bfTopics++; }
+      if (nt.length) {
+        c.topics = nt;
+        bfTopics++;
+      }
     }
     if (needOccs) {
       const no = pickTop(occVotes, minW, 2);
-      if (no.length) { c.occs = no; bfOccs++; }
+      if (no.length) {
+        c.occs = no;
+        bfOccs++;
+      }
     }
   }
 
   // Last-resort topic seed from LCSH / DBpedia ancestor trees
   const lcshTree = new Map<string, string[]>();
-  for (const path of [`${BUILD}/1j_lcsh_tree.tsv`, `${BUILD}/1k_dbpedia_tree.tsv`]) {
+  for (
+    const path of [`${BUILD}/1j_lcsh_tree.tsv`, `${BUILD}/1k_dbpedia_tree.tsv`]
+  ) {
     try {
       forEachLine(path, (line) => {
         const tab = line.indexOf("\t");
@@ -2393,18 +3679,36 @@ function stageDedupe() {
       }
     }
   }
-  console.log(`[dedupe] backfill: topics+=${bfTopics}, occs+=${bfOccs}, lcsh-topics+=${bfLcsh}`);
+  console.log(
+    `[dedupe] backfill: topics+=${bfTopics}, occs+=${bfOccs}, lcsh-topics+=${bfLcsh}`,
+  );
 
   const outLines = [hdr];
   for (const c of canons) {
     const r = rows[c.idx];
-    outLines.push([r.id, r.title, r.description, r.sources, c.allTags.join(","), c.occs.join(","), c.topics.join(",")].join("\t"));
+    outLines.push(
+      [
+        r.id,
+        r.title,
+        r.description,
+        r.sources,
+        c.allTags.join(","),
+        c.occs.join(","),
+        c.topics.join(","),
+      ].join("\t"),
+    );
   }
-  Deno.writeTextFileSync(`${BUILD}/3b_tagged_deduped.tsv`, outLines.join("\n") + "\n");
+  Deno.writeTextFileSync(
+    `${BUILD}/3b_tagged_deduped.tsv`,
+    outLines.join("\n") + "\n",
+  );
 
   const aliasLines = ["dropped_id\tcanonical_id"];
   for (const [drop, keep] of alias) aliasLines.push(`${drop}\t${keep}`);
-  Deno.writeTextFileSync(`${BUILD}/3b_aliases.tsv`, aliasLines.join("\n") + "\n");
+  Deno.writeTextFileSync(
+    `${BUILD}/3b_aliases.tsv`,
+    aliasLines.join("\n") + "\n",
+  );
 
   writeStats("3b", {
     before: rows.length,
@@ -2435,12 +3739,22 @@ function gradeToDifficulty(token: string): number | null {
 }
 
 function stageDifficulty() {
-  const lines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) =>
+    l.length
+  );
   const hdr = lines[0].split("\t");
-  const iTags = hdr.indexOf("tags"), iSources = hdr.indexOf("sources"), iTopics = hdr.indexOf("topics");
+  const iTags = hdr.indexOf("tags"),
+    iSources = hdr.indexOf("sources"),
+    iTopics = hdr.indexOf("topics");
   const skills = lines.slice(1).map((l) => {
     const c = l.split("\t");
-    return { id: c[0], title: c[1], sources: c[iSources], tags: c[iTags], topics: c[iTopics] };
+    return {
+      id: c[0],
+      title: c[1],
+      sources: c[iSources],
+      tags: c[iTags],
+      topics: c[iTopics],
+    };
   });
   const DIM = EMBED_DIM;
   const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
@@ -2464,9 +3778,13 @@ function stageDifficulty() {
     }
   }
   try {
-    const lines = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split("\n").filter((l) => l.length);
+    const lines = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split(
+      "\n",
+    ).filter((l) => l.length);
     const h = lines[0].split("\t");
-    const iN = h.indexOf("Data Name"), iD = h.indexOf("Display Name"), iV = h.indexOf("V-Position");
+    const iN = h.indexOf("Data Name"),
+      iD = h.indexOf("Display Name"),
+      iV = h.indexOf("V-Position");
     // Build the richer skill index (title + slug + id) once for resolveConcept-style matching.
     const idSet = new Set<string>();
     const titleToId = new Map<string, string>();
@@ -2479,7 +3797,9 @@ function stageDifficulty() {
       if (t && !titleToId.has(t)) titleToId.set(t, skills[i].id);
       slugToId.set(skills[i].id, skills[i].id);
       const altSlug = slugify(skills[i].title || "");
-      if (altSlug && !slugToId.has(altSlug)) slugToId.set(altSlug, skills[i].id);
+      if (altSlug && !slugToId.has(altSlug)) {
+        slugToId.set(altSlug, skills[i].id);
+      }
     }
     const kidx = { idSet, titleToId, slugToId };
     const labelsV: [string, number][] = [];
@@ -2488,7 +3808,8 @@ function stageDifficulty() {
       const c = lines[i].split("\t");
       const v = Number(c[iV]);
       if (!Number.isFinite(v)) continue;
-      vMin = Math.min(vMin, v); vMax = Math.max(vMax, v);
+      vMin = Math.min(vMin, v);
+      vMax = Math.max(vMax, v);
       if (c[iN]) labelsV.push([c[iN], v]);
       if (c[iD]) labelsV.push([c[iD], v]);
     }
@@ -2504,7 +3825,11 @@ function stageDifficulty() {
         seen.add(id);
       }
     }
-  } catch (e) { console.warn(`[difficulty] WARN: Khan anchors unavailable — ${(e as Error).message}`); }
+  } catch (e) {
+    console.warn(
+      `[difficulty] WARN: Khan anchors unavailable — ${(e as Error).message}`,
+    );
+  }
 
   let zoneAnchored = 0;
   try {
@@ -2517,14 +3842,21 @@ function stageDifficulty() {
       if (soc && Number.isFinite(z) && z >= 1 && z <= 5) socToZone.set(soc, z);
     }
     const cmr = new Map<string, string>();
-    for (const r of parseTsv(Deno.readTextFileSync("data/onet/Content Model Reference.txt")).slice(1))
+    for (
+      const r of parseTsv(
+        Deno.readTextFileSync("data/onet/Content Model Reference.txt"),
+      ).slice(1)
+    ) {
       if (r[0] && r[1]) cmr.set(r[0], r[1]);
+    }
     const skillZoneSum = new Map<string, { w: number; wz: number }>();
     for (const fname of ["Skills.txt", "Knowledge.txt", "Abilities.txt"]) {
       const rows = parseTsv(Deno.readTextFileSync(`data/onet/${fname}`));
       const h = rows[0];
-      const iS = h.indexOf("O*NET-SOC Code"), iE = h.indexOf("Element ID"),
-            iSc = h.indexOf("Scale ID"), iV = h.indexOf("Data Value");
+      const iS = h.indexOf("O*NET-SOC Code"),
+        iE = h.indexOf("Element ID"),
+        iSc = h.indexOf("Scale ID"),
+        iV = h.indexOf("Data Value");
       for (let i = 1; i < rows.length; i++) {
         if (rows[i][iSc] !== "IM") continue;
         const name = cmr.get(rows[i][iE]);
@@ -2534,7 +3866,8 @@ function stageDifficulty() {
         if (!Number.isFinite(w) || w <= 0) continue;
         const key = slugify(name);
         const e = skillZoneSum.get(key) ?? { w: 0, wz: 0 };
-        e.w += w; e.wz += w * zone;
+        e.w += w;
+        e.wz += w * zone;
         skillZoneSum.set(key, e);
       }
     }
@@ -2543,26 +3876,41 @@ function stageDifficulty() {
     const taskSocByTid = new Map<string, string>();
     const taskTextByTid = new Map<string, string>();
     {
-      const rows = parseTsv(Deno.readTextFileSync("data/onet/Task Statements.txt"));
+      const rows = parseTsv(
+        Deno.readTextFileSync("data/onet/Task Statements.txt"),
+      );
       const h = rows[0];
-      const iS = h.indexOf("O*NET-SOC Code"), iTid = h.indexOf("Task ID"), iTask = h.indexOf("Task");
+      const iS = h.indexOf("O*NET-SOC Code"),
+        iTid = h.indexOf("Task ID"),
+        iTask = h.indexOf("Task");
       for (let i = 1; i < rows.length; i++) {
         const tid = rows[i][iTid], task = rows[i][iTask], soc = rows[i][iS];
         if (!tid || !task || !soc) continue;
-        if (!taskSocByTid.has(tid)) { taskSocByTid.set(tid, soc); taskTextByTid.set(tid, task); }
+        if (!taskSocByTid.has(tid)) {
+          taskSocByTid.set(tid, soc);
+          taskTextByTid.set(tid, task);
+        }
         const key = slugify(task);
         const zone = socToZone.get(soc);
         if (zone === undefined) continue;
         const e = skillZoneSum.get(key) ?? { w: 0, wz: 0 };
-        e.w += 1; e.wz += zone;
+        e.w += 1;
+        e.wz += zone;
         skillZoneSum.set(key, e);
       }
     }
     try {
       const dwaTitle = new Map<string, string>();
-      for (const r of parseTsv(Deno.readTextFileSync("data/onet/DWA Reference.txt")).slice(1))
+      for (
+        const r of parseTsv(
+          Deno.readTextFileSync("data/onet/DWA Reference.txt"),
+        ).slice(1)
+      ) {
         if (r[0] && r[1]) dwaTitle.set(r[0] || "", r[1] || "");
-      const t2d = parseTsv(Deno.readTextFileSync("data/onet/Tasks to DWAs.txt"));
+      }
+      const t2d = parseTsv(
+        Deno.readTextFileSync("data/onet/Tasks to DWAs.txt"),
+      );
       const h = t2d[0];
       const iTid = h.indexOf("Task ID"), iDid = h.indexOf("DWA ID");
       for (let i = 1; i < t2d.length; i++) {
@@ -2574,10 +3922,15 @@ function stageDifficulty() {
         if (zone === undefined) continue;
         const key = slugify(title);
         const e = skillZoneSum.get(key) ?? { w: 0, wz: 0 };
-        e.w += 1; e.wz += zone;
+        e.w += 1;
+        e.wz += zone;
         skillZoneSum.set(key, e);
       }
-    } catch (e) { console.warn(`[difficulty] WARN: DWA zone mapping skipped — ${(e as Error).message}`); }
+    } catch (e) {
+      console.warn(
+        `[difficulty] WARN: DWA zone mapping skipped — ${(e as Error).message}`,
+      );
+    }
 
     const idToIdx = new Map<string, number>();
     for (let i = 0; i < skills.length; i++) idToIdx.set(skills[i].id, i);
@@ -2587,11 +3940,21 @@ function stageDifficulty() {
       anchor[i] = 11.5 + 1.5 * (wz / w);
       zoneAnchored++;
     }
-  } catch (e) { console.warn(`[difficulty] WARN: Job Zone anchors unavailable — ${(e as Error).message}`); }
+  } catch (e) {
+    console.warn(
+      `[difficulty] WARN: Job Zone anchors unavailable — ${
+        (e as Error).message
+      }`,
+    );
+  }
 
   const anchorIdxs: number[] = [];
-  for (let i = 0; i < skills.length; i++) if (!Number.isNaN(anchor[i])) anchorIdxs.push(i);
-  console.log(`[difficulty] anchors: grade=${gradeAnchored}, khan=${khanAnchored}, zone=${zoneAnchored}, total=${anchorIdxs.length}`);
+  for (let i = 0; i < skills.length; i++) {
+    if (!Number.isNaN(anchor[i])) anchorIdxs.push(i);
+  }
+  console.log(
+    `[difficulty] anchors: grade=${gradeAnchored}, khan=${khanAnchored}, zone=${zoneAnchored}, total=${anchorIdxs.length}`,
+  );
 
   const K = Number(Deno.env.get("KNN_K") ?? "15");
   const t0 = performance.now();
@@ -2601,7 +3964,10 @@ function stageDifficulty() {
     for (const topic of skills[ai].topics.split(",")) {
       if (!topic) continue;
       let arr = topicToAnchors.get(topic);
-      if (!arr) { arr = []; topicToAnchors.set(topic, arr); }
+      if (!arr) {
+        arr = [];
+        topicToAnchors.set(topic, arr);
+      }
       arr.push(a);
     }
   }
@@ -2611,7 +3977,7 @@ function stageDifficulty() {
     for (const topic of skills[i].topics.split(",")) {
       if (!topic) continue;
       const arr = topicToAnchors.get(topic);
-      if (arr) for (const a of arr) seen.add(a);
+      if (arr) { for (const a of arr) seen.add(a); }
     }
     return seen.size ? [...seen] : [];
   };
@@ -2630,7 +3996,10 @@ function stageDifficulty() {
     const anchorMat = new Float32Array(anchorIdxs.length * DIM);
     const anchorDiff = new Float32Array(anchorIdxs.length);
     for (let a = 0; a < anchorIdxs.length; a++) {
-      anchorMat.set(vecs.subarray(anchorIdxs[a] * DIM, (anchorIdxs[a] + 1) * DIM), a * DIM);
+      anchorMat.set(
+        vecs.subarray(anchorIdxs[a] * DIM, (anchorIdxs[a] + 1) * DIM),
+        a * DIM,
+      );
       anchorDiff[a] = anchor[anchorIdxs[a]];
     }
     for (let i = 0; i < skills.length; i++) {
@@ -2638,13 +4007,16 @@ function stageDifficulty() {
       const top: { score: number; a: number }[] = [];
       let pool: number[] | null = candidates(i);
       if (!pool.length) pool = null;
-      if (pool) withinTopic++; else globalFallback++;
+      if (pool) withinTopic++;
+      else globalFallback++;
       const n = pool ? pool.length : anchorIdxs.length;
       for (let k = 0; k < n; k++) {
         const a = pool ? pool[k] : k;
         let sc = 0;
         const aOff = a * DIM;
-        for (let d = 0; d < DIM; d++) sc += vecs[sOff + d] * anchorMat[aOff + d];
+        for (let d = 0; d < DIM; d++) {
+          sc += vecs[sOff + d] * anchorMat[aOff + d];
+        }
         if (top.length < K) {
           top.push({ score: sc, a });
           if (top.length === K) top.sort((x, y) => x.score - y.score);
@@ -2672,7 +4044,9 @@ function stageDifficulty() {
       for (const t of skills[i].topics.split(",")) {
         if (!t) continue;
         const e = topicSum.get(t) ?? { sum: 0, n: 0 };
-        e.sum += out[i]; e.n++; topicSum.set(t, e);
+        e.sum += out[i];
+        e.n++;
+        topicSum.set(t, e);
       }
     }
     for (let i = 0; i < skills.length; i++) {
@@ -2691,7 +4065,9 @@ function stageDifficulty() {
   const jittered = new Float32Array(skills.length);
   for (let i = 0; i < skills.length; i++) {
     let h = 0;
-    for (let k = 0; k < skills[i].id.length; k++) h = ((h * 31) + skills[i].id.charCodeAt(k)) | 0;
+    for (let k = 0; k < skills[i].id.length; k++) {
+      h = ((h * 31) + skills[i].id.charCodeAt(k)) | 0;
+    }
     jittered[i] = smoothed[i] + (((h >>> 0) % 1000) / 1000 - 0.5) * 0.001;
   }
 
@@ -2705,23 +4081,33 @@ function stageDifficulty() {
     let cur: PavNode = { x, y, w: 1 };
     while (pav.length && pav[pav.length - 1].y > cur.y) {
       const prev = pav.pop()!;
-      cur = { x: prev.x, y: (prev.y * prev.w + cur.y * cur.w) / (prev.w + cur.w), w: prev.w + cur.w };
+      cur = {
+        x: prev.x,
+        y: (prev.y * prev.w + cur.y * cur.w) / (prev.w + cur.w),
+        w: prev.w + cur.w,
+      };
     }
     pav.push(cur);
   }
   const pavX = pav.map((p) => p.x), pavY = pav.map((p) => p.y);
-  const tailStart = Math.max(0, pavX.length - Math.max(2, Math.floor(pavX.length * 0.1)));
+  const tailStart = Math.max(
+    0,
+    pavX.length - Math.max(2, Math.floor(pavX.length * 0.1)),
+  );
   const tailDX = pavX[pavX.length - 1] - pavX[tailStart];
   const tailDY = pavY[pavY.length - 1] - pavY[tailStart];
   const tailSlope = tailDX > 0 ? tailDY / tailDX : 0.5;
   const calibrate = (raw: number): number => {
     if (pavX.length === 0) return raw;
     if (raw <= pavX[0]) return pavY[0];
-    if (raw >= pavX[pavX.length - 1]) return pavY[pavY.length - 1] + tailSlope * (raw - pavX[pavX.length - 1]);
+    if (raw >= pavX[pavX.length - 1]) {
+      return pavY[pavY.length - 1] + tailSlope * (raw - pavX[pavX.length - 1]);
+    }
     let lo = 0, hi = pavX.length - 1;
     while (lo < hi - 1) {
       const mid = (lo + hi) >> 1;
-      if (pavX[mid] <= raw) lo = mid; else hi = mid;
+      if (pavX[mid] <= raw) lo = mid;
+      else hi = mid;
     }
     const span = pavX[hi] - pavX[lo];
     const t = span > 0 ? (raw - pavX[lo]) / span : 0;
@@ -2731,7 +4117,11 @@ function stageDifficulty() {
   for (let i = 0; i < skills.length; i++) {
     const c = calibrate(jittered[i]);
     if (!Number.isFinite(c)) {
-      throw new Error(`[difficulty] non-finite calibrated value for ${skills[i].id} (raw=${out[i]}, smoothed=${smoothed[i]}, jittered=${jittered[i]})`);
+      throw new Error(
+        `[difficulty] non-finite calibrated value for ${skills[i].id} (raw=${
+          out[i]
+        }, smoothed=${smoothed[i]}, jittered=${jittered[i]})`,
+      );
     }
     calibrated[i] = c;
   }
@@ -2745,7 +4135,9 @@ function stageDifficulty() {
     const idToIdx = new Map<string, number>();
     for (let i = 0; i < skills.length; i++) idToIdx.set(skills[i].id, i);
     const alias = loadAliasesCollapsed();
-    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
+    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split(
+      "\n",
+    ).filter((l) => l.length).slice(1);
     for (const line of seedLines) {
       const c = line.split("\t");
       if (c[4] === "1") continue; // skip holdout seeds
@@ -2759,7 +4151,9 @@ function stageDifficulty() {
       }
     }
     if (seedAnchorAdjusted > 0) {
-      console.log(`[difficulty] seed-anchored ${seedAnchorAdjusted} prereqs below their dependents`);
+      console.log(
+        `[difficulty] seed-anchored ${seedAnchorAdjusted} prereqs below their dependents`,
+      );
       // Re-run calibration on adjusted raws
       for (let i = 0; i < skills.length; i++) {
         const c = calibrate(out[i] + (jittered[i] - out[i])); // preserve jitter
@@ -2777,35 +4171,55 @@ function stageDifficulty() {
     // should not exceed band 13 regardless of kNN pull from medical O*NET neighbors.
     if (!Number.isNaN(anchor[i])) {
       const anchorBand = Math.round(anchor[i]) + 1;
-      if (anchorBand <= 13 && b > 13) { b = 13; healthCapped++; }
+      if (anchorBand <= 13 && b > 13) {
+        b = 13;
+        healthCapped++;
+      }
     }
     if (!Number.isInteger(b) || b < 1 || b > 20) {
-      throw new Error(`[difficulty] bad band for ${skills[i].id}: ${b} (calibrated=${calibrated[i]})`);
+      throw new Error(
+        `[difficulty] bad band for ${skills[i].id}: ${b} (calibrated=${
+          calibrated[i]
+        })`,
+      );
     }
     band[i] = b;
     bandCounts[b - 1]++;
   }
-  if (healthCapped > 0) console.log(`[difficulty] K-12 anchor band cap applied to ${healthCapped} skills`);
+  if (healthCapped > 0) {
+    console.log(
+      `[difficulty] K-12 anchor band cap applied to ${healthCapped} skills`,
+    );
+  }
 
   const rows = ["id\tdifficulty\tdifficulty_raw"];
-  for (let i = 0; i < skills.length; i++) rows.push(`${skills[i].id}\t${band[i]}\t${out[i].toFixed(4)}`);
+  for (let i = 0; i < skills.length; i++) {
+    rows.push(`${skills[i].id}\t${band[i]}\t${out[i].toFixed(4)}`);
+  }
   Deno.writeTextFileSync(`${BUILD}/4_difficulty.tsv`, rows.join("\n") + "\n");
   Deno.writeFileSync(`${BUILD}/4_raw.bin`, new Uint8Array(out.buffer));
 
   // Kendall-τ vs anchors
   let concordant = 0, discordant = 0;
   const sample: { raw: number; a: number }[] = [];
-  for (let i = 0; i < skills.length; i++) if (!Number.isNaN(anchor[i]) && anchor[i] < 14) sample.push({ raw: out[i], a: anchor[i] });
+  for (let i = 0; i < skills.length; i++) {
+    if (!Number.isNaN(anchor[i]) && anchor[i] < 14) {
+      sample.push({ raw: out[i], a: anchor[i] });
+    }
+  }
   sample.length = Math.min(sample.length, 2000);
   for (let i = 0; i < sample.length; i++) {
     for (let j = i + 1; j < sample.length; j++) {
       const ds = Math.sign(sample[i].raw - sample[j].raw);
       const da = Math.sign(sample[i].a - sample[j].a);
       if (ds === 0 || da === 0) continue;
-      if (ds === da) concordant++; else discordant++;
+      if (ds === da) concordant++;
+      else discordant++;
     }
   }
-  const tau = concordant + discordant ? (concordant - discordant) / (concordant + discordant) : 0;
+  const tau = concordant + discordant
+    ? (concordant - discordant) / (concordant + discordant)
+    : 0;
 
   // Grade-vs-band inversion audit: direct grade-anchored skills should have
   // a band close to the grade anchor. >5 bands off signals calibration
@@ -2827,14 +4241,27 @@ function stageDifficulty() {
     if (gap > 5) {
       inversions++;
       worstInversion = Math.max(worstInversion, gap);
-      if (invSamples.length < 10) invSamples.push(`${skills[i].id}: grade→${anchorBand}, band=${band[i]}`);
+      if (invSamples.length < 10) {
+        invSamples.push(
+          `${skills[i].id}: grade→${anchorBand}, band=${band[i]}`,
+        );
+      }
     }
   }
-  if (inversions > 0) console.warn(`[difficulty] ${inversions} grade-vs-band inversions (>5 gap) out of ${gradeAnchoredSkills}; worst gap=${worstInversion}`);
+  if (inversions > 0) {
+    console.warn(
+      `[difficulty] ${inversions} grade-vs-band inversions (>5 gap) out of ${gradeAnchoredSkills}; worst gap=${worstInversion}`,
+    );
+  }
 
   writeStats(4, {
     skills: skills.length,
-    anchors: { grade: gradeAnchored, khan: khanAnchored, zone: zoneAnchored, total: anchorIdxs.length },
+    anchors: {
+      grade: gradeAnchored,
+      khan: khanAnchored,
+      zone: zoneAnchored,
+      total: anchorIdxs.length,
+    },
     within_topic: withinTopic,
     global_fallbacks: globalFallback,
     band_distribution: bandCounts,
@@ -2861,13 +4288,22 @@ type SkillWithDiff = {
   sources: string;
   tags: string;
   gradeStart: number; // -2 = unknown
-  gradeEnd: number;   // -2 = unknown
+  gradeEnd: number; // -2 = unknown
 };
 
-function parseSkillsWithDifficulty(): { skills: SkillWithDiff[]; diff: Int32Array; raw: Float32Array } {
-  const tagged = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
+function parseSkillsWithDifficulty(): {
+  skills: SkillWithDiff[];
+  diff: Int32Array;
+  raw: Float32Array;
+} {
+  const tagged = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((
+    l,
+  ) => l.length);
   const h = tagged[0].split("\t");
-  const iT = h.indexOf("title"), iD = h.indexOf("description"), iTp = h.indexOf("topics"), iOc = h.indexOf("occupations");
+  const iT = h.indexOf("title"),
+    iD = h.indexOf("description"),
+    iTp = h.indexOf("topics"),
+    iOc = h.indexOf("occupations");
   const iS = h.indexOf("sources"), iTg = h.indexOf("tags");
   const skills: SkillWithDiff[] = tagged.slice(1).map((l) => {
     const c = l.split("\t");
@@ -2875,20 +4311,30 @@ function parseSkillsWithDifficulty(): { skills: SkillWithDiff[]; diff: Int32Arra
     let gs = Infinity, ge = -Infinity;
     for (const m of tags.matchAll(/grade:([A-Za-z0-9-]+)/g)) {
       const d = gradeToDifficulty(m[1]);
-      if (d !== null) { gs = Math.min(gs, d); ge = Math.max(ge, d); }
+      if (d !== null) {
+        gs = Math.min(gs, d);
+        ge = Math.max(ge, d);
+      }
     }
     return {
-      id: c[0], title: c[iT], description: c[iD],
-      topics: c[iTp], occupations: iOc >= 0 ? (c[iOc] || "") : "",
+      id: c[0],
+      title: c[iT],
+      description: c[iD],
+      topics: c[iTp],
+      occupations: iOc >= 0 ? (c[iOc] || "") : "",
       sources: iS >= 0 ? (c[iS] || "") : "",
       tags,
       gradeStart: Number.isFinite(gs) ? gs : -2,
       gradeEnd: Number.isFinite(ge) ? ge : -2,
     };
   });
-  const dLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length).slice(1);
+  const dLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n")
+    .filter((l) => l.length).slice(1);
   const dm = new Map<string, { band: number; raw: number }>();
-  for (const l of dLines) { const c = l.split("\t"); dm.set(c[0], { band: Number(c[1]), raw: Number(c[2]) }); }
+  for (const l of dLines) {
+    const c = l.split("\t");
+    dm.set(c[0], { band: Number(c[1]), raw: Number(c[2]) });
+  }
   const diff = new Int32Array(skills.length);
   const raw = new Float32Array(skills.length);
   for (let i = 0; i < skills.length; i++) {
@@ -2902,32 +4348,64 @@ function parseSkillsWithDifficulty(): { skills: SkillWithDiff[]; diff: Int32Arra
 
 // Pass 9 R6: language-family mutual exclusion for candidate pool.
 const LANG_TOKENS = [
-  "spanish","french","german","italian","portuguese","chinese","japanese",
-  "greek","latin","arabic","korean","russian","hebrew","swazi","kanuri","pulaar",
+  "spanish",
+  "french",
+  "german",
+  "italian",
+  "portuguese",
+  "chinese",
+  "japanese",
+  "greek",
+  "latin",
+  "arabic",
+  "korean",
+  "russian",
+  "hebrew",
+  "swazi",
+  "kanuri",
+  "pulaar",
 ];
 function langTokenOf(id: string): string | null {
   for (const t of LANG_TOKENS) {
-    if (id === t || id.startsWith(`${t}-`) || id.includes(`-${t}-`) || id.endsWith(`-${t}`)) return t;
+    if (
+      id === t || id.startsWith(`${t}-`) || id.includes(`-${t}-`) ||
+      id.endsWith(`-${t}`)
+    ) return t;
   }
   return null;
 }
 
 // Pass 9 R4: study/meta-skill denylist for candidate pool.
-const STUDY_SKILL_RE = /^(take[- ]notes?|mental[- ]concentration|find[- ]a[- ]dedicated|test[- ]anxiety|time[- ]management|study[- ]space|ask[- ]for[- ]help)/i;
+const STUDY_SKILL_RE =
+  /^(take[- ]notes?|mental[- ]concentration|find[- ]a[- ]dedicated|test[- ]anxiety|time[- ]management|study[- ]space|ask[- ]for[- ]help)/i;
 
 // Cross-domain foundation whitelist — these are cross-domain prereqs we want to
 // preserve in within-topic shared-token guards (R3). Mirrors the postproc FOUNDATION set.
 const FOUNDATION_IDS = new Set([
-  "mathematics","math","arithmetic","reading","writing","literacy","numeracy",
-  "problem-solving","critical-thinking","research","communication","algebra",
-  "geometry","statistics","probability",
+  "mathematics",
+  "math",
+  "arithmetic",
+  "reading",
+  "writing",
+  "literacy",
+  "numeracy",
+  "problem-solving",
+  "critical-thinking",
+  "research",
+  "communication",
+  "algebra",
+  "geometry",
+  "statistics",
+  "probability",
 ]);
 
 function loadPathologicalIds(): Set<string> {
   try {
     const t = Deno.readTextFileSync(`${BUILD}/2_pathological.tsv`);
     return new Set(t.split("\n").filter((l) => l.length));
-  } catch { return new Set(); }
+  } catch {
+    return new Set();
+  }
 }
 
 function computePrereqCandidates(): Map<string, number[]> {
@@ -2939,7 +4417,10 @@ function computePrereqCandidates(): Map<string, number[]> {
     for (const t of skills[i].topics.split(",")) {
       if (!t) continue;
       let arr = topicIdx.get(t);
-      if (!arr) { arr = []; topicIdx.set(t, arr); }
+      if (!arr) {
+        arr = [];
+        topicIdx.set(t, arr);
+      }
       arr.push(i);
     }
   }
@@ -2955,7 +4436,8 @@ function computePrereqCandidates(): Map<string, number[]> {
   // Pass 11 H2: framework-only skills (only topic from LCSH/DBpedia framework slugs)
   // get excluded from the global-pool fallback — they become phantom hubs otherwise.
   const frameworkOnly = new Uint8Array(skills.length);
-  const FRAME_RE = /-standards|^sced-|-\d{4}|framework|curriculum|scope-and-sequence/;
+  const FRAME_RE =
+    /-standards|^sced-|-\d{4}|framework|curriculum|scope-and-sequence/;
   for (let i = 0; i < skills.length; i++) {
     const topics = skills[i].topics.split(",").filter(Boolean);
     if (topics.length === 0) frameworkOnly[i] = 1;
@@ -2963,7 +4445,10 @@ function computePrereqCandidates(): Map<string, number[]> {
   }
   // Precompute per-skill grade caps and filter flags
   const slugLangs = skills.map((s) => langTokenOf(s.id));
-  const isSced = skills.map((s) => s.tags.includes("sced:catalog") && !/\b(esco|onet|lightcast)\b/.test(s.sources));
+  const isSced = skills.map((s) =>
+    s.tags.includes("sced:catalog") &&
+    !/\b(esco|onet|lightcast)\b/.test(s.sources)
+  );
   const isStudyMeta = skills.map((s) => STUDY_SKILL_RE.test(s.id));
   const topQuintileRaw = (() => {
     const sorted = [...raw].sort((a, b) => a - b);
@@ -2979,12 +4464,12 @@ function computePrereqCandidates(): Map<string, number[]> {
   const candOk = (i: number, j: number): boolean => {
     if (i === j) return false;
     if (pathological.has(skills[j].id)) return false;
-    if (isSced[j]) return false;              // R1
+    if (isSced[j]) return false; // R1
     if (isStudyMeta[j] && !isStudyMeta[i]) return false; // R4
     const lj = slugLangs[j];
     if (lj && slugLangs[i] && lj !== slugLangs[i]) return false; // R6
-    if (gradeGapReject(i, j)) return false;   // R2
-    return raw[j] < raw[i] - MIN_DIFF;        // DR1 hard guard
+    if (gradeGapReject(i, j)) return false; // R2
+    return raw[j] < raw[i] - MIN_DIFF; // DR1 hard guard
   };
 
   const out = new Map<string, number[]>();
@@ -2995,16 +4480,26 @@ function computePrereqCandidates(): Map<string, number[]> {
     const occsI = skills[i].occupations.split(",").filter(Boolean);
     const myOccs = new Set<string>(occsI);
     const myToks = new Set<string>();
-    for (const t of topics) for (const tok of t.split("-")) if (tok.length >= TOK_MIN) myToks.add(tok);
+    for (const t of topics) {
+      for (const tok of t.split("-")) {
+        if (tok.length >= TOK_MIN) myToks.add(tok);
+      }
+    }
 
     // R3 within-topic shared-token guard: candidate must share ≥1 topic token,
     // OR share an occupation, OR be in FOUNDATION_IDS.
     const withinTopicOk = (j: number): boolean => {
       if (FOUNDATION_IDS.has(skills[j].id)) return true;
-      for (const oc of skills[j].occupations.split(",")) if (oc && myOccs.has(oc)) return true;
-      for (const tok of skills[j].id.split("-")) if (tok.length >= TOK_MIN && myToks.has(tok)) return true;
+      for (const oc of skills[j].occupations.split(",")) {
+        if (oc && myOccs.has(oc)) return true;
+      }
+      for (const tok of skills[j].id.split("-")) {
+        if (tok.length >= TOK_MIN && myToks.has(tok)) return true;
+      }
       for (const t of skills[j].topics.split(",")) {
-        for (const tok of t.split("-")) if (tok.length >= TOK_MIN && myToks.has(tok)) return true;
+        for (const tok of t.split("-")) {
+          if (tok.length >= TOK_MIN && myToks.has(tok)) return true;
+        }
       }
       return false;
     };
@@ -3017,7 +4512,9 @@ function computePrereqCandidates(): Map<string, number[]> {
     }
     let cands: number[];
     if (pool.size >= K) cands = [...pool];
-    else if (skills[i].sources.split(",").filter(Boolean).length >= 2 && pool.size < 3) {
+    else if (
+      skills[i].sources.split(",").filter(Boolean).length >= 2 && pool.size < 3
+    ) {
       // M1: multi-source skill with sparse pool — skip global fallback, let LLM say "none"
       cands = [...pool];
     } else {
@@ -3028,7 +4525,9 @@ function computePrereqCandidates(): Map<string, number[]> {
     // Ancestor candidates — foundations within same topic (or expanded for advanced skills)
     const ancestorSet = new Set<number>();
     // R9/R10: top-quintile OR specialized-tool skills get relaxed ancestor MIN_DIFF (0.1 vs 1.5)
-    const isSpecialized = skills[i].sources.includes("lightcast") && /specialized-skill|-package$|-framework$|-library$|-middleware$|-software$/.test(skills[i].id + "|" + skills[i].tags);
+    const isSpecialized = skills[i].sources.includes("lightcast") &&
+      /specialized-skill|-package$|-framework$|-library$|-middleware$|-software$/
+        .test(skills[i].id + "|" + skills[i].tags);
     const ancestorMin = (raw[i] >= topQuintileRaw || isSpecialized) ? 0.1 : 2;
     if (topics.length > 0 && ANCESTOR_K > 0) {
       const aMax = raw[i] - ancestorMin;
@@ -3036,7 +4535,11 @@ function computePrereqCandidates(): Map<string, number[]> {
         const arr = topicIdx.get(t);
         if (!arr) continue;
         const sorted = [...arr].sort((a, b) => raw[a] - raw[b]);
-        for (let k = 0; k < sorted.length && ancestorSet.size < ANCESTOR_K; k++) {
+        for (
+          let k = 0;
+          k < sorted.length && ancestorSet.size < ANCESTOR_K;
+          k++
+        ) {
           const j = sorted[k];
           if (raw[j] > aMax) break;
           if (!candOk(i, j)) continue;
@@ -3064,12 +4567,21 @@ function computePrereqCandidates(): Map<string, number[]> {
       }
     }
     top.sort((a, b) => b.score - a.score);
-    const picked = new Set<number>([...ancestorSet, ...top.map((t) => t.idx), i]);
+    const picked = new Set<number>([
+      ...ancestorSet,
+      ...top.map((t) => t.idx),
+      i,
+    ]);
     if (GLOBAL_K > 0 && (topics.length > 0 || skills[i].occupations)) {
       const crossPool = new Set<number>();
       for (const [ot, oi] of topicIdx) {
         let shared = false;
-        for (const tok of ot.split("-")) if (tok.length >= TOK_MIN && myToks.has(tok)) { shared = true; break; }
+        for (const tok of ot.split("-")) {
+          if (tok.length >= TOK_MIN && myToks.has(tok)) {
+            shared = true;
+            break;
+          }
+        }
         if (!shared) continue;
         for (const j of oi) crossPool.add(j);
       }
@@ -3079,12 +4591,20 @@ function computePrereqCandidates(): Map<string, number[]> {
         if (frameworkOnly[j]) continue; // H2: framework-only skills never enter global pool
         if (myOccs.size) {
           let occShared = false;
-          for (const o of skills[j].occupations.split(",")) if (o && myOccs.has(o)) { occShared = true; break; }
+          for (const o of skills[j].occupations.split(",")) {
+            if (o && myOccs.has(o)) {
+              occShared = true;
+              break;
+            }
+          }
           if (!occShared) {
             let tokShared = 0;
             for (const t of skills[j].topics.split(",")) {
               for (const tok of t.split("-")) {
-                if (tok.length >= TOK_MIN && myToks.has(tok)) { tokShared++; break; }
+                if (tok.length >= TOK_MIN && myToks.has(tok)) {
+                  tokShared++;
+                  break;
+                }
               }
               if (tokShared >= 2) break;
             }
@@ -3094,7 +4614,10 @@ function computePrereqCandidates(): Map<string, number[]> {
           let tokShared = 0;
           for (const t of skills[j].topics.split(",")) {
             for (const tok of t.split("-")) {
-              if (tok.length >= TOK_MIN && myToks.has(tok)) { tokShared++; break; }
+              if (tok.length >= TOK_MIN && myToks.has(tok)) {
+                tokShared++;
+                break;
+              }
             }
             if (tokShared >= 2) break;
           }
@@ -3105,7 +4628,9 @@ function computePrereqCandidates(): Map<string, number[]> {
         for (let d = 0; d < DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];
         if (globalTop.length < GLOBAL_K) {
           globalTop.push({ idx: j, score: sc });
-          if (globalTop.length === GLOBAL_K) globalTop.sort((a, b) => a.score - b.score);
+          if (globalTop.length === GLOBAL_K) {
+            globalTop.sort((a, b) => a.score - b.score);
+          }
         } else if (sc > globalTop[0].score) {
           globalTop[0] = { idx: j, score: sc };
           globalTop.sort((a, b) => a.score - b.score);
@@ -3116,8 +4641,16 @@ function computePrereqCandidates(): Map<string, number[]> {
 
     // S5-3: near-duplicate cluster dedup — if >2 candidates have pairwise cosine ≥0.97,
     // keep only the highest-scoring. Prevents identical K-grade standards flooding slots.
-    const allPicks: { idx: number; score: number; src: "anc" | "top" | "global" }[] = [
-      ...[...ancestorSet].map((idx) => ({ idx, score: 0, src: "anc" as const })),
+    const allPicks: {
+      idx: number;
+      score: number;
+      src: "anc" | "top" | "global";
+    }[] = [
+      ...[...ancestorSet].map((idx) => ({
+        idx,
+        score: 0,
+        src: "anc" as const,
+      })),
       ...top.map((t) => ({ ...t, src: "top" as const })),
       ...globalTop.map((t) => ({ ...t, src: "global" as const })),
     ];
@@ -3136,7 +4669,10 @@ function computePrereqCandidates(): Map<string, number[]> {
         if (sc >= DUP_COS) {
           // keep higher-scoring (or lower index for ancestors — score 0)
           if (allPicks[a].score >= allPicks[b].score) dropped.add(b);
-          else { dropped.add(a); break; }
+          else {
+            dropped.add(a);
+            break;
+          }
         }
       }
     }
@@ -3146,7 +4682,11 @@ function computePrereqCandidates(): Map<string, number[]> {
     outLines.push(`${skills[i].id}\t${idxs.join(",")}`);
     if ((i + 1) % 5000 === 0) {
       const el = (performance.now() - t0) / 1000;
-      console.log(`  candidates ${i + 1}/${skills.length} (${((i + 1) / el).toFixed(0)}/s)`);
+      console.log(
+        `  candidates ${i + 1}/${skills.length} (${
+          ((i + 1) / el).toFixed(0)
+        }/s)`,
+      );
     }
   }
   Deno.writeTextFileSync(PREREQ_CANDIDATES_CACHE, outLines.join("\n") + "\n");
@@ -3163,13 +4703,19 @@ function loadPrereqCandidates(): Map<string, number[]> {
       if (tab < 0) continue;
       const id = line.slice(0, tab);
       const rest = line.slice(tab + 1);
-      m.set(id, rest ? rest.split(",").map(Number).filter(Number.isFinite) : []);
+      m.set(
+        id,
+        rest ? rest.split(",").map(Number).filter(Number.isFinite) : [],
+      );
     }
     return m;
-  } catch { return new Map(); }
+  } catch {
+    return new Map();
+  }
 }
 
-const PREREQ_PROMPT = `You identify true prerequisites for a skill. Given a skill and a numbered list of candidate prerequisites (all from easier/earlier material), return the numbers of candidates that MUST be understood first before learning the skill. Be strict — only include genuinely foundational dependencies, not merely related or adjacent topics. Return ONLY a comma-separated list of numbers (e.g. "2,5,9") or the word "none". No explanation.`;
+const PREREQ_PROMPT =
+  `You identify true prerequisites for a skill. Given a skill and a numbered list of candidate prerequisites (all from easier/earlier material), return the numbers of candidates that MUST be understood first before learning the skill. Be strict — only include genuinely foundational dependencies, not merely related or adjacent topics. Return ONLY a comma-separated list of numbers (e.g. "2,5,9") or the word "none". No explanation.`;
 
 const PREREQ_PICK_CAP = Number(Deno.env.get("PREREQ_PICK_CAP") ?? "8");
 
@@ -3210,52 +4756,83 @@ async function stagePrereq() {
       }
     } catch { /* fresh */ }
     const skillOrder = skills.map((s) => s.id);
-    type Job = { id: string; title: string; description: string; candTitles: string[]; candIdxs: number[] };
+    type Job = {
+      id: string;
+      title: string;
+      description: string;
+      candTitles: string[];
+      candIdxs: number[];
+    };
     const todo: Job[] = [];
     for (let i = 0; i < skills.length; i++) {
       const s = skills[i];
       if (localCache.has(s.id)) continue;
       const cands = candidates.get(s.id);
       if (!cands || cands.length === 0) continue;
-      todo.push({ id: s.id, title: s.title, description: s.description,
-        candTitles: cands.map((j) => skills[j].title), candIdxs: cands });
+      todo.push({
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        candTitles: cands.map((j) => skills[j].title),
+        candIdxs: cands,
+      });
     }
     console.log(`[prereq] cached=${localCache.size} todo=${todo.length}`);
     if (todo.length) {
       const CONCURRENCY = Number(Deno.env.get("OLLAMA_CONCURRENCY") ?? "4");
-      const LIMIT = Deno.env.get("OLLAMA_LIMIT") ? Number(Deno.env.get("OLLAMA_LIMIT")) : todo.length;
+      const LIMIT = Deno.env.get("OLLAMA_LIMIT")
+        ? Number(Deno.env.get("OLLAMA_LIMIT"))
+        : todo.length;
       const queue = todo.slice(0, LIMIT);
       const fh = Deno.openSync(PREREQ_CACHE, { create: true, append: true });
       const enc = new TextEncoder();
       const t0 = performance.now();
       let done = 0, errs = 0;
-      async function worker() {
+      const worker = async () => {
         while (queue.length) {
           const item = queue.shift();
           if (!item) break;
-          const desc = item.description ? `\nDescription: ${item.description.slice(0, 200)}` : "";
-          const cands = item.candTitles.map((t, i) => `${i + 1}. ${t}`).join("\n");
-          const prompt = `${PREREQ_PROMPT}\n\nSkill: ${item.title}${desc}\n\nCandidates:\n${cands}\n\nPrerequisite numbers (or "none"):`;
+          const desc = item.description
+            ? `\nDescription: ${item.description.slice(0, 200)}`
+            : "";
+          const cands = item.candTitles.map((t, i) => `${i + 1}. ${t}`).join(
+            "\n",
+          );
+          const prompt =
+            `${PREREQ_PROMPT}\n\nSkill: ${item.title}${desc}\n\nCandidates:\n${cands}\n\nPrerequisite numbers (or "none"):`;
           try {
             const raw = await generateOne(prompt, 600);
             const picks = parsePrereqResponse(raw, item.candTitles.length);
-            const resolved = picks.map((p) => skillOrder[item.candIdxs[p]]).filter(Boolean).join(",");
+            const resolved = picks.map((p) => skillOrder[item.candIdxs[p]])
+              .filter(Boolean).join(",");
             fh.writeSync(enc.encode(`${item.id}\t${resolved}\n`));
           } catch (e) {
             errs++;
-            if (errs < 5) console.warn(`[prereq] err ${item.id}: ${(e as Error).message.slice(0, 80)}`);
+            if (errs < 5) {
+              console.warn(
+                `[prereq] err ${item.id}: ${(e as Error).message.slice(0, 80)}`,
+              );
+            }
           }
           done++;
           if (done % 100 === 0) {
             const dt = (performance.now() - t0) / 1000;
             const rate = done / dt;
-            console.log(`  ${done}/${LIMIT} (${rate.toFixed(1)}/s, eta ${(queue.length / rate / 60).toFixed(1)}min, errs=${errs})`);
+            console.log(
+              `  ${done}/${LIMIT} (${rate.toFixed(1)}/s, eta ${
+                (queue.length / rate / 60).toFixed(1)
+              }min, errs=${errs})`,
+            );
           }
         }
-      }
+      };
       await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
       fh.close();
-      console.log(`[prereq] done ${done} in ${((performance.now() - t0) / 1000).toFixed(0)}s, errs=${errs}`);
+      console.log(
+        `[prereq] done ${done} in ${
+          ((performance.now() - t0) / 1000).toFixed(0)
+        }s, errs=${errs}`,
+      );
     }
   }
 
@@ -3269,40 +4846,64 @@ async function stagePrereq() {
     }
   } catch { /* none */ }
   const skillIds = new Set(skills.map((s) => s.id));
-  const fh = Deno.openSync(`${BUILD}/5_edges.tsv`, { create: true, write: true, truncate: true });
+  const fh = Deno.openSync(`${BUILD}/5_edges.tsv`, {
+    create: true,
+    write: true,
+    truncate: true,
+  });
   const enc = new TextEncoder();
   fh.writeSync(enc.encode("skill_id\tprereq_id\n"));
   let edges = 0, orphans = 0;
   for (const s of skills) {
     const resp = cacheFinal.get(s.id);
-    if (!resp || resp === "none") { orphans++; continue; }
+    if (!resp || resp === "none") {
+      orphans++;
+      continue;
+    }
     let n = 0;
     for (const pid of resp.split(",")) {
       if (!pid || !skillIds.has(pid)) continue;
       fh.writeSync(enc.encode(`${s.id}\t${pid}\n`));
-      edges++; n++;
+      edges++;
+      n++;
     }
     if (n === 0) orphans++;
   }
   fh.close();
-  writeStats(5, { skills: skills.length, responses: cacheFinal.size, edges, orphans, orphan_rate: orphans / skills.length });
+  writeStats(5, {
+    skills: skills.length,
+    responses: cacheFinal.size,
+    edges,
+    orphans,
+    orphan_rate: orphans / skills.length,
+  });
 }
 
 // ---------- stage postproc ----------
 
 function stagePostproc() {
-  const tagLines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
+  const tagLines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((
+    l,
+  ) => l.length);
   const hdr = tagLines[0].split("\t");
-  const iTitle = hdr.indexOf("title"), iTags = hdr.indexOf("tags"), iTopics = hdr.indexOf("topics");
-  const skill = new Map<string, { title: string; tags: string; topics: Set<string> }>();
+  const iTitle = hdr.indexOf("title"),
+    iTags = hdr.indexOf("tags"),
+    iTopics = hdr.indexOf("topics");
+  const skill = new Map<
+    string,
+    { title: string; tags: string; topics: Set<string> }
+  >();
   for (let i = 1; i < tagLines.length; i++) {
     const c = tagLines[i].split("\t");
     skill.set(c[0], {
-      title: c[iTitle], tags: c[iTags],
+      title: c[iTitle],
+      tags: c[iTags],
       topics: new Set(c[iTopics].split(",").filter(Boolean)),
     });
   }
-  const diffLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length);
+  const diffLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split(
+    "\n",
+  ).filter((l) => l.length);
   const rawDiff = new Map<string, number>();
   const band = new Map<string, number>();
   for (let i = 1; i < diffLines.length; i++) {
@@ -3311,7 +4912,9 @@ function stagePostproc() {
     rawDiff.set(c[0], Number(c[2]));
   }
 
-  const prereqLines = Deno.readTextFileSync(PREREQ_CACHE).split("\n").filter((l) => l.length);
+  const prereqLines = Deno.readTextFileSync(PREREQ_CACHE).split("\n").filter((
+    l,
+  ) => l.length);
   const pick = new Map<string, string>();
   for (const line of prereqLines) {
     const tab = line.indexOf("\t");
@@ -3328,21 +4931,29 @@ function stagePostproc() {
   {
     const alias = loadAliasesCollapsed();
     if (alias.size) {
-      raw = raw.map(([s, p]) => [alias.get(s) ?? s, alias.get(p) ?? p] as [string, string])
+      raw = raw.map(([s, p]) =>
+        [alias.get(s) ?? s, alias.get(p) ?? p] as [string, string]
+      )
         .filter(([s, p]) => s !== p);
     }
   }
 
   const beforeOrphan = raw.length;
   raw = raw.filter(([s, p]) => skill.has(s) && skill.has(p));
-  if (beforeOrphan - raw.length > 0) console.log(`[postproc] dropped ${beforeOrphan - raw.length} orphan-ref edges`);
+  if (beforeOrphan - raw.length > 0) {
+    console.log(
+      `[postproc] dropped ${beforeOrphan - raw.length} orphan-ref edges`,
+    );
+  }
   console.log(`[postproc] raw edges: ${raw.length}`);
 
   // Load seed edges for exemption
   const seedEdgeKeys = new Set<string>();
   let seedLoaded = 0;
   try {
-    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
+    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split(
+      "\n",
+    ).filter((l) => l.length).slice(1);
     const alias = loadAliasesCollapsed();
     for (const line of seedLines) {
       const c = line.split("\t");
@@ -3353,31 +4964,47 @@ function stagePostproc() {
       seedLoaded++;
     }
   } catch { /* none */ }
-  const isSeed = (s: string, p: string): boolean => seedEdgeKeys.has(`${s}\t${p}`);
+  const isSeed = (s: string, p: string): boolean =>
+    seedEdgeKeys.has(`${s}\t${p}`);
   console.log(`[postproc] seed keys: ${seedLoaded}`);
 
   // Pass 11 H1: leaf-specific holiday/retell titles survive hub caps because they have
   // 1,800+ incoming edges from K-3 ELA scope-and-sequence frameworks.
   // Drop any edge whose prereq matches a leaf-title pattern BEFORE hub filtering.
-  const LEAF_PATTERN = /retell-stories-related-to-.*-day|customs-around-.*-day|-national-independence-day|classify-character-traits-and-their-influence|understand-object-naming-and-naming-conventions/;
+  const LEAF_PATTERN =
+    /retell-stories-related-to-.*-day|customs-around-.*-day|-national-independence-day|classify-character-traits-and-their-influence|understand-object-naming-and-naming-conventions/;
   const beforeLeaf = raw.length;
   let leafExempt = 0;
   raw = raw.filter(([s, p]) => {
     if (!LEAF_PATTERN.test(p)) return true;
-    if (isSeed(s, p)) { leafExempt++; return true; }
+    if (isSeed(s, p)) {
+      leafExempt++;
+      return true;
+    }
     return false;
   });
-  console.log(`[postproc] dropped ${beforeLeaf - raw.length} leaf-pattern edges (${leafExempt} seed exempt)`);
+  console.log(
+    `[postproc] dropped ${
+      beforeLeaf - raw.length
+    } leaf-pattern edges (${leafExempt} seed exempt)`,
+  );
 
   // Filter 0: band-inverted
   let bandExempt = 0;
   const beforeBand = raw.length;
   raw = raw.filter(([s, p]) => {
     if ((band.get(p) ?? 0) <= (band.get(s) ?? 20)) return true;
-    if (isSeed(s, p)) { bandExempt++; return true; }
+    if (isSeed(s, p)) {
+      bandExempt++;
+      return true;
+    }
     return false;
   });
-  console.log(`[postproc] dropped ${beforeBand - raw.length} band-inverted (${bandExempt} seed exempt)`);
+  console.log(
+    `[postproc] dropped ${
+      beforeBand - raw.length
+    } band-inverted (${bandExempt} seed exempt)`,
+  );
 
   // Filter 0a: raw-difficulty monotonicity (catches same-band reversals)
   const RAW_EPS = Number(Deno.env.get("RAW_MONOTONIC_EPS") ?? "0.05");
@@ -3388,10 +5015,17 @@ function stagePostproc() {
     const pR = rawDiff.get(p);
     if (sR === undefined || pR === undefined) return true;
     if (pR <= sR - RAW_EPS) return true;
-    if (isSeed(s, p)) { rawExempt++; return true; }
+    if (isSeed(s, p)) {
+      rawExempt++;
+      return true;
+    }
     return false;
   });
-  console.log(`[postproc] dropped ${beforeRaw - raw.length} raw-inverted (${rawExempt} seed exempt)`);
+  console.log(
+    `[postproc] dropped ${
+      beforeRaw - raw.length
+    } raw-inverted (${rawExempt} seed exempt)`,
+  );
 
   // Filter 0b: domain-skill specificity guard.
   // A broad domain skill (≤2 tokens in its slug, e.g. "arithmetic", "algebra", "geometry")
@@ -3399,7 +5033,9 @@ function stagePostproc() {
   // by the LLM. Those are usually sub-concepts mis-picked as prereqs. Only allow seed edges
   // or prereqs that are themselves broad (≤ skill.tokens + 1).
   const tokenCount = (id: string): number => {
-    let n = 0; for (const w of id.split("-")) if (w.length >= 2) n++; return n;
+    let n = 0;
+    for (const w of id.split("-")) if (w.length >= 2) n++;
+    return n;
   };
   const beforeDomain = raw.length;
   let domainExempt = 0;
@@ -3408,16 +5044,50 @@ function stagePostproc() {
     if (sTok > 2) return true;
     const pTok = tokenCount(p);
     if (pTok <= sTok + 1) return true;
-    if (isSeed(s, p)) { domainExempt++; return true; }
+    if (isSeed(s, p)) {
+      domainExempt++;
+      return true;
+    }
     return false;
   });
-  console.log(`[postproc] dropped ${beforeDomain - raw.length} domain-specificity (${domainExempt} seed exempt)`);
+  console.log(
+    `[postproc] dropped ${
+      beforeDomain - raw.length
+    } domain-specificity (${domainExempt} seed exempt)`,
+  );
 
   // Filter 0b: hypernym
-  const HYP_STOP = new Set(["a","an","the","of","to","for","in","on","at","by","with","and","or","from","as","is","are","be","that","this","these","those","their","its"]);
+  const HYP_STOP = new Set([
+    "a",
+    "an",
+    "the",
+    "of",
+    "to",
+    "for",
+    "in",
+    "on",
+    "at",
+    "by",
+    "with",
+    "and",
+    "or",
+    "from",
+    "as",
+    "is",
+    "are",
+    "be",
+    "that",
+    "this",
+    "these",
+    "those",
+    "their",
+    "its",
+  ]);
   const sigSlugToks = (id: string): Set<string> => {
     const out = new Set<string>();
-    for (const w of id.split("-")) if (w.length >= 3 && !HYP_STOP.has(w)) out.add(w);
+    for (const w of id.split("-")) {
+      if (w.length >= 3 && !HYP_STOP.has(w)) out.add(w);
+    }
     return out;
   };
   const beforeHyp = raw.length;
@@ -3434,7 +5104,11 @@ function stagePostproc() {
 
   // Filter 1: onet:tech
   const bySkill = new Map<string, string[]>();
-  for (const [s, p] of raw) { const arr = bySkill.get(s) ?? []; arr.push(p); bySkill.set(s, arr); }
+  for (const [s, p] of raw) {
+    const arr = bySkill.get(s) ?? [];
+    arr.push(p);
+    bySkill.set(s, arr);
+  }
   let droppedTech = 0;
   const techFiltered: [string, string][] = [];
   for (const [s, prereqs] of bySkill) {
@@ -3453,7 +5127,9 @@ function stagePostproc() {
     });
     let final = kept;
     if (final.length === 0 && !sIsTech && prereqs.length > 0) {
-      const firstNonTech = prereqs.find((p) => !(skill.get(p)?.tags.includes("onet:tech") ?? false));
+      const firstNonTech = prereqs.find((p) =>
+        !(skill.get(p)?.tags.includes("onet:tech") ?? false)
+      );
       if (firstNonTech) final = [firstNonTech];
     }
     droppedTech += prereqs.length - final.length;
@@ -3467,17 +5143,27 @@ function stagePostproc() {
   const GLOBAL_CAP = Number(Deno.env.get("HUB_CAP") ?? "150");
   const TECH_HUB_CAP = Number(Deno.env.get("TECH_HUB_CAP") ?? "15");
   const downstream = new Map<string, [string, string][]>();
-  for (const e of raw) { const arr = downstream.get(e[1]) ?? []; arr.push(e); downstream.set(e[1], arr); }
+  for (const e of raw) {
+    const arr = downstream.get(e[1]) ?? [];
+    arr.push(e);
+    downstream.set(e[1], arr);
+  }
   let droppedHub = 0, droppedPerTopic = 0;
   const keep = new Set<string>();
   for (const [prereqId, edges] of downstream) {
     const pIsTech = skill.get(prereqId)?.tags.includes("onet:tech") ?? false;
     const pRaw = rawDiff.get(prereqId) ?? 0;
-    edges.sort((a, b) => Math.abs((rawDiff.get(a[0]) ?? 0) - pRaw) - Math.abs((rawDiff.get(b[0]) ?? 0) - pRaw));
+    edges.sort((a, b) =>
+      Math.abs((rawDiff.get(a[0]) ?? 0) - pRaw) -
+      Math.abs((rawDiff.get(b[0]) ?? 0) - pRaw)
+    );
     if (pIsTech) {
       for (let i = 0; i < edges.length; i++) {
         const [s, p] = edges[i];
-        if (isSeed(s, p)) { keep.add(`${s}\t${p}`); continue; }
+        if (isSeed(s, p)) {
+          keep.add(`${s}\t${p}`);
+          continue;
+        }
         if (i < TECH_HUB_CAP) keep.add(`${s}\t${p}`);
         else droppedHub++;
       }
@@ -3486,19 +5172,35 @@ function stagePostproc() {
     const perTopic = new Map<string, number>();
     let kept = 0;
     for (const [s, p] of edges) {
-      if (isSeed(s, p)) { keep.add(`${s}\t${p}`); kept++; continue; }
+      if (isSeed(s, p)) {
+        keep.add(`${s}\t${p}`);
+        kept++;
+        continue;
+      }
       const ct = skill.get(s)?.topics;
       const topics = ct && ct.size ? [...ct] : ["_notopic"];
-      const allowed = topics.filter((t) => (perTopic.get(t) ?? 0) < PER_TOPIC_CAP);
-      if (allowed.length === 0) { droppedPerTopic++; continue; }
-      if (kept >= GLOBAL_CAP) { droppedHub++; continue; }
+      const allowed = topics.filter((t) =>
+        (perTopic.get(t) ?? 0) < PER_TOPIC_CAP
+      );
+      if (allowed.length === 0) {
+        droppedPerTopic++;
+        continue;
+      }
+      if (kept >= GLOBAL_CAP) {
+        droppedHub++;
+        continue;
+      }
       keep.add(`${s}\t${p}`);
       for (const t of allowed) perTopic.set(t, (perTopic.get(t) ?? 0) + 1);
       kept++;
     }
   }
-  const final: [string, string][] = raw.filter((e) => keep.has(`${e[0]}\t${e[1]}`));
-  console.log(`[postproc] hub caps: dropped ${droppedPerTopic} per-topic, ${droppedHub} global/tech`);
+  const final: [string, string][] = raw.filter((e) =>
+    keep.has(`${e[0]}\t${e[1]}`)
+  );
+  console.log(
+    `[postproc] hub caps: dropped ${droppedPerTopic} per-topic, ${droppedHub} global/tech`,
+  );
 
   // Heuristic orphan fix
   const orphanSkills = new Set<string>();
@@ -3508,7 +5210,9 @@ function stagePostproc() {
   for (const [id] of skill) {
     for (const w of id.split("-")) {
       if (w.length >= 5) {
-        const arr = wordToSkills.get(w) ?? []; arr.push(id); wordToSkills.set(w, arr);
+        const arr = wordToSkills.get(w) ?? [];
+        arr.push(id);
+        wordToSkills.set(w, arr);
       }
     }
   }
@@ -3521,11 +5225,12 @@ function stagePostproc() {
   let orphanFixed = 0;
   const orphanTitleTok = (id: string): Set<string> => {
     const out = new Set<string>();
-    for (const w of id.split("-")) if (w.length >= 4 && !stopWords.has(w)) out.add(w);
+    for (const w of id.split("-")) {
+      if (w.length >= 4 && !stopWords.has(w)) out.add(w);
+    }
     return out;
   };
   for (const orphanId of HEUR_DISABLE ? [] : orphanSkills) {
-    const ssk = skill.get(orphanId)!;
     const sRaw = rawDiff.get(orphanId) ?? 0;
     const titleToks = orphanTitleTok(orphanId);
     // Candidate words must appear in orphan's own TITLE (not just topics).
@@ -3546,9 +5251,10 @@ function stagePostproc() {
     }
     if (cands.size === 0) continue;
     const ranked = [...cands.entries()].sort((a, b) =>
-      b[1] - a[1]
-      || (heurUseCount.get(a[0]) ?? 0) - (heurUseCount.get(b[0]) ?? 0)
-      || (rawDiff.get(a[0]) ?? 0) - (rawDiff.get(b[0]) ?? 0));
+      b[1] - a[1] ||
+      (heurUseCount.get(a[0]) ?? 0) - (heurUseCount.get(b[0]) ?? 0) ||
+      (rawDiff.get(a[0]) ?? 0) - (rawDiff.get(b[0]) ?? 0)
+    );
     for (const [candId] of ranked) {
       const n = heurUseCount.get(candId) ?? 0;
       if (n >= HEUR_CAP) continue;
@@ -3558,19 +5264,35 @@ function stagePostproc() {
       break;
     }
   }
-  console.log(`[postproc] orphan fix: added ${orphanFixed}/${orphanSkills.size}`);
+  console.log(
+    `[postproc] orphan fix: added ${orphanFixed}/${orphanSkills.size}`,
+  );
 
   // Cross-domain filter
   const FOUNDATION = new Set([
-    "mathematics","math","arithmetic","reading","writing","reading-comprehension",
-    "written-expression","active-listening","speaking","problem-solving",
-    "critical-thinking","complex-problem-solving","deductive-reasoning","inductive-reasoning",
-    "active-learning","learning-strategies",
+    "mathematics",
+    "math",
+    "arithmetic",
+    "reading",
+    "writing",
+    "reading-comprehension",
+    "written-expression",
+    "active-listening",
+    "speaking",
+    "problem-solving",
+    "critical-thinking",
+    "complex-problem-solving",
+    "deductive-reasoning",
+    "inductive-reasoning",
+    "active-learning",
+    "learning-strategies",
   ]);
   const MIN_OVERLAP = Number(Deno.env.get("MIN_TOPIC_OVERLAP") ?? "0.0001");
   const sigTok2 = (id: string): Set<string> => {
     const out = new Set<string>();
-    for (const w of id.split("-")) if (w.length >= 4 && !stopWords.has(w)) out.add(w);
+    for (const w of id.split("-")) {
+      if (w.length >= 4 && !stopWords.has(w)) out.add(w);
+    }
     return out;
   };
   const outPerSkill = new Map<string, number>();
@@ -3599,7 +5321,9 @@ function stagePostproc() {
   // Seed ingestion
   let seedAdded = 0, seedDup = 0, seedMissing = 0;
   try {
-    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split("\n").filter((l) => l.length);
+    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split(
+      "\n",
+    ).filter((l) => l.length);
     const existing = new Set(final.map(([s, p]) => `${s}\t${p}`));
     const alias = loadAliasesCollapsed();
     for (let i = 1; i < seedLines.length; i++) {
@@ -3607,21 +5331,33 @@ function stagePostproc() {
       const src = alias.get(c[0]) ?? c[0];
       const dst = alias.get(c[1]) ?? c[1];
       if (c[4] === "1") continue;
-      if (!skill.has(src) || !skill.has(dst) || src === dst) { seedMissing++; continue; }
+      if (!skill.has(src) || !skill.has(dst) || src === dst) {
+        seedMissing++;
+        continue;
+      }
       const key = `${dst}\t${src}`;
-      if (existing.has(key)) { seedDup++; continue; }
+      if (existing.has(key)) {
+        seedDup++;
+        continue;
+      }
       final.push([dst, src]);
       existing.add(key);
       seedAdded++;
     }
   } catch { /* none */ }
-  console.log(`[postproc] seeds: added=${seedAdded}, dup=${seedDup}, missing=${seedMissing}`);
+  console.log(
+    `[postproc] seeds: added=${seedAdded}, dup=${seedDup}, missing=${seedMissing}`,
+  );
 
   // Cycle breaker (Tarjan + rank-based back-edge drop)
   let cyclesBroken = 0, cyclesSeedDropped = 0;
   for (let iter = 0; iter < 100; iter++) {
     const adj = new Map<string, string[]>();
-    for (const [s, p] of final) { const arr = adj.get(p) ?? []; arr.push(s); adj.set(p, arr); }
+    for (const [s, p] of final) {
+      const arr = adj.get(p) ?? [];
+      arr.push(s);
+      adj.set(p, arr);
+    }
     const index = new Map<string, number>();
     const lowlink = new Map<string, number>();
     const onStack = new Set<string>();
@@ -3629,12 +5365,26 @@ function stagePostproc() {
     let idx = 0;
     const sccs: string[][] = [];
     const nodes = new Set<string>();
-    for (const [s, p] of final) { nodes.add(s); nodes.add(p); }
-    function strongconnect(v0: string) {
-      const callStack: { node: string; iter: Iterator<string>; minLink: number }[] = [];
-      index.set(v0, idx); lowlink.set(v0, idx); idx++;
-      stack.push(v0); onStack.add(v0);
-      callStack.push({ node: v0, iter: (adj.get(v0) || [])[Symbol.iterator](), minLink: lowlink.get(v0)! });
+    for (const [s, p] of final) {
+      nodes.add(s);
+      nodes.add(p);
+    }
+    const strongconnect = (v0: string) => {
+      const callStack: {
+        node: string;
+        iter: Iterator<string>;
+        minLink: number;
+      }[] = [];
+      index.set(v0, idx);
+      lowlink.set(v0, idx);
+      idx++;
+      stack.push(v0);
+      onStack.add(v0);
+      callStack.push({
+        node: v0,
+        iter: (adj.get(v0) || [])[Symbol.iterator](),
+        minLink: lowlink.get(v0)!,
+      });
       while (callStack.length) {
         const top = callStack[callStack.length - 1];
         const next = top.iter.next();
@@ -3643,7 +5393,9 @@ function stagePostproc() {
           if (lowlink.get(top.node) === index.get(top.node)) {
             const comp: string[] = [];
             while (true) {
-              const w = stack.pop()!; onStack.delete(w); comp.push(w);
+              const w = stack.pop()!;
+              onStack.delete(w);
+              comp.push(w);
               if (w === top.node) break;
             }
             if (comp.length > 1) sccs.push(comp);
@@ -3657,32 +5409,52 @@ function stagePostproc() {
         }
         const w = next.value;
         if (!index.has(w)) {
-          index.set(w, idx); lowlink.set(w, idx); idx++;
-          stack.push(w); onStack.add(w);
-          callStack.push({ node: w, iter: (adj.get(w) || [])[Symbol.iterator](), minLink: lowlink.get(w)! });
+          index.set(w, idx);
+          lowlink.set(w, idx);
+          idx++;
+          stack.push(w);
+          onStack.add(w);
+          callStack.push({
+            node: w,
+            iter: (adj.get(w) || [])[Symbol.iterator](),
+            minLink: lowlink.get(w)!,
+          });
         } else if (onStack.has(w)) {
           top.minLink = Math.min(top.minLink, index.get(w)!);
         }
       }
-    }
+    };
     for (const n of nodes) if (!index.has(n)) strongconnect(n);
     if (sccs.length === 0) break;
     const toDrop = new Set<string>();
     for (const scc of sccs) {
       const sccSet = new Set(scc);
-      const internal: { s: string; p: string; gap: number; seed: boolean }[] = [];
+      const internal: { s: string; p: string; gap: number; seed: boolean }[] =
+        [];
       for (const [s, p] of final) {
         if (!sccSet.has(s) || !sccSet.has(p)) continue;
-        internal.push({ s, p, gap: (rawDiff.get(s) ?? 0) - (rawDiff.get(p) ?? 0), seed: isSeed(s, p) });
+        internal.push({
+          s,
+          p,
+          gap: (rawDiff.get(s) ?? 0) - (rawDiff.get(p) ?? 0),
+          seed: isSeed(s, p),
+        });
       }
-      const seedInDeg = new Map<string, number>(), seedAdj = new Map<string, string[]>();
+      const seedInDeg = new Map<string, number>(),
+        seedAdj = new Map<string, string[]>();
       for (const n of scc) seedInDeg.set(n, 0);
-      for (const e of internal) if (e.seed) {
-        const arr = seedAdj.get(e.p) ?? []; arr.push(e.s); seedAdj.set(e.p, arr);
-        seedInDeg.set(e.s, (seedInDeg.get(e.s) ?? 0) + 1);
+      for (const e of internal) {
+        if (e.seed) {
+          const arr = seedAdj.get(e.p) ?? [];
+          arr.push(e.s);
+          seedAdj.set(e.p, arr);
+          seedInDeg.set(e.s, (seedInDeg.get(e.s) ?? 0) + 1);
+        }
       }
       const rankFor = new Map<string, number>();
-      const ready: string[] = [...scc].filter((n) => (seedInDeg.get(n) ?? 0) === 0);
+      const ready: string[] = [...scc].filter((n) =>
+        (seedInDeg.get(n) ?? 0) === 0
+      );
       ready.sort((a, b) => (rawDiff.get(a) ?? 0) - (rawDiff.get(b) ?? 0));
       let rank = 0;
       const seedCycleNodes = new Set(scc);
@@ -3694,12 +5466,17 @@ function stagePostproc() {
           seedInDeg.set(v, (seedInDeg.get(v) ?? 0) - 1);
           if (seedInDeg.get(v) === 0) {
             let ins = 0;
-            while (ins < ready.length && (rawDiff.get(ready[ins]) ?? 0) <= (rawDiff.get(v) ?? 0)) ins++;
+            while (
+              ins < ready.length &&
+              (rawDiff.get(ready[ins]) ?? 0) <= (rawDiff.get(v) ?? 0)
+            ) ins++;
             ready.splice(ins, 0, v);
           }
         }
       }
-      const leftover = [...seedCycleNodes].sort((a, b) => (rawDiff.get(a) ?? 0) - (rawDiff.get(b) ?? 0));
+      const leftover = [...seedCycleNodes].sort((a, b) =>
+        (rawDiff.get(a) ?? 0) - (rawDiff.get(b) ?? 0)
+      );
       for (const n of leftover) rankFor.set(n, rank++);
       let droppedThis = 0;
       for (const e of internal) {
@@ -3710,7 +5487,10 @@ function stagePostproc() {
         }
       }
       if (droppedThis === 0 && internal.length) {
-        internal.sort((a, b) => (a.seed === b.seed ? a.gap - b.gap : a.seed ? 1 : -1));
+        internal.sort((
+          a,
+          b,
+        ) => (a.seed === b.seed ? a.gap - b.gap : a.seed ? 1 : -1));
         const e = internal[0];
         toDrop.add(`${e.s}\t${e.p}`);
         if (e.seed) cyclesSeedDropped++;
@@ -3723,25 +5503,38 @@ function stagePostproc() {
     cyclesBroken += before - final.length;
     if (before === final.length) break;
   }
-  console.log(`[postproc] cycle-breaker: ${cyclesBroken} edges (${cyclesSeedDropped} seed)`);
+  console.log(
+    `[postproc] cycle-breaker: ${cyclesBroken} edges (${cyclesSeedDropped} seed)`,
+  );
 
   // DAG assertion
   {
     const adj = new Map<string, string[]>();
-    for (const [s, p] of final) { const arr = adj.get(p) ?? []; arr.push(s); adj.set(p, arr); }
+    for (const [s, p] of final) {
+      const arr = adj.get(p) ?? [];
+      arr.push(s);
+      adj.set(p, arr);
+    }
     const inDeg = new Map<string, number>();
     const allNodes = new Set<string>();
-    for (const [s, p] of final) { allNodes.add(s); allNodes.add(p); }
+    for (const [s, p] of final) {
+      allNodes.add(s);
+      allNodes.add(p);
+    }
     for (const n of allNodes) inDeg.set(n, 0);
     for (const [s] of final) inDeg.set(s, (inDeg.get(s) ?? 0) + 1);
     const q = [...allNodes].filter((n) => (inDeg.get(n) ?? 0) === 0);
     let removed = 0;
     const removedSet = new Set<string>(q);
     while (q.length) {
-      const u = q.shift()!; removed++;
+      const u = q.shift()!;
+      removed++;
       for (const v of adj.get(u) ?? []) {
         inDeg.set(v, (inDeg.get(v) ?? 0) - 1);
-        if (inDeg.get(v) === 0 && !removedSet.has(v)) { removedSet.add(v); q.push(v); }
+        if (inDeg.get(v) === 0 && !removedSet.has(v)) {
+          removedSet.add(v);
+          q.push(v);
+        }
       }
     }
     const stuck = allNodes.size - removed;
@@ -3749,15 +5542,25 @@ function stagePostproc() {
       const stuckSet = new Set<string>();
       for (const n of allNodes) if (!removedSet.has(n)) stuckSet.add(n);
       for (let i = final.length - 1; i >= 0; i--) {
-        if (stuckSet.has(final[i][0]) && stuckSet.has(final[i][1])) final.splice(i, 1);
+        if (stuckSet.has(final[i][0]) && stuckSet.has(final[i][1])) {
+          final.splice(i, 1);
+        }
       }
       console.log(`[postproc] force-dropped remaining cycles (${stuck} nodes)`);
     }
   }
 
   // Write (sorted for deterministic output across runs)
-  final.sort((a, b) => a[0] === b[0] ? (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0) : (a[0] < b[0] ? -1 : 1));
-  const fh = Deno.openSync(`${BUILD}/6_edges.tsv`, { create: true, write: true, truncate: true });
+  final.sort((a, b) =>
+    a[0] === b[0]
+      ? (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)
+      : (a[0] < b[0] ? -1 : 1)
+  );
+  const fh = Deno.openSync(`${BUILD}/6_edges.tsv`, {
+    create: true,
+    write: true,
+    truncate: true,
+  });
   const enc = new TextEncoder();
   fh.writeSync(enc.encode("skill_id\tprereq_id\n"));
   for (const [s, p] of final) fh.writeSync(enc.encode(`${s}\t${p}\n`));
@@ -3777,22 +5580,36 @@ function stagePostproc() {
     seed_added: seedAdded,
     seed_in_final: seedInFinal,
     orphan_fixed: orphanFixed,
-    orphan_rate: 1 - new Set(final.flatMap((e) => [e[0], e[1]])).size / skill.size,
+    orphan_rate: 1 -
+      new Set(final.flatMap((e) => [e[0], e[1]])).size / skill.size,
   });
 }
 
 // ---------- stage finalize ----------
 
 function stageFinalize() {
-  const lines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) => l.length);
+  const lines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) =>
+    l.length
+  );
   const h = lines[0].split("\t");
-  const iT = h.indexOf("title"), iD = h.indexOf("description"),
-        iO = h.indexOf("occupations"), iTp = h.indexOf("topics"), iTg = h.indexOf("tags");
+  const iT = h.indexOf("title"),
+    iD = h.indexOf("description"),
+    iO = h.indexOf("occupations"),
+    iTp = h.indexOf("topics"),
+    iTg = h.indexOf("tags");
   const skills = lines.slice(1).map((l) => {
     const c = l.split("\t");
-    return { id: c[0], title: c[iT], description: c[iD], occupations: c[iO], topics: c[iTp], tags: iTg >= 0 ? (c[iTg] || "") : "" };
+    return {
+      id: c[0],
+      title: c[iT],
+      description: c[iD],
+      occupations: c[iO],
+      topics: c[iTp],
+      tags: iTg >= 0 ? (c[iTg] || "") : "",
+    };
   });
-  const dLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n").filter((l) => l.length);
+  const dLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n")
+    .filter((l) => l.length);
   const diff = new Map<string, number>();
   for (let i = 1; i < dLines.length; i++) {
     const c = dLines[i].split("\t");
@@ -3811,15 +5628,20 @@ function stageFinalize() {
   const remap = (id: string) => aliasMap.get(id) ?? id;
 
   const skillIdSet = new Set<string>(skills.map((s) => s.id));
-  const edgeLines = Deno.readTextFileSync(`${BUILD}/6_edges.tsv`).split("\n").filter((l) => l.length).slice(1);
+  const edgeLines = Deno.readTextFileSync(`${BUILD}/6_edges.tsv`).split("\n")
+    .filter((l) => l.length).slice(1);
   const prereqs = new Map<string, string[]>();
   let edgeRemapped = 0, edgeOrphanDropped = 0;
   for (const l of edgeLines) {
     let [s, p] = l.split("\t");
     const s2 = remap(s), p2 = remap(p);
     if (s2 !== s || p2 !== p) edgeRemapped++;
-    if (!skillIdSet.has(s2) || !skillIdSet.has(p2) || s2 === p2) { edgeOrphanDropped++; continue; }
-    s = s2; p = p2;
+    if (!skillIdSet.has(s2) || !skillIdSet.has(p2) || s2 === p2) {
+      edgeOrphanDropped++;
+      continue;
+    }
+    s = s2;
+    p = p2;
     const arr = prereqs.get(s) ?? [];
     if (!arr.includes(p)) arr.push(p);
     prereqs.set(s, arr);
@@ -3829,8 +5651,31 @@ function stageFinalize() {
   const frameworkRe = FRAMEWORK_RE;
   const wikiCatRe = WIKI_CAT_RE;
   const yearRe = YEAR_RE;
-  const STOP = new Set(["the","a","an","of","to","for","in","on","and","or","with","by","at","from","as","is","be","that","this","these","those"]);
-  const sigTokens = (id: string) => new Set(id.split("-").filter((t) => t.length >= 4 && !STOP.has(t)));
+  const STOP = new Set([
+    "the",
+    "a",
+    "an",
+    "of",
+    "to",
+    "for",
+    "in",
+    "on",
+    "and",
+    "or",
+    "with",
+    "by",
+    "at",
+    "from",
+    "as",
+    "is",
+    "be",
+    "that",
+    "this",
+    "these",
+    "those",
+  ]);
+  const sigTokens = (id: string) =>
+    new Set(id.split("-").filter((t) => t.length >= 4 && !STOP.has(t)));
 
   // Cruft drop
   const aliasCanonicals = new Set<string>();
@@ -3839,9 +5684,14 @@ function stageFinalize() {
     if (keep && keep !== "canonical_id") aliasCanonicals.add(keep);
   });
   const childCount = new Map<string, number>();
-  for (const [, p] of prereqs) for (const pid of p) childCount.set(pid, (childCount.get(pid) ?? 0) + 1);
-  const isOrphanLeaf = (id: string) => (prereqs.get(id) || []).length === 0 && (childCount.get(id) ?? 0) === 0;
-  const isCruft = (s: { id: string; title: string; description: string; topics: string }) => {
+  for (const [, p] of prereqs) {
+    for (const pid of p) childCount.set(pid, (childCount.get(pid) ?? 0) + 1);
+  }
+  const isOrphanLeaf = (id: string) =>
+    (prereqs.get(id) || []).length === 0 && (childCount.get(id) ?? 0) === 0;
+  const isCruft = (
+    s: { id: string; title: string; description: string; topics: string },
+  ) => {
     if (aliasCanonicals.has(s.id)) return false;
     const desc = (s.description || "").trim();
     const topics = (s.topics || "").split(",").filter(Boolean);
@@ -3849,7 +5699,9 @@ function stageFinalize() {
     // Empty description AND only 1 topic: not enough signal for a skill node.
     if (!desc && topics.length < 2) return true;
     if (s.id.split("-").length >= 5 && desc.length < 60) return true;
-    if (/^review-records|^prepare-inserts|^seal-containers/.test(s.id)) return true;
+    if (/^review-records|^prepare-inserts|^seal-containers/.test(s.id)) {
+      return true;
+    }
     return false;
   };
 
@@ -3862,7 +5714,11 @@ function stageFinalize() {
       }
     }
     const head = title.slice(0, 80);
-    const lastDot = Math.max(head.lastIndexOf(". "), head.lastIndexOf("? "), head.lastIndexOf("! "));
+    const lastDot = Math.max(
+      head.lastIndexOf(". "),
+      head.lastIndexOf("? "),
+      head.lastIndexOf("! "),
+    );
     if (lastDot > 30) return head.slice(0, lastDot + 1).trim();
     const trim = title.slice(0, 79);
     const lastSpace = trim.lastIndexOf(" ");
@@ -3871,37 +5727,80 @@ function stageFinalize() {
 
   // Load LCSH + DBpedia ancestor chains
   const lcshTree = new Map<string, string[]>();
-  const loadTree = (path: string) => forEachLine(path, (line) => {
-    const tab = line.indexOf("\t");
-    const slug = line.slice(0, tab);
-    const anc = line.slice(tab + 1).split(",").filter(Boolean);
-    if (slug && anc.length) {
-      const existing = lcshTree.get(slug);
-      lcshTree.set(slug, existing ? [...new Set([...existing, ...anc])] : anc);
-    }
-  });
+  const loadTree = (path: string) =>
+    forEachLine(path, (line) => {
+      const tab = line.indexOf("\t");
+      const slug = line.slice(0, tab);
+      const anc = line.slice(tab + 1).split(",").filter(Boolean);
+      if (slug && anc.length) {
+        const existing = lcshTree.get(slug);
+        lcshTree.set(
+          slug,
+          existing ? [...new Set([...existing, ...anc])] : anc,
+        );
+      }
+    });
   loadTree(`${BUILD}/1j_lcsh_tree.tsv`);
   loadTree(`${BUILD}/1k_dbpedia_tree.tsv`);
-  console.log(`[finalize] loaded ${lcshTree.size} LCSH/DBpedia ancestor chains`);
+  console.log(
+    `[finalize] loaded ${lcshTree.size} LCSH/DBpedia ancestor chains`,
+  );
 
-  type Row = { id: string; title: string; display: string; desc: string; d: number; ps: string; occ: string; topics: string[]; gStart: string; gEnd: string };
+  type Row = {
+    id: string;
+    title: string;
+    display: string;
+    desc: string;
+    d: number;
+    ps: string;
+    occ: string;
+    topics: string[];
+    gStart: string;
+    gEnd: string;
+  };
   const pending: Row[] = [];
   const TOPIC_CAP = 5;
-  let frameworkFiltered = 0, junkFiltered = 0, lcshEnriched = 0, cruftDropped = 0;
+  let frameworkFiltered = 0,
+    junkFiltered = 0,
+    lcshEnriched = 0,
+    cruftDropped = 0;
   for (const s of skills) {
-    if (isOrphanLeaf(s.id) && isCruft(s)) { cruftDropped++; continue; }
+    if (isOrphanLeaf(s.id) && isCruft(s)) {
+      cruftDropped++;
+      continue;
+    }
     const d = diff.get(s.id);
     if (d === undefined) throw new Error(`skill ${s.id} missing difficulty`);
     const ps = (prereqs.get(s.id) ?? []).join(",");
     const existing = s.topics.split(",").filter(Boolean);
     const skillTokens = sigTokens(s.id);
-    for (const tok of sigTokens(s.title.toLowerCase().replace(/\s+/g, "-"))) skillTokens.add(tok);
-    for (const tok of sigTokens((s.description || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, "-"))) skillTokens.add(tok);
-    for (const t of s.occupations.split(",").filter(Boolean)) for (const tok of sigTokens(t)) skillTokens.add(tok);
+    for (const tok of sigTokens(s.title.toLowerCase().replace(/\s+/g, "-"))) {
+      skillTokens.add(tok);
+    }
+    for (
+      const tok of sigTokens(
+        (s.description || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ")
+          .replace(/\s+/g, "-"),
+      )
+    ) skillTokens.add(tok);
+    for (const t of s.occupations.split(",").filter(Boolean)) {
+      for (const tok of sigTokens(t)) {
+        skillTokens.add(tok);
+      }
+    }
     const filtered = existing.filter((t) => {
-      if (frameworkRe.test(t)) { frameworkFiltered++; return false; }
-      if (wikiCatRe.test(t) || yearRe.test(t)) { junkFiltered++; return false; }
-      if (sigTokens(t).size === 0) { junkFiltered++; return false; }
+      if (frameworkRe.test(t)) {
+        frameworkFiltered++;
+        return false;
+      }
+      if (wikiCatRe.test(t) || yearRe.test(t)) {
+        junkFiltered++;
+        return false;
+      }
+      if (sigTokens(t).size === 0) {
+        junkFiltered++;
+        return false;
+      }
       return true;
     });
     // LCSH/DBpedia ancestor enrichment
@@ -3910,11 +5809,19 @@ function stageFinalize() {
       const anc = lcshTree.get(cand);
       if (!anc) continue;
       for (const a of anc) {
-        if (lcshTopics.includes(a) || yearRe.test(a) || wikiCatRe.test(a) || frameworkRe.test(a)) continue;
+        if (
+          lcshTopics.includes(a) || yearRe.test(a) || wikiCatRe.test(a) ||
+          frameworkRe.test(a)
+        ) continue;
         if (sigTokens(a).size === 0) continue;
         const aToks = sigTokens(a);
         let ovl = 0;
-        for (const tok of aToks) if (skillTokens.has(tok)) { ovl++; break; }
+        for (const tok of aToks) {
+          if (skillTokens.has(tok)) {
+            ovl++;
+            break;
+          }
+        }
         if (!ovl) continue;
         lcshTopics.push(a);
         if (lcshTopics.length >= 3) break;
@@ -3922,7 +5829,10 @@ function stageFinalize() {
       if (lcshTopics.length >= 3) break;
     }
     if (lcshTopics.length) lcshEnriched++;
-    const topics = [...new Set([...filtered, ...lcshTopics])].slice(0, TOPIC_CAP);
+    const topics = [...new Set([...filtered, ...lcshTopics])].slice(
+      0,
+      TOPIC_CAP,
+    );
     const gradeMap: Record<string, number> = { "PK": -1, "K": 0 };
     const grades: number[] = [];
     for (const tag of s.tags.split(",")) {
@@ -3932,8 +5842,14 @@ function stageFinalize() {
       if (!Number.isNaN(n)) grades.push(n);
     }
     pending.push({
-      id: s.id, title: s.title, display: deriveDisplay(s.title, s.tags),
-      desc: s.description, d, ps, occ: s.occupations, topics,
+      id: s.id,
+      title: s.title,
+      display: deriveDisplay(s.title, s.tags),
+      desc: s.description,
+      d,
+      ps,
+      occ: s.occupations,
+      topics,
       gStart: grades.length ? Math.min(...grades).toString() : "",
       gEnd: grades.length ? Math.max(...grades).toString() : "",
     });
@@ -3941,27 +5857,76 @@ function stageFinalize() {
 
   // Topic frequency cap
   const topicFreq = new Map<string, number>();
-  for (const r of pending) for (const t of r.topics) topicFreq.set(t, (topicFreq.get(t) ?? 0) + 1);
+  for (const r of pending) {
+    for (const t of r.topics) topicFreq.set(t, (topicFreq.get(t) ?? 0) + 1);
+  }
   const MAX_FREQ = Math.max(1200, Math.floor(pending.length * 0.013));
   const whitelist = new Set([
-    "mathematics","science","biology","chemistry","physics","engineering","technology",
-    "economics","history","literature","philosophy","medicine","law","education",
-    "problem-solving","critical-thinking","communication","management","leadership",
-    "computer-science","software-engineering","data-analysis","statistics","research",
-    "information-skills","management-skills","nondestructive-testing","mathematical-optimization",
-    "handling-and-moving","personnel-management","working-with-machinery-and-specialised-equipment",
+    "mathematics",
+    "science",
+    "biology",
+    "chemistry",
+    "physics",
+    "engineering",
+    "technology",
+    "economics",
+    "history",
+    "literature",
+    "philosophy",
+    "medicine",
+    "law",
+    "education",
+    "problem-solving",
+    "critical-thinking",
+    "communication",
+    "management",
+    "leadership",
+    "computer-science",
+    "software-engineering",
+    "data-analysis",
+    "statistics",
+    "research",
+    "information-skills",
+    "management-skills",
+    "nondestructive-testing",
+    "mathematical-optimization",
+    "handling-and-moving",
+    "personnel-management",
+    "working-with-machinery-and-specialised-equipment",
   ]);
   const blocklist = new Set([
-    "photomechanical-processes","flying-machines","rome-officials-and-employees",
-    "traffic-regulations","units-of-measurement",
-    "professional-employees","employees","persons","specialists","scientists",
-    "workers","people","occupations","officials","personnel","staff",
-    "professionals","practitioners","technicians","operators",
-    "judaism-customs-and-practices","descriptive-cataloging","ibm-computers",
-    "wikiproject-countries-projects","wikiproject-africa-projects",
-    "computer-input-output-equipment","history-of-technology",
-    "personality-tests","diagnostic-equipment-industry","industrial-equipment-industry",
-    "portable-computers","telecommunication-equipment-industry",
+    "photomechanical-processes",
+    "flying-machines",
+    "rome-officials-and-employees",
+    "traffic-regulations",
+    "units-of-measurement",
+    "professional-employees",
+    "employees",
+    "persons",
+    "specialists",
+    "scientists",
+    "workers",
+    "people",
+    "occupations",
+    "officials",
+    "personnel",
+    "staff",
+    "professionals",
+    "practitioners",
+    "technicians",
+    "operators",
+    "judaism-customs-and-practices",
+    "descriptive-cataloging",
+    "ibm-computers",
+    "wikiproject-countries-projects",
+    "wikiproject-africa-projects",
+    "computer-input-output-equipment",
+    "history-of-technology",
+    "personality-tests",
+    "diagnostic-equipment-industry",
+    "industrial-equipment-industry",
+    "portable-computers",
+    "telecommunication-equipment-industry",
     "law-interpretation-and-construction",
   ]);
   let singletonDropped = 0, genericDropped = 0;
@@ -3971,16 +5936,40 @@ function stageFinalize() {
   for (const r of pending) {
     r.topics = r.topics.filter((t) => {
       const f = topicFreq.get(t) ?? 0;
-      if (f < TOPIC_MIN_FREQ) { singletonDropped++; return false; }
-      if (blocklist.has(t)) { genericDropped++; return false; }
-      if (f > MAX_FREQ && !whitelist.has(t)) { genericDropped++; return false; }
+      if (f < TOPIC_MIN_FREQ) {
+        singletonDropped++;
+        return false;
+      }
+      if (blocklist.has(t)) {
+        genericDropped++;
+        return false;
+      }
+      if (f > MAX_FREQ && !whitelist.has(t)) {
+        genericDropped++;
+        return false;
+      }
       return true;
     });
   }
 
-  const rows = ["id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end"];
+  const rows = [
+    "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end",
+  ];
   for (const r of pending) {
-    rows.push([r.id, r.title, r.display, r.desc, r.d.toString(), r.ps, r.occ, r.topics.join(","), r.gStart, r.gEnd].join("\t"));
+    rows.push(
+      [
+        r.id,
+        r.title,
+        r.display,
+        r.desc,
+        r.d.toString(),
+        r.ps,
+        r.occ,
+        r.topics.join(","),
+        r.gStart,
+        r.gEnd,
+      ].join("\t"),
+    );
   }
   Deno.writeTextFileSync("skills.tsv", rows.join("\n") + "\n");
 
@@ -3991,12 +5980,16 @@ function stageFinalize() {
     if (!r.ps) continue;
     for (const p of r.ps.split(",")) {
       if (!emittedSet.has(p)) {
-        if (violations < 5) console.error(`[finalize] orphan edge: ${r.id} → ${p}`);
+        if (violations < 5) {
+          console.error(`[finalize] orphan edge: ${r.id} → ${p}`);
+        }
         violations++;
       }
     }
   }
-  if (violations > 0) throw new Error(`finalize: ${violations} orphan prereq references`);
+  if (violations > 0) {
+    throw new Error(`finalize: ${violations} orphan prereq references`);
+  }
 
   new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] }).outputSync();
 
@@ -4006,15 +5999,23 @@ function stageFinalize() {
     if (!emittedSet.has(s)) continue;
     for (const p of ps) {
       if (!emittedSet.has(p)) continue;
-      const arr = adj.get(p) ?? []; arr.push(s); adj.set(p, arr);
+      const arr = adj.get(p) ?? [];
+      arr.push(s);
+      adj.set(p, arr);
     }
   }
-  const roots = skills.filter((s) => emittedSet.has(s.id) && !prereqs.has(s.id)).map((s) => s.id);
+  const roots = skills.filter((s) => emittedSet.has(s.id) && !prereqs.has(s.id))
+    .map((s) => s.id);
   const visited = new Set<string>(roots);
   const queue = [...roots];
   while (queue.length) {
     const u = queue.shift()!;
-    for (const v of adj.get(u) ?? []) if (!visited.has(v)) { visited.add(v); queue.push(v); }
+    for (const v of adj.get(u) ?? []) {
+      if (!visited.has(v)) {
+        visited.add(v);
+        queue.push(v);
+      }
+    }
   }
 
   const emitted = rows.length - 1;
@@ -4032,11 +6033,17 @@ function stageFinalize() {
     junk_topics_filtered: junkFiltered,
     singleton_topics_dropped: singletonDropped,
     generic_topics_dropped: genericDropped,
-    grade_populated: rows.slice(1).filter((r) => r.split("\t")[8] !== "").length,
+    grade_populated: rows.slice(1).filter((r) =>
+      r.split("\t")[8] !== ""
+    ).length,
     edge_remapped: edgeRemapped,
     edge_orphan_dropped: edgeOrphanDropped,
   });
-  console.log(`[finalize] emitted ${emitted} skills, ${[...prereqs.values()].reduce((s, a) => s + a.length, 0)} edges, ${roots.length} roots`);
+  console.log(
+    `[finalize] emitted ${emitted} skills, ${
+      [...prereqs.values()].reduce((s, a) => s + a.length, 0)
+    } edges, ${roots.length} roots`,
+  );
 }
 
 // ---------- dispatch ----------
@@ -4058,7 +6065,11 @@ const stages: Record<string, () => void | Promise<void>> = {
 const arg = Deno.args[0];
 if (arg) {
   const fn = stages[arg];
-  if (!fn) throw new Error(`unknown stage: ${arg}. known: ${Object.keys(stages).join(", ")}`);
+  if (!fn) {
+    throw new Error(
+      `unknown stage: ${arg}. known: ${Object.keys(stages).join(", ")}`,
+    );
+  }
   await fn();
 } else {
   for (const [name, fn] of Object.entries(stages)) {
