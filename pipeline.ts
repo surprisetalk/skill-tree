@@ -346,11 +346,15 @@ const GEN_MODEL = Deno.env.get("OLLAMA_GEN_MODEL") ?? "gpt-oss:20b";
 const CACHE_PATH = `${BUILD}/2_cache.bin`;
 const CACHE_RECORD_BYTES = 32 + EMBED_DIM * 4;
 
+// A cold model load takes tens of seconds; a request past this bound has hung.
+const OLLAMA_TIMEOUT_MS = 300_000;
+
 async function embedOne(content: string): Promise<Float32Array> {
   const res = await fetch(`${OLLAMA}/api/embeddings`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ model: EMBED_MODEL, prompt: content }),
+    signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`ollama embed ${res.status}: ${await res.text()}`);
@@ -371,6 +375,7 @@ async function generateOne(prompt: string, numPredict = 120): Promise<string> {
       stream: false,
       options: { temperature: 0.1, num_predict: numPredict },
     }),
+    signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`ollama gen ${res.status}: ${await res.text()}`);
   const j = await res.json();
@@ -634,6 +639,53 @@ function normalizedEmbeddingsForSkills(skillIds: string[]): Float32Array {
     );
   }
   return vecs;
+}
+
+// ---------- MOOCCubeX ----------
+
+const TRANSLATE_CACHE = `${BUILD}/1f_translate.tsv`;
+const HAN_RE = /\p{Script=Han}/u;
+
+type MoocPair = { domain: string; c1: string; c2: string };
+
+// Expert-confirmed (ground_truth 1) prereq pairs, c1 → c2.
+async function readMoocPairs(): Promise<MoocPair[]> {
+  const pairs: MoocPair[] = [];
+  for (const domain of ["cs", "math", "psy"]) {
+    const path = `data/mooccubex/${domain}.json.gz`;
+    const stream = new Blob([Deno.readFileSync(path)]).stream().pipeThrough(
+      new DecompressionStream("gzip"),
+    );
+    const lines = (await new Response(stream).text()).split("\n");
+    lines.forEach((line, i) => {
+      if (!line) return;
+      let o: { c1?: unknown; c2?: unknown; ground_truth?: unknown };
+      try {
+        o = JSON.parse(line);
+      } catch {
+        throw new Error(
+          `${path}:${i + 1}: expected a JSON object, received ${
+            line.slice(0, 80)
+          }`,
+        );
+      }
+      if (o.ground_truth !== 1) return;
+      if (
+        typeof o.c1 !== "string" || typeof o.c2 !== "string" || !o.c1 ||
+        !o.c2 || /[\t\n]/.test(o.c1 + o.c2)
+      ) {
+        throw new Error(
+          `${path}:${
+            i + 1
+          }: expected labels c1 and c2 as non-empty strings without tabs, received ${
+            JSON.stringify([o.c1, o.c2])
+          }`,
+        );
+      }
+      pairs.push({ domain, c1: o.c1, c2: o.c2 });
+    });
+  }
+  return pairs;
 }
 
 // ---------- stage list ----------
@@ -1573,6 +1625,27 @@ async function stageEnrich() {
       `Describe this K-12 academic standard in one sentence (<150 chars) that a teacher would use to explain what a student learns. Start with a noun or verb. Do not use "Students will". No preamble, no quotation marks.\n\nStandard: ${t.title}\n\nDescription:`,
     { numPredict: 140 },
   );
+
+  // MOOCCubeX labels are Simplified Chinese; seed-edges matches English titles.
+  const hanLabels = new Set(
+    (await readMoocPairs()).flatMap((p) => [p.c1, p.c2]).filter((l) =>
+      HAN_RE.test(l)
+    ),
+  );
+  await resumableOllama(
+    "enrich:translate",
+    TRANSLATE_CACHE,
+    [...hanLabels].map((id) => ({ id })),
+    (t) =>
+      `Translate this concept from a Chinese university course into the short English name an English textbook index would use (1-6 words). Output only the name.\n\nConcept: ${t.id}\n\nEnglish:`,
+    {
+      numPredict: 200,
+      clean: (raw) => {
+        const c = cleanDef(raw);
+        return HAN_RE.test(c) ? "" : c;
+      },
+    },
+  );
 }
 
 // ---------- stage trees: LCSH + DBpedia SKOS broader chains ----------
@@ -1887,57 +1960,24 @@ async function stageSeedEdges() {
   }
 
   // MOOCCubeX
-  const translations: Record<string, string> = (() => {
-    try {
-      return JSON.parse(
-        Deno.readTextFileSync("data/mooccubex/translations.json"),
-      );
-    } catch (e) {
-      console.warn(
-        `[seed-edges] WARN: data/mooccubex/translations.json missing — Chinese labels will pass through untranslated (${
-          (e as Error).message
-        })`,
-      );
-      return {};
-    }
-  })();
-  for (const domain of ["cs", "math", "psy"]) {
-    let bytes: Uint8Array;
-    try {
-      bytes = Deno.readFileSync(`data/mooccubex/${domain}.json.gz`);
-    } catch (e) {
-      console.warn(
-        `[seed-edges] WARN: skipping MOOCCubeX ${domain} — ${
-          (e as Error).message
-        }`,
-      );
-      continue;
-    }
-    const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(
-      new DecompressionStream("gzip"),
-    );
-    const text = await new Response(stream).text();
-    let parseFails = 0;
-    for (const line of text.split("\n")) {
-      if (!line) continue;
-      let obj: { c1?: string; c2?: string; ground_truth?: number };
-      try {
-        obj = JSON.parse(line);
-      } catch {
-        parseFails++;
-        continue;
+  {
+    const translations = loadTsvCache(TRANSLATE_CACHE);
+    const english = (label: string) => {
+      if (!HAN_RE.test(label)) return label;
+      const t = translations.get(label);
+      if (!t) {
+        throw new Error(
+          `MOOCCubeX label "${label}" has no translation in ${TRANSLATE_CACHE}. Run: deno run -A pipeline.ts enrich`,
+        );
       }
-      if (obj.ground_truth !== 1 || !obj.c1 || !obj.c2) continue;
+      return t;
+    };
+    for (const p of await readMoocPairs()) {
       addRaw(
-        translations[obj.c1] || obj.c1,
-        translations[obj.c2] || obj.c2,
-        `moocx_${domain}`,
-        `${obj.c1}->${obj.c2}`,
-      );
-    }
-    if (parseFails > 0) {
-      console.warn(
-        `[seed-edges] WARN: MOOCCubeX ${domain} dropped ${parseFails} malformed JSON lines`,
+        english(p.c1),
+        english(p.c2),
+        `moocx_${p.domain}`,
+        `${p.c1}->${p.c2}`,
       );
     }
   }
@@ -6103,6 +6143,7 @@ const DIFFICULTY_HEADER = "id\tdifficulty\tdifficulty_raw";
 const STAGE_OF: Record<string, string> = {
   [`${BUILD}/1_skills.tsv`]: "list",
   [`${BUILD}/1e_seed_edges.tsv`]: "seed-edges",
+  [TRANSLATE_CACHE]: "enrich",
   [`${BUILD}/2_ids.tsv`]: "embed",
   [`${BUILD}/2_embeddings.bin`]: "embed",
   [`${BUILD}/3b_aliases.tsv`]: "dedupe",
@@ -6356,6 +6397,16 @@ async function stageStatus() {
         return grade(stale.length / rows.length, 0, 1);
       },
     ],
+    ["Every Chinese MOOCCubeX label has an English translation.", async () => {
+      const translations = loadTsvCache(need(TRANSLATE_CACHE));
+      const labels = new Set(
+        (await readMoocPairs()).flatMap((p) => [p.c1, p.c2]).filter((l) =>
+          HAN_RE.test(l)
+        ),
+      );
+      const done = [...labels].filter((l) => translations.has(l));
+      return grade(done.length / labels.size, 1, 0);
+    }],
     ["Under 10% of seed edges put the prereq in a higher band.", () => {
       const m = byId();
       const both = seeds().filter((e) => m.has(e.pre) && m.has(e.dep));

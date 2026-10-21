@@ -9,28 +9,13 @@
       caches removes the ~10% wrong descriptions (E2) and applies the ENR1–4
       prompts.
   1. `git rm build/1b_infill.tsv build/1c_summarize.tsv build/1d_onet_desc.tsv build/5_prereqs.tsv`.
-  2. Run `deno run -A pipeline.ts enrich`. Stage `list` drops 25k long titles
-     today, because the summarize cache has only 3.4k rows and the OpenSALT
-     description cache is empty.
+  2. Run `deno run -A pipeline.ts enrich`. It now also translates the MOOCCubeX
+     labels into `build/1f_translate.tsv`; commit that cache. Stage `list` drops
+     25k long titles today, because the summarize cache has only 3.4k rows and
+     the OpenSALT description cache is empty.
   3. Run `deno run -A pipeline.ts`. Stage `seed-edges` now runs after `dedupe`
      for the first time; watch its foundation-wiring count and quarantine.
   4. Run `deno task status`. Write a todo entry for each condition below 1.0.
-
-- [ ] MOOCCubeX prereq pairs resolve to skills, and stage `seed-edges` throws
-      when a Chinese label has no translation. Decision: gpt-oss translates
-      inside stage `enrich`, through `resumableOllama`, into the cache
-      `build/1f_translate.tsv`. Delete `data/translate.ts` and its claude.md
-      section. Blocker: the translation run needs Ollama. Build the code now;
-      the run folds into the fresh build.
-  1. Add a status condition: every CJK `c1`/`c2` label in
-     `data/mooccubex/*.json.gz` has a row in `build/1f_translate.tsv`.
-  2. In stage `enrich`, collect distinct CJK labels and translate each to a
-     short English concept name.
-  3. In stage `seed-edges`, read the cache. Delete the `try/catch` that returns
-     `{}`. Throw on a missing label:
-     `MOOCCubeX label "分区表" has no translation. Run: deno run -A pipeline.ts enrich`.
-  4. Add `!build/1f_translate.tsv` to `.gitignore`, next to the other paid
-     caches.
 
 - [ ] Skills from every US state standard set appear in `skills.tsv`, merged
       with OpenSALT where they repeat. Decision: approved design. Common

@@ -72,6 +72,15 @@ Deno.test("list: every code:* tag has at least 4 chars", () => {
 
 // A small build that passes every status condition. Each test mutates a copy.
 type Fixture = Record<string, string | Uint8Array>;
+const gzip = async (text: string) =>
+  new Uint8Array(
+    await new Response(
+      new Blob([text]).stream().pipeThrough(new CompressionStream("gzip")),
+    ).arrayBuffer(),
+  );
+const MOOC_GZ = await gzip(
+  '{"c1":"函数","c2":"欧拉函数","ground_truth":1}\n{"c1":"集合","c2":"函数","ground_truth":0}\n',
+);
 const goodBuild = (): Fixture => {
   const skills: [string, number, string, string, string][] = [
     ["counting", 1, "", "", ""],
@@ -107,13 +116,19 @@ const goodBuild = (): Fixture => {
       grade_band_inversions: 0,
     }),
     "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\taddition\n",
+    "build/1f_translate.tsv":
+      "函数\tfunction\n欧拉函数\tEuler's totient function\n",
+    "data/mooccubex/cs.json.gz": MOOC_GZ,
+    "data/mooccubex/math.json.gz": MOOC_GZ,
+    "data/mooccubex/psy.json.gz": MOOC_GZ,
   };
 };
 
 const runStatus = async (fixture: Fixture) => {
   const dir = Deno.makeTempDirSync();
-  Deno.mkdirSync(`${dir}/build`);
   for (const [path, body] of Object.entries(fixture)) {
+    const parent = path.slice(0, path.lastIndexOf("/") + 1);
+    Deno.mkdirSync(`${dir}/${parent}`, { recursive: true });
     if (typeof body === "string") {
       Deno.writeTextFileSync(`${dir}/${path}`, body);
     } else Deno.writeFileSync(`${dir}/${path}`, body);
@@ -160,6 +175,17 @@ Deno.test("status: graph defects score below 1 and exit 1", async () => {
     1 - 1 / 11,
   );
   assertEquals(score("Addition is a transitive prereq of multiplication."), 1);
+});
+
+Deno.test("status: an untranslated MOOCCubeX label scores below 1", async () => {
+  const build = goodBuild();
+  build["build/1f_translate.tsv"] = "函数\tfunction\n";
+  const { code, score } = await runStatus(build);
+  assertEquals(code, 1);
+  assertEquals(
+    score("Every Chinese MOOCCubeX label has an English translation."),
+    0.5,
+  );
 });
 
 Deno.test("status: a missing build file scores 0 and names the stage to rerun", async () => {

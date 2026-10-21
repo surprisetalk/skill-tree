@@ -146,8 +146,9 @@ is a JSON object:
 - `c1` → `c2` prerequisite direction; `ground_truth`: 1 = confirmed prerequisite
 - **cs.json.gz**, **math.json.gz**, **psy.json.gz**
 - Uncompressed .json files are gitignored
-- `data/mooccubex/translations.json` is not in the repo, so stage `seed-edges`
-  passes Chinese labels through untranslated. todo.md tracks the fix.
+- Stage `enrich` translates the Chinese labels with Ollama into
+  `build/1f_translate.tsv`. Stage `seed-edges` throws on a label with no
+  translation.
 
 ### data/khanacademy/ — Khan Academy Math Prerequisite Graph (TSV)
 
@@ -216,9 +217,9 @@ cached in `build/`.
 
 **LLM enrichment** (stage `enrich`, Ollama): fill missing Lightcast
 descriptions; summarize long OpenSALT/O\*NET-task titles into 3-7 word names;
-expand short O\*NET task statements. Resumable via tab-separated cache files
-(`1b_infill.tsv`, `1c_summarize.tsv`, `1d_onet_desc.tsv`). Applied back by
-re-running `list`.
+expand short O\*NET task statements; translate MOOCCubeX labels. Resumable via
+tab-separated cache files (`1b_infill.tsv`, `1c_summarize.tsv`,
+`1d_onet_desc.tsv`). Applied back by re-running `list`.
 
 **Prereq inference** (stage `prereq`, Ollama): per-skill top-K candidate ranking
 via cosine similarity (within-topic + ancestor + cross-topic pools), then LLM
@@ -235,15 +236,6 @@ in `3b_aliases.tsv`; stages 6/7 remap edges through it.
 (`OCC_TOP_K`, `TOPIC_TOP_K`, `PREREQ_K`, `PREREQ_PICK_CAP`, `KNN_K`,
 `DEDUPE_COSINE`, `PER_TOPIC_CAP`, `HUB_CAP`, `SEED_FALLBACK_COS`, `BF_SIM`,
 `BF_SIM_ZERO_ZERO` etc.).
-
-### data/translate.ts — Chinese Label Translator
-
-`ANTHROPIC_API_KEY=... deno run --allow-read --allow-write --allow-net --allow-run data/translate.ts`
-
-One-time script that extracts Chinese labels from MOOCCubeX (Simplified Chinese
-concepts), translates them to English via Claude API (Haiku, batches of 100),
-and writes `data/mooccubex/translations.json`. Caches results — skips labels
-already in the existing JSON file.
 
 ### data/download.ts — Dataset Downloader
 
@@ -289,8 +281,8 @@ Caches for per-stage resumption. Key files:
 
 - `1_skills.tsv` — post-parse, post-dedupe skill list (id, title, description,
   sources, tags).
-- `1b_infill.tsv`, `1c_summarize.tsv`, `1d_onet_desc.tsv` — Ollama enrichment
-  caches.
+- `1b_infill.tsv`, `1c_summarize.tsv`, `1d_onet_desc.tsv`, `1f_translate.tsv` —
+  Ollama enrichment caches.
 - `1e_seed_edges.tsv` — resolved expert-labeled prereq pairs from
   Khan/AL-CPL/Metacademy/MOOCCubeX/OpenSALT.
 - `1e_unresolved.tsv` — seed pairs that failed to resolve, with per-label reason
