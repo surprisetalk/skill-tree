@@ -440,39 +440,43 @@ async function resumableOllama<T extends { id: string }>(
   const enc = new TextEncoder();
   const cleanFn = opts.clean ?? cleanDef;
   const t0 = performance.now();
-  let done = 0, errs = 0;
-  async function worker() {
-    while (queue.length) {
-      const item = queue.shift();
-      if (!item) break;
+  let done = 0, rejected = 0;
+  let failure: Error | undefined;
+  const worker = async () => {
+    while (queue.length && !failure) {
+      const item = queue.shift()!;
       try {
-        const raw = await generateOne(promptFn(item), opts.numPredict);
-        const cleaned = cleanFn(raw);
+        const cleaned = cleanFn(
+          await generateOne(promptFn(item), opts.numPredict),
+        );
         if (cleaned) fh.writeSync(enc.encode(`${item.id}\t${cleaned}\n`));
+        else rejected++;
       } catch (e) {
-        errs++;
-        if (errs < 5) {
-          console.warn(
-            `[${label}] err ${item.id}: ${(e as Error).message.slice(0, 80)}`,
-          );
-        }
+        // Stop every worker; in-flight successes still reach the cache.
+        failure ??= new Error(
+          `[${label}] Ollama failed on "${item.id}" after ${done} items: ${
+            (e as Error).message
+          }. Check that ${OLLAMA} serves ${GEN_MODEL}, then rerun; the cache keeps finished items.`,
+          { cause: e },
+        );
+        return;
       }
       done++;
       if (done % 200 === 0) {
-        const dt = (performance.now() - t0) / 1000;
-        const rate = done / dt;
+        const rate = done / ((performance.now() - t0) / 1000);
         console.log(
           `  ${done}/${queue.length + done} (${rate.toFixed(1)}/s, eta ${
             (queue.length / rate / 60).toFixed(1)
-          }min, errs=${errs})`,
+          }min, rejected=${rejected})`,
         );
       }
     }
-  }
+  };
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   fh.close();
+  if (failure) throw failure;
   console.log(
-    `[${label}] done ${done} (errs=${errs}) in ${
+    `[${label}] done ${done} (rejected=${rejected}) in ${
       ((performance.now() - t0) / 1000).toFixed(0)
     }s`,
   );
