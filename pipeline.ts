@@ -3,6 +3,11 @@
 // Usage: deno run --allow-all pipeline.ts [stage]
 // Stages: list, enrich, trees, seed-edges, embed, tag, dedupe, difficulty, prereq, postproc, finalize.
 
+import { parse as parseCsvText } from "@std/csv/parse";
+import { unescape } from "@std/html/entities";
+import entityList from "@std/html/named-entity-list.json" with {
+  type: "json",
+};
 import { TextLineStream } from "@std/streams/text-line-stream";
 
 const BUILD = "build";
@@ -18,97 +23,7 @@ type Skill = {
 
 // ---------- util ----------
 
-const NAMED_ENTITY: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: " ",
-  rsquo: "'",
-  lsquo: "'",
-  rdquo: '"',
-  ldquo: '"',
-  sbquo: ",",
-  bdquo: '"',
-  ndash: "-",
-  mdash: "-",
-  hellip: "…",
-  middot: "·",
-  bull: "•",
-  acirc: "â",
-  aacute: "á",
-  agrave: "à",
-  auml: "ä",
-  atilde: "ã",
-  aring: "å",
-  aelig: "æ",
-  ecirc: "ê",
-  eacute: "é",
-  egrave: "è",
-  euml: "ë",
-  icirc: "î",
-  iacute: "í",
-  igrave: "ì",
-  iuml: "ï",
-  ocirc: "ô",
-  oacute: "ó",
-  ograve: "ò",
-  ouml: "ö",
-  otilde: "õ",
-  oslash: "ø",
-  ucirc: "û",
-  uacute: "ú",
-  ugrave: "ù",
-  uuml: "ü",
-  ccedil: "ç",
-  ntilde: "ñ",
-  szlig: "ß",
-  yacute: "ý",
-  yuml: "ÿ",
-  Acirc: "Â",
-  Aacute: "Á",
-  Agrave: "À",
-  Auml: "Ä",
-  Atilde: "Ã",
-  Aring: "Å",
-  AElig: "Æ",
-  Ecirc: "Ê",
-  Eacute: "É",
-  Egrave: "È",
-  Euml: "Ë",
-  Icirc: "Î",
-  Iacute: "Í",
-  Igrave: "Ì",
-  Iuml: "Ï",
-  Ocirc: "Ô",
-  Oacute: "Ó",
-  Ograve: "Ò",
-  Ouml: "Ö",
-  Otilde: "Õ",
-  Oslash: "Ø",
-  Ucirc: "Û",
-  Uacute: "Ú",
-  Ugrave: "Ù",
-  Uuml: "Ü",
-  Ccedil: "Ç",
-  Ntilde: "Ñ",
-  Yacute: "Ý",
-  copy: "©",
-  reg: "®",
-  trade: "™",
-  deg: "°",
-  plusmn: "±",
-  times: "×",
-  divide: "÷",
-};
-const decodeEntities = (s: string) =>
-  s
-    .replace(/&([a-zA-Z]+);/g, (m, name) => NAMED_ENTITY[name] ?? m)
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) =>
-      String.fromCharCode(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, n) =>
-      String.fromCharCode(Number(n)));
+const decodeEntities = (s: string) => unescape(s, { entityList });
 
 const normalizeText = (s: string): string => {
   if (!s) return "";
@@ -120,17 +35,6 @@ const normalizeText = (s: string): string => {
   );
   t = t.replace(/[\u2010\u2011\u2012\u2013\u2014]/g, "-");
   t = t.replace(/\*\*([^*]+)\*\*/g, "$1");
-  t = t.replace(/Â\s*/g, " ");
-  t = t.replace(/â€[\u0090-\u009F\u200B-\u200F]*/g, "");
-  t = t.replace(/Ã[\u0080-\u00BF]/g, (m) => {
-    try {
-      return new TextDecoder().decode(
-        new Uint8Array([...m].map((c) => c.charCodeAt(0))),
-      );
-    } catch {
-      return m;
-    }
-  });
   t = t.replace(/\s+/g, " ").trim();
   return t;
 };
@@ -230,39 +134,16 @@ const parseTsv = (text: string, tag?: string): string[][] => {
   return rows;
 };
 
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cur = "";
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else inQuotes = false;
-      } else cur += c;
-    } else {
-      if (c === '"') inQuotes = true;
-      else if (c === ",") {
-        row.push(cur);
-        cur = "";
-      } else if (c === "\n") {
-        row.push(cur);
-        rows.push(row);
-        row = [];
-        cur = "";
-      } else if (c === "\r") { /* skip */ }
-      else cur += c;
-    }
+function readCsv(path: string): string[][] {
+  try {
+    return parseCsvText(Deno.readTextFileSync(path), { fieldsPerRecord: 0 });
+  } catch (e) {
+    throw new Error(
+      `${path}: expected RFC 4180 CSV with a constant field count, received ${
+        (e as Error).message
+      }. Re-download the file.`,
+    );
   }
-  if (cur.length || row.length) {
-    row.push(cur);
-    rows.push(row);
-  }
-  return rows;
 }
 
 function pct(arr: number[], p: number): number {
@@ -830,7 +711,7 @@ function stageList() {
 
   // ESCO
   {
-    const rows = parseCsv(Deno.readTextFileSync("data/esco/skills_en.csv"));
+    const rows = readCsv("data/esco/skills_en.csv");
     const h = rows[0];
     const iLabel = h.indexOf("preferredLabel"),
       iDesc = h.indexOf("description"),
@@ -1869,10 +1750,8 @@ async function stageSeedEdges() {
 
   // Metacademy — Wikipedia-mapped CSV
   {
-    const rows = parseCsv(
-      Deno.readTextFileSync(
-        "data/metacademy/Metacademy-prerequisite-pairs-transformed-to-wikipedia.csv",
-      ),
+    const rows = readCsv(
+      "data/metacademy/Metacademy-prerequisite-pairs-transformed-to-wikipedia.csv",
     );
     for (let i = 1; i < rows.length; i++) {
       const pre = rows[i][0], tgt = rows[i][3];
@@ -2568,7 +2447,7 @@ function parseOccupationRefs(): { label: string; desc: string }[] {
     seen.add(k);
     refs.push({ label, desc: desc.trim() });
   };
-  const esco = parseCsv(Deno.readTextFileSync("data/esco/occupations_en.csv"));
+  const esco = readCsv("data/esco/occupations_en.csv");
   const eh = esco[0],
     el = eh.indexOf("preferredLabel"),
     ed = eh.indexOf("description");
@@ -2655,9 +2534,7 @@ async function parseTopicRefs(
 }
 
 function parseEscoSkillTopics(): Map<string, string[]> {
-  const rows = parseCsv(
-    Deno.readTextFileSync("data/esco/broaderRelationsSkillPillar_en.csv"),
-  );
+  const rows = readCsv("data/esco/broaderRelationsSkillPillar_en.csv");
   const h = rows[0];
   const iC = h.indexOf("conceptLabel"),
     iCu = h.indexOf("conceptUri"),
@@ -2756,9 +2633,7 @@ function parseOnetSkillOccupations(): Map<string, string[]> {
 }
 
 function parseEscoSkillOccupations(): Map<string, string[]> {
-  const rows = parseCsv(
-    Deno.readTextFileSync("data/esco/occupationSkillRelations_en.csv"),
-  );
+  const rows = readCsv("data/esco/occupationSkillRelations_en.csv");
   const h = rows[0];
   const iO = h.indexOf("occupationLabel"),
     iS = h.indexOf("skillLabel"),

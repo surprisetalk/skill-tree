@@ -2,6 +2,9 @@
   "version": "5",
   "specifiers": {
     "jsr:@std/assert@1": "1.0.19",
+    "jsr:@std/csv@1": "1.0.6",
+    "jsr:@std/html@1": "1.0.7",
+    "jsr:@std/html@1.0.7": "1.0.7",
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "jsr:@std/streams@1": "1.2.0"
   },
@@ -11,6 +14,12 @@
       "dependencies": [
         "jsr:@std/internal"
       ]
+    },
+    "@std/csv@1.0.6": {
+      "integrity": "52ef0e62799a0028d278fa04762f17f9bd263fad9a8e7f98c14fbd371d62d9fd"
+    },
+    "@std/html@1.0.7": {
+      "integrity": "175c818905a6e75743c69c251395e273d82698e58cfe7dd76268d70e28b8d8fe"
     },
     "@std/internal@1.0.14": {
       "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
@@ -22,6 +31,8 @@
   "workspace": {
     "dependencies": [
       "jsr:@std/assert@1",
+      "jsr:@std/csv@1",
+      "jsr:@std/html@1",
       "jsr:@std/streams@1"
     ]
   }
