@@ -1,14 +1,3 @@
-- [ ] Stage `list` emits the foundation hubs (addition, fractions, loops, …),
-      and it throws when `data/_foundations.json` is missing.
-  1. Add a failing test: run `deno run -A pipeline.ts list`; expect ids
-     `addition`, `subtraction`, `multiplication`, `division`, `fractions`,
-     `decimals`, `place-value`, `area`, `perimeter`, `functions`,
-     `pythagorean-theorem`, `loops`, `python`, `cells`, `atoms`.
-  2. Write `data/_foundations.json` in the shape the code reads:
-     `{"foundations": [{"id", "title", "description", "grade_start", "grade_end"}], "seed_edges": [{"prereq", "dependent" | "dependent_pattern"}]}`.
-  3. Delete both `try/catch` wrappers around the file read, in stage `list` and
-     stage `seed-edges`.
-
 - [ ] You read claude.md and readme.md, and each count in them is a command, not
       a number that goes stale.
   1. Replace counts in claude.md (`~3,000 lines`, `~65k rows`, `13,890+`, etc.)
@@ -24,6 +13,19 @@
      OpenSALT parser with an established decoder, not a hand-written table.
 
 ## Blocked on you
+
+- [ ] Stage `seed-edges` runs on a clean `build/` and resolves seeds against the
+      current run's skills. Blocker: verification needs Ollama (embedding
+      fallback); fix before the fresh build. `loadSkillIndex` reads
+      `build/3_tagged.tsv`, which stage `tag` writes later in the run. A clean
+      build crashes; a re-run resolves against the previous run's ids.
+  1. Point `loadSkillIndex` at `build/1_skills.tsv`.
+  2. Confirm that every seed reader (difficulty, postproc, finalize) remaps ids
+     through `loadAliasesCollapsed`.
+  3. Map each `foundation:<id>` tag to its row id in `slugToId`, so a foundation
+     that merged into another skill still resolves.
+  4. Run `rm -rf build/1e_* && deno run -A pipeline.ts seed-edges` on a build
+     with no `3_tagged.tsv`.
 
 - [ ] You get a fresh `skills.tsv` that includes the fixes from audit passes
       9–16, and `deno task status` passes. Blocker: a multi-hour Ollama run on

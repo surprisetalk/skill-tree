@@ -105,3 +105,19 @@ Deno.test("status: scores a fixture build and exits 1 on a failing condition", a
   );
   assertEquals(score("At least 80% of seed edges survive into skills.tsv."), 0);
 });
+
+// REG-MF1: OpenSALT splits these concepts into hundreds of grade variants and
+// emits no hub, so data/_foundations.json supplies them. A foundation may merge
+// into an existing skill, so the check follows its foundation:<id> tag.
+Deno.test("list: every foundation lands in a skill", () => {
+  const tags = new Set(rows.flatMap((c) => c[4].split(",")));
+  const { foundations } = JSON.parse(
+    Deno.readTextFileSync("data/_foundations.json"),
+  );
+  const missing = foundations.map((f: { id: string }) => `foundation:${f.id}`)
+    .filter((t: string) => !tags.has(t));
+  assertEquals(missing, [], "foundations missing from build/1_skills.tsv");
+  for (const id of ["addition", "multiplication", "fractions", "loops"]) {
+    assert(rows.some((c) => c[0] === id), `no skill has id ${id}`);
+  }
+});

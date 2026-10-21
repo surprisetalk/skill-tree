@@ -665,6 +665,68 @@ const SHORT_TECH_WHITELIST = new Set([
   "rsa",
 ]);
 
+type Foundations = {
+  foundations: {
+    id: string;
+    title: string;
+    description: string;
+    grade_start?: number;
+    grade_end?: number;
+  }[];
+  seed_edges: {
+    prereq: string;
+    dependent?: string;
+    dependent_pattern?: string;
+  }[];
+};
+
+const FOUNDATIONS_PATH = "data/_foundations.json";
+
+function readFoundations(): Foundations {
+  const f = JSON.parse(Deno.readTextFileSync(FOUNDATIONS_PATH)) as Foundations;
+  const bad = (expected: string, received: unknown) =>
+    new Error(
+      `${FOUNDATIONS_PATH}: expected ${expected}.\n  received: ${
+        JSON.stringify(received)
+      }\n  Fix that record.`,
+    );
+  if (!Array.isArray(f.foundations) || !Array.isArray(f.seed_edges)) {
+    throw bad("{foundations: [...], seed_edges: [...]}", Object.keys(f));
+  }
+  const ids = new Set<string>();
+  for (const fd of f.foundations) {
+    if (
+      typeof fd.title !== "string" || typeof fd.description !== "string" ||
+      !fd.description
+    ) {
+      throw bad("a title and a non-empty description", fd);
+    }
+    if (fd.id !== slugify(fd.title)) {
+      throw bad(`id "${slugify(fd.title)}", the slug of the title`, fd);
+    }
+    for (const g of [fd.grade_start, fd.grade_end]) {
+      if (g !== undefined && !(Number.isInteger(g) && g >= -1 && g <= 12)) {
+        throw bad("grades as integers from -1 (PK) to 12", fd);
+      }
+    }
+    ids.add(fd.id);
+  }
+  for (const e of f.seed_edges) {
+    const one =
+      (e.dependent === undefined) !== (e.dependent_pattern === undefined);
+    if (
+      !ids.has(e.prereq) || !one ||
+      (e.dependent !== undefined && !ids.has(e.dependent))
+    ) {
+      throw bad(
+        "a foundation prereq plus exactly one of a foundation dependent or a dependent_pattern",
+        e,
+      );
+    }
+  }
+  return f;
+}
+
 function stageList() {
   console.log("[list] reading sources…");
   const infill = loadTsvCache(INFILL_CACHE);
@@ -922,47 +984,26 @@ function stageList() {
   // them into 284+ grade-specific variants, leaving no convergence point. Seed them
   // as first-class skills with curated descriptions.
   {
-    try {
-      const f = JSON.parse(Deno.readTextFileSync("data/_foundations.json"));
-      let n = 0;
-      for (const fd of f.foundations || []) {
-        if (!fd.id || !fd.title) continue;
-        const tags = ["foundation", `foundation:${fd.id}`];
-        if (Number.isFinite(fd.grade_start)) {
-          tags.push(
-            `grade:${
-              fd.grade_start === 0
-                ? "K"
-                : fd.grade_start === -1
-                ? "PK"
-                : String(fd.grade_start)
-            }`,
-          );
-        }
-        if (Number.isFinite(fd.grade_end) && fd.grade_end !== fd.grade_start) {
-          tags.push(
-            `grade:${
-              fd.grade_end === 0
-                ? "K"
-                : fd.grade_end === -1
-                ? "PK"
-                : String(fd.grade_end)
-            }`,
-          );
-        }
-        raw.push({
-          id: "",
-          title: fd.title,
-          description: fd.description || "",
-          sources: ["foundation"],
-          tags,
-        });
-        n++;
-      }
-      console.log(`  foundations: ${n}`);
-    } catch (e) {
-      console.warn(`[list] foundations skipped: ${(e as Error).message}`);
+    const f = readFoundations();
+    const gradeTag = (g: number) =>
+      `grade:${g === 0 ? "K" : g === -1 ? "PK" : String(g)}`;
+    for (const fd of f.foundations) {
+      const grades = new Set(
+        [fd.grade_start, fd.grade_end].filter((g) => g !== undefined),
+      );
+      raw.push({
+        id: "",
+        title: fd.title,
+        description: fd.description,
+        sources: ["foundation"],
+        tags: [
+          "foundation",
+          `foundation:${fd.id}`,
+          ...[...grades].map(gradeTag),
+        ],
+      });
     }
+    console.log(`  foundations: ${f.foundations.length}`);
   }
 
   // OpenSALT CFItems
@@ -2066,45 +2107,30 @@ async function stageSeedEdges() {
   // Pass 16 MF2: foundation wiring. Connect synthesized foundation hubs to their
   // fragmented variants (add-within-5 → addition, etc.) via pattern matching.
   {
-    try {
-      const f = JSON.parse(Deno.readTextFileSync("data/_foundations.json"));
-      const foundationTitles = new Map<string, string>();
-      for (const fd of f.foundations || []) {
-        if (fd.id && fd.title) foundationTitles.set(fd.id, fd.title);
+    const f = readFoundations();
+    const titleOf = new Map(f.foundations.map((fd) => [fd.id, fd.title]));
+    let n = 0;
+    for (const e of f.seed_edges) {
+      const pre = titleOf.get(e.prereq)!;
+      if (e.dependent) {
+        addRaw(
+          pre,
+          titleOf.get(e.dependent)!,
+          "foundation",
+          `${e.prereq}->${e.dependent}`,
+        );
+        n++;
+        continue;
       }
-      let n = 0;
-      for (const e of f.seed_edges || []) {
-        if (!e.prereq) continue;
-        const preTitle = foundationTitles.get(e.prereq);
-        if (!preTitle) continue;
-        if (e.dependent) {
-          const dTitle = foundationTitles.get(e.dependent);
-          if (dTitle) {
-            addRaw(
-              preTitle,
-              dTitle,
-              "foundation",
-              `${e.prereq}->${e.dependent}`,
-            );
-            n++;
-          }
-        } else if (e.dependent_pattern) {
-          const re = new RegExp(e.dependent_pattern);
-          for (const id of idx.idSet) {
-            if (!re.test(id)) continue;
-            if (id === e.prereq) continue;
-            // resolveConcept matches ids directly; pass the id slug as the "label".
-            addRaw(preTitle, id, "foundation", `${e.prereq}->${id}`);
-            n++;
-          }
-        }
+      const re = new RegExp(e.dependent_pattern!);
+      for (const id of idx.idSet) {
+        if (id === e.prereq || !re.test(id)) continue;
+        // resolveConcept matches ids directly; pass the id slug as the "label".
+        addRaw(pre, id, "foundation", `${e.prereq}->${id}`);
+        n++;
       }
-      console.log(`[seed-edges] foundation wiring: ${n} pairs`);
-    } catch (e) {
-      console.warn(
-        `[seed-edges] foundation wiring skipped: ${(e as Error).message}`,
-      );
     }
+    console.log(`[seed-edges] foundation wiring: ${n} pairs`);
   }
 
   // Pass 15 K2: Khan-to-OpenSALT-Khan crosswalk via humanCodingScheme.
