@@ -1,9 +1,3 @@
-- [ ] OpenSALT text with math symbols reads correctly, e.g. `x²⋅x⁵`, not
-      `x ²â‹…xâµ`.
-  1. Add a failing test: no `build/1_skills.tsv` field contains `â` or `Ã`.
-  2. Repair the double-encoded UTF-8 (Windows-1252 read as UTF-8) in the
-     OpenSALT parser with an established decoder, not a hand-written table.
-
 ## Blocked on you
 
 - [ ] Stage `seed-edges` runs on a clean `build/` and resolves seeds against the

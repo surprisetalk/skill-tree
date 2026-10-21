@@ -121,3 +121,12 @@ Deno.test("list: every foundation lands in a skill", () => {
     assert(rows.some((c) => c[0] === id), `no skill has id ${id}`);
   }
 });
+
+// UTF-8 read as Windows-1252: a lead byte (Â, Ã, â) followed by a char from the
+// 0x80–0xBF continuation range as cp1252 shows it. A lone Â is a mangled
+// no-break space after the pipeline collapses whitespace.
+Deno.test("list: no field holds double-encoded UTF-8", () => {
+  const mojibake = /[ÂÃâ][\u0080-¿ŒœŠšŸŽžƒˆ˜–-›€™]|Â(\s|$)/;
+  const bad = rows.filter((c) => c.some((f) => mojibake.test(f)));
+  assertEquals(bad.slice(0, 3).map((c) => c[0]), [], `${bad.length} rows`);
+});

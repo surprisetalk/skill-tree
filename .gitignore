@@ -23,3 +23,6 @@ skills-*.html
 .DS_Store
 .env.*
 !.env.example
+
+# agent worktrees
+.claude/worktrees/
