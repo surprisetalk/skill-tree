@@ -17,35 +17,6 @@
   3. Correct the `translations.json` text in claude.md: the file is not in the
      repo.
 
-- [ ] `deno task test` runs the real entry point in seconds, and
-      `deno task status` scores the last full build for snitch. Decision:
-      approved design. Today 33 of 40 tests read `build/` outputs that only a
-      multi-hour Ollama run makes, so the suite fails on a clean checkout. Stage
-      2–7 regressions surface only in status.
-  1. `deno task test` spawns `deno run -A pipeline.ts list` (2.3 s, no Ollama,
-     30 s bound) and asserts on `build/1_skills.tsv` and `build/1_stats.json`.
-     The stage-1 tests stay: schema, sources, unique ids, no tabs, EC1, EC2, R5,
-     TG2, foundations.
-  2. Each other test becomes a condition in a new `status` stage of
-     `pipeline.ts`. `deno task status` runs it.
-  3. `status` prints
-     `{"Reversed-difficulty LLM picks stay under 8%.": {"0": 0.91}, ...}` and
-     exits 1 when any score is below 1.0.
-  4. Score = 1.0 at the threshold, 0.0 at total failure. Example: reversed rate
-     r, threshold 0.08 → `(1 - r) / (1 - 0.08)`.
-  5. Conditions: DAG with resolved ids and no self-loops; ≤5 skills share an
-     embedding; reversed picks <8%; seed reversals <10%; ≥80% of seed edges
-     survive to `skills.tsv`; orphans <20%; roots <20%; Kendall τ >0.5;
-     grade-band inversions <5%; ≥95% of OpenSALT skills carry a grade tag; no
-     anomalous hub >200 in-degree; no cross-language prereqs; no junk topic or
-     hex occupation; `addition` reaches `multiplication`; every `5_prereqs.tsv`
-     id is a current skill; ≥10 GB free disk.
-  6. A missing build file scores its conditions 0.0 and prints
-     `build/6_stats.json: missing. Stage postproc writes it. Run: deno run -A pipeline.ts postproc`.
-  7. Add `.githooks/pre-commit` that runs `deno task check && deno task test`.
-     Add `git config core.hooksPath .githooks` to readme.md.
-  8. Set `skill-tree	deno task status` in `~/Developer/snitch/projects.tsv`.
-
 - [ ] OpenSALT text with math symbols reads correctly, e.g. `x²⋅x⁵`, not
       `x ²â‹…xâµ`.
   1. Add a failing test: no `build/1_skills.tsv` field contains `â` or `Ã`.

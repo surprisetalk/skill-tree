@@ -5952,9 +5952,7 @@ function stageFinalize() {
     });
   }
 
-  const rows = [
-    "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end",
-  ];
+  const rows = [SKILLS_HEADER];
   for (const r of pending) {
     rows.push(
       [
@@ -6046,6 +6044,387 @@ function stageFinalize() {
   );
 }
 
+// ---------- status ----------
+
+const SKILLS_HEADER =
+  "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end";
+
+const STAGE_OF: Record<string, string> = {
+  [`${BUILD}/1_skills.tsv`]: "list",
+  [`${BUILD}/1e_seed_edges.tsv`]: "seed-edges",
+  [`${BUILD}/2_ids.tsv`]: "embed",
+  [`${BUILD}/2_embeddings.bin`]: "embed",
+  [`${BUILD}/4_difficulty.tsv`]: "difficulty",
+  [`${BUILD}/4_stats.json`]: "difficulty",
+  [`${BUILD}/5_prereqs.tsv`]: "prereq",
+  "skills.tsv": "finalize",
+};
+
+// snitch convention: 1.0 at the passing threshold, 0.0 at total failure.
+function grade(value: number, pass: number, fail: number): number {
+  if (!Number.isFinite(value)) {
+    throw new Error(
+      `expected a finite measurement, received ${value}. A count the condition divides by is 0.`,
+    );
+  }
+  return Math.max(0, (value - fail) / (pass - fail));
+}
+
+function need(path: string): string {
+  try {
+    Deno.statSync(path);
+  } catch (e) {
+    if (!(e instanceof Deno.errors.NotFound)) throw e;
+    const stage = STAGE_OF[path];
+    throw new Deno.errors.NotFound(
+      `${path}: missing. Stage ${stage} writes it. Run: deno run -A pipeline.ts ${stage}`,
+    );
+  }
+  return path;
+}
+
+function readRows(path: string, header: string): string[][] {
+  const lines = Deno.readTextFileSync(need(path)).split("\n").filter((l) =>
+    l.length
+  );
+  const fix = `Run: deno run -A pipeline.ts ${STAGE_OF[path]}`;
+  if (lines[0] !== header) {
+    throw new Error(
+      `${path}: unexpected header.\n  expected: ${header}\n  received: ${
+        lines[0]
+      }\n  ${fix}`,
+    );
+  }
+  const n = header.split("\t").length;
+  return lines.slice(1).map((l, i) => {
+    const c = l.split("\t");
+    if (c.length !== n) {
+      throw new Error(
+        `${path}:${i + 2}: expected ${n} columns, received ${c.length}. ${fix}`,
+      );
+    }
+    return c;
+  });
+}
+
+type StatusSkill = {
+  id: string;
+  band: number;
+  prereqs: string[];
+  occupations: string[];
+  topics: string[];
+};
+
+function readSkillsTsv(): StatusSkill[] {
+  const list = (c: string) => c ? c.split(",") : [];
+  return readRows("skills.tsv", SKILLS_HEADER).map((c) => ({
+    id: c[0],
+    band: Number(c[4]),
+    prereqs: list(c[5]),
+    occupations: list(c[6]),
+    topics: list(c[7]),
+  }));
+}
+
+// Kahn order, prereqs first. Nodes on a cycle never enter the order.
+function topoOrder(skills: StatusSkill[]): string[] {
+  const ids = new Set(skills.map((s) => s.id));
+  const indeg = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
+  for (const s of skills) {
+    const ps = s.prereqs.filter((p) => p !== s.id && ids.has(p));
+    indeg.set(s.id, ps.length);
+    for (const p of ps) dependents.set(p, [...dependents.get(p) ?? [], s.id]);
+  }
+  const order = [...indeg].filter(([, d]) => d === 0).map(([id]) => id);
+  for (let i = 0; i < order.length; i++) {
+    for (const d of dependents.get(order[i]) ?? []) {
+      const left = indeg.get(d)! - 1;
+      indeg.set(d, left);
+      if (left === 0) order.push(d);
+    }
+  }
+  return order;
+}
+
+const ANOMALOUS_HUB_RE =
+  /retell-stories-related-to.*-day|^sced-|language-immersion-prior|understand-object-naming-and-naming-conventions|^(leadership|assisted-reading|corrective-reading|study-hall)$/;
+
+async function stageStatus() {
+  let cached: StatusSkill[] | undefined;
+  const skills = () => cached ??= readSkillsTsv();
+  const byId = () => new Map(skills().map((s) => [s.id, s]));
+  const edgeCount = () => skills().reduce((n, s) => n + s.prereqs.length, 0);
+  const seeds = () => {
+    const alias = loadAliasesCollapsed();
+    return readRows(
+      `${BUILD}/1e_seed_edges.tsv`,
+      "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback",
+    ).filter((c) => c[4] === "0").map((c) => ({
+      pre: alias.get(c[0]) ?? c[0],
+      dep: alias.get(c[1]) ?? c[1],
+    }));
+  };
+  const stats = (path: string) =>
+    JSON.parse(Deno.readTextFileSync(need(path))) as Record<string, number>;
+
+  const conditions: [string, () => number | Promise<number>][] = [
+    ["The prereq graph is a DAG, and every prereq names another skill.", () => {
+      const ss = skills();
+      const ids = new Set(ss.map((s) => s.id));
+      const ordered = new Set(topoOrder(ss));
+      let bad = 0;
+      for (const s of ss) {
+        for (const p of s.prereqs) {
+          if (p === s.id || !ids.has(p) || !ordered.has(s.id)) bad++;
+        }
+      }
+      return grade(bad / edgeCount(), 0, 1);
+    }],
+    ["At most 5 skills share an embedding.", () => {
+      const DIM = 768;
+      const ids = Deno.readTextFileSync(need(`${BUILD}/2_ids.tsv`)).split("\n")
+        .filter((l) => l.length);
+      const bin = Deno.readFileSync(need(`${BUILD}/2_embeddings.bin`));
+      if (bin.byteLength !== ids.length * DIM * 4) {
+        throw new Error(
+          `${BUILD}/2_embeddings.bin: expected ${
+            ids.length * DIM * 4
+          } bytes (${ids.length} ids × ${DIM} × 4), received ${bin.byteLength}. Run: deno run -A pipeline.ts embed`,
+        );
+      }
+      const f32 = new Float32Array(bin.buffer);
+      const groups = new Map<string, number>();
+      for (let i = 0; i < ids.length; i++) {
+        const k = [0, 1, 2].map((j) => f32[i * DIM + j].toFixed(4)).join("_");
+        groups.set(k, (groups.get(k) ?? 0) + 1);
+      }
+      return grade(Math.max(...groups.values()), 5, ids.length);
+    }],
+    ["Under 8% of LLM prereq picks sit above their skill's difficulty.", () => {
+      const raw = new Map(
+        readRows(
+          `${BUILD}/4_difficulty.tsv`,
+          "id\tdifficulty\tdifficulty_raw",
+        ).map((c) => [c[0], Number(c[2])]),
+      );
+      let picks = 0, reversed = 0;
+      for (
+        const line of Deno.readTextFileSync(need(`${BUILD}/5_prereqs.tsv`))
+          .split("\n")
+      ) {
+        const [s, rest] = line.split("\t");
+        if (!rest || rest === "none") continue;
+        for (const p of rest.split(",")) {
+          const rs = raw.get(s), rp = raw.get(p);
+          if (rs === undefined || rp === undefined) continue;
+          picks++;
+          if (rp >= rs) reversed++;
+        }
+      }
+      return picks ? grade(reversed / picks, 0.08, 1) : 0;
+    }],
+    [
+      "Every 5_prereqs.tsv row names a skill from the current difficulty stage.",
+      () => {
+        const ids = new Set(
+          readRows(
+            `${BUILD}/4_difficulty.tsv`,
+            "id\tdifficulty\tdifficulty_raw",
+          ).map((c) => c[0]),
+        );
+        const keys = Deno.readTextFileSync(need(`${BUILD}/5_prereqs.tsv`))
+          .split("\n").filter((l) => l.length).map((l) => l.split("\t")[0]);
+        return grade(
+          keys.filter((k) => !ids.has(k)).length / keys.length,
+          0,
+          1,
+        );
+      },
+    ],
+    ["Under 10% of seed edges put the prereq in a higher band.", () => {
+      const m = byId();
+      const both = seeds().filter((e) => m.has(e.pre) && m.has(e.dep));
+      const bad = both.filter((e) => m.get(e.pre)!.band > m.get(e.dep)!.band);
+      return grade(bad.length / both.length, 0.10, 1);
+    }],
+    ["At least 80% of seed edges survive into skills.tsv.", () => {
+      const m = byId();
+      const both = seeds().filter((e) => m.has(e.pre) && m.has(e.dep));
+      const kept = both.filter((e) => m.get(e.dep)!.prereqs.includes(e.pre));
+      return grade(kept.length / both.length, 0.8, 0);
+    }],
+    [
+      "At least 95% of skills sit at or above every transitive prereq's band.",
+      () => {
+        const m = byId();
+        const maxAbove = new Map<string, number>();
+        let withPrereqs = 0, clean = 0;
+        for (const id of topoOrder(skills())) {
+          const s = m.get(id)!;
+          let top = -Infinity;
+          for (const p of s.prereqs) {
+            top = Math.max(top, m.get(p)!.band, maxAbove.get(p) ?? -Infinity);
+          }
+          maxAbove.set(id, top);
+          if (!s.prereqs.length) continue;
+          withPrereqs++;
+          if (top <= s.band) clean++;
+        }
+        return grade(clean / withPrereqs, 0.95, 0);
+      },
+    ],
+    ["Under 20% of skills have no prereqs and no dependents.", () => {
+      const used = new Set(skills().flatMap((s) => s.prereqs));
+      const alone = skills().filter((s) =>
+        !s.prereqs.length && !used.has(s.id)
+      );
+      return grade(alone.length / skills().length, 0.2, 1);
+    }],
+    ["Under 20% of skills are roots.", () => {
+      const used = new Set(skills().flatMap((s) => s.prereqs));
+      const roots = skills().filter((s) => !s.prereqs.length && used.has(s.id));
+      return grade(roots.length / skills().length, 0.2, 1);
+    }],
+    [
+      "Difficulty agrees with grade anchors: Kendall τ above 0.5.",
+      () => grade(stats(`${BUILD}/4_stats.json`).kendall_tau_vs_anchor, 0.5, 0),
+    ],
+    [
+      "Under 5% of grade-anchored skills miss their band by more than 5.",
+      () => {
+        const s = stats(`${BUILD}/4_stats.json`);
+        return s.grade_anchored_skills
+          ? grade(s.grade_band_inversions / s.grade_anchored_skills, 0.05, 1)
+          : 0;
+      },
+    ],
+    ["At least 95% of OpenSALT skills carry a grade tag.", () => {
+      const rows = readRows(
+        `${BUILD}/1_skills.tsv`,
+        "id\ttitle\tdescription\tsources\ttags",
+      ).filter((c) => c[3].split(",").includes("opensalt"));
+      const tagged = rows.filter((c) => /(^|,)grade:/.test(c[4]));
+      return grade(tagged.length / rows.length, 0.95, 0);
+    }],
+    [
+      "No anomalous hub (holiday retells, SCED catalog) has over 200 dependents.",
+      () => {
+        const indeg = new Map<string, number>();
+        for (const s of skills()) {
+          for (const p of s.prereqs) indeg.set(p, (indeg.get(p) ?? 0) + 1);
+        }
+        const worst = Math.max(
+          0,
+          ...[...indeg].filter(([id]) => ANOMALOUS_HUB_RE.test(id)).map((
+            [, n],
+          ) => n),
+        );
+        return grade(worst, 200, skills().length);
+      },
+    ],
+    ["No language skill has another language as a prereq.", () => {
+      let bad = 0;
+      for (const s of skills()) {
+        const ls = langTokenOf(s.id);
+        if (!ls) continue;
+        for (const p of s.prereqs) {
+          const lp = langTokenOf(p);
+          if (lp && lp !== ls) bad++;
+        }
+      }
+      return grade(bad / edgeCount(), 0, 1);
+    }],
+    [
+      "No skill has a hex-overflow id, a junk topic, or a hex-overflow occupation.",
+      () => {
+        const hex = /-[a-f0-9]{6}$/;
+        const junk = skills().filter((s) =>
+          (s.id.length >= 70 && hex.test(s.id)) || s.topics.some(isJunkTopic) ||
+          s.occupations.some((o) => hex.test(o))
+        );
+        return grade(junk.length / skills().length, 0, 1);
+      },
+    ],
+    ["Addition is a transitive prereq of multiplication.", () => {
+      const m = byId();
+      const stack = [...m.get("multiplication")?.prereqs ?? []];
+      const seen = new Set<string>();
+      while (stack.length) {
+        const u = stack.pop()!;
+        if (u === "addition") return 1;
+        if (seen.has(u)) continue;
+        seen.add(u);
+        stack.push(...m.get(u)?.prereqs ?? []);
+      }
+      return 0;
+    }],
+    [
+      "Spot checks pass: known tags present, known false prereqs absent.",
+      () => {
+        const m = byId();
+        const has = (id: string, p: string) => m.get(id)?.prereqs.includes(p);
+        const js = m.get("javascript"), bio = m.get("biology");
+        const add = m.get("addition"), calc = m.get("calculus");
+        const checks = [
+          !!js &&
+          (js.occupations.some((o) => o.includes("software-developer")) ||
+            js.topics.some((t) => t.includes("programming"))),
+          !!bio && (bio.occupations.some((o) => o.includes("biologist")) ||
+            bio.topics.some((t) => t.includes("biology"))),
+          !!add && !!calc && add.band <= calc.band,
+          !has(
+            "describe-consequences-of-following-rules",
+            "antisocial-personality-disorder",
+          ),
+          !has(
+            "distinguish-lumber-categories",
+            "pack-fragile-items-for-transportation",
+          ),
+          !has(
+            "weigh-products-or-estimate-weight",
+            "use-measures-of-dispersion",
+          ),
+        ];
+        return grade(checks.filter((c) => !c).length / checks.length, 0, 1);
+      },
+    ],
+    ["The build disk has at least 10 GB free.", async () => {
+      const out = await new Deno.Command("df", {
+        args: ["-k", "."],
+        signal: AbortSignal.timeout(10_000),
+      }).output();
+      if (!out.success) throw new Error(`df -k . exited ${out.code}`);
+      const kb = Number(
+        new TextDecoder().decode(out.stdout).split("\n")[1]?.split(/\s+/)[3],
+      );
+      if (!Number.isFinite(kb)) {
+        throw new Error("df -k .: expected available KB in column 4 of line 2");
+      }
+      return grade(kb / 1024 ** 2, 10, 0);
+    }],
+  ];
+
+  const report: Record<string, { "0": number }> = {};
+  for (const [name, fn] of conditions) {
+    let score: number;
+    try {
+      score = await fn();
+    } catch (e) {
+      if (!(e instanceof Deno.errors.NotFound)) {
+        throw new Error(`status "${name}": ${(e as Error).message}`, {
+          cause: e,
+        });
+      }
+      console.error(`${name}\n  ${e.message}`);
+      score = 0;
+    }
+    report[name] = { "0": score };
+  }
+  console.log(JSON.stringify(report, null, 2));
+  if (Object.values(report).some((r) => r["0"] < 1)) Deno.exit(1);
+}
+
 // ---------- dispatch ----------
 
 const stages: Record<string, () => void | Promise<void>> = {
@@ -6060,6 +6439,7 @@ const stages: Record<string, () => void | Promise<void>> = {
   prereq: stagePrereq,
   postproc: stagePostproc,
   finalize: stageFinalize,
+  status: stageStatus,
 };
 
 const arg = Deno.args[0];

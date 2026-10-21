@@ -2,17 +2,25 @@
 
 Aggregates open datasets into a unified skill prerequisite graph.
 
+## Setup
+
+```sh
+git config core.hooksPath .githooks  # pre-commit runs check + test
+```
+
 ## Run
 
 ```sh
-deno run -A pipeline.ts           # all stages
+deno run -A pipeline.ts            # all stages, then status
 deno run -A pipeline.ts seed-edges # one stage
-deno test -A pipeline_test.ts
+deno task check                    # fmt, lint, typecheck
+deno task test                     # runs stage list for real, in seconds
+deno task status                   # grades the last full build; exits 1 on a failing condition
 ```
 
 Stages (run in order, all cached resumable): `list` → `enrich` → `trees` →
 `seed-edges` → `embed` → `tag` → `dedupe` → `difficulty` → `prereq` → `postproc`
-→ `finalize`
+→ `finalize` → `status`
 
 Final output: `skills.tsv`
 (`id title display_title description difficulty prereqs occupations topics grade_start grade_end`).

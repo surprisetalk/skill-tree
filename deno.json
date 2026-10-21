@@ -5,7 +5,8 @@
   },
   "tasks": {
     "check": "deno fmt --check && deno lint && deno check *.ts data/*.ts",
-    "test": "deno test -A pipeline_test.ts"
+    "test": "deno test -A pipeline_test.ts",
+    "status": "deno run -A pipeline.ts status"
   },
   "fmt": { "include": ["*.ts", "*.md", "data/*.ts"] },
   "lint": { "include": ["*.ts", "data/*.ts"] }
