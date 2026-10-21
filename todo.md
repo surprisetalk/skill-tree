@@ -1,18 +1,5 @@
 ## Blocked on you
 
-- [ ] Stage `seed-edges` runs on a clean `build/` and resolves seeds against the
-      current run's skills. Blocker: verification needs Ollama (embedding
-      fallback); fix before the fresh build. `loadSkillIndex` reads
-      `build/3_tagged.tsv`, which stage `tag` writes later in the run. A clean
-      build crashes; a re-run resolves against the previous run's ids.
-  1. Point `loadSkillIndex` at `build/1_skills.tsv`.
-  2. Confirm that every seed reader (difficulty, postproc, finalize) remaps ids
-     through `loadAliasesCollapsed`.
-  3. Map each `foundation:<id>` tag to its row id in `slugToId`, so a foundation
-     that merged into another skill still resolves.
-  4. Run `rm -rf build/1e_* && deno run -A pipeline.ts seed-edges` on a build
-     with no `3_tagged.tsv`.
-
 - [ ] You get a fresh `skills.tsv` that includes the fixes from audit passes
       9–16, and `deno task status` passes. Blocker: a multi-hour Ollama run on
       the Mac, after the MOOCCubeX entry lands. The last full build predates the
@@ -25,7 +12,8 @@
   2. Run `deno run -A pipeline.ts enrich`. Stage `list` drops 25k long titles
      today, because the summarize cache has only 3.4k rows and the OpenSALT
      description cache is empty.
-  3. Run `deno run -A pipeline.ts`.
+  3. Run `deno run -A pipeline.ts`. Stage `seed-edges` now runs after `dedupe`
+     for the first time; watch its foundation-wiring count and quarantine.
   4. Run `deno task status`. Write a todo entry for each condition below 1.0.
 
 - [ ] MOOCCubeX prereq pairs resolve to skills, and stage `seed-edges` throws

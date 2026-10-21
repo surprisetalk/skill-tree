@@ -19,7 +19,7 @@ deno task status                   # grades the last full build; exits 1 on a fa
 ```
 
 Stages (run in order, all cached resumable): `list` → `enrich` → `trees` →
-`seed-edges` → `embed` → `tag` → `dedupe` → `difficulty` → `prereq` → `postproc`
+`embed` → `tag` → `dedupe` → `seed-edges` → `difficulty` → `prereq` → `postproc`
 → `finalize` → `status`
 
 Final output: `skills.tsv`

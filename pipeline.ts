@@ -486,15 +486,20 @@ function taggedTsvPath(): string {
 // Stage 3b may re-merge an already-canonical target, leaving stale pointers.
 function loadAliasesCollapsed(): Map<string, string> {
   const raw = new Map<string, string>();
-  try {
-    const aLines = Deno.readTextFileSync(`${BUILD}/3b_aliases.tsv`).split("\n")
-      .filter((l) => l.length);
-    for (let i = 1; i < aLines.length; i++) {
-      const [d, c] = aLines[i].split("\t");
-      if (d && c) raw.set(d, c);
+  const path = `${BUILD}/3b_aliases.tsv`;
+  const aLines = Deno.readTextFileSync(path).split("\n").filter((l) =>
+    l.length
+  );
+  for (let i = 1; i < aLines.length; i++) {
+    const [d, c, extra] = aLines[i].split("\t");
+    if (!d || !c || extra !== undefined) {
+      throw new Error(
+        `${path}:${i + 1}: expected "dropped_id<TAB>canonical_id", received "${
+          aLines[i]
+        }". Run: deno run -A pipeline.ts dedupe`,
+      );
     }
-  } catch {
-    return raw;
+    raw.set(d, c);
   }
   const collapsed = new Map<string, string>();
   for (const [d] of raw) {
@@ -695,6 +700,7 @@ function readFoundations(): Foundations {
   }
   const ids = new Set<string>();
   for (const fd of f.foundations) {
+    if (ids.has(fd.id)) throw bad("unique ids", fd);
     if (
       typeof fd.title !== "string" || typeof fd.description !== "string" ||
       !fd.description
@@ -709,25 +715,35 @@ function readFoundations(): Foundations {
         throw bad("grades as integers from -1 (PK) to 12", fd);
       }
     }
+    if ((fd.grade_start ?? -1) > (fd.grade_end ?? 12)) {
+      throw bad("grade_start at or below grade_end", fd);
+    }
     ids.add(fd.id);
   }
   for (const e of f.seed_edges) {
-    const one =
-      (e.dependent === undefined) !== (e.dependent_pattern === undefined);
-    if (
-      !ids.has(e.prereq) || !one ||
-      (e.dependent !== undefined && !ids.has(e.dependent))
-    ) {
+    const dep = e.dependent, pat = e.dependent_pattern;
+    const depOk = typeof dep === "string" && ids.has(dep) && dep !== e.prereq &&
+      pat === undefined;
+    const patOk = typeof pat === "string" && pat !== "" && dep === undefined;
+    if (!ids.has(e.prereq) || !(depOk || patOk)) {
       throw bad(
-        "a foundation prereq plus exactly one of a foundation dependent or a dependent_pattern",
+        "a foundation prereq plus exactly one of another foundation as dependent or a non-empty dependent_pattern",
         e,
       );
+    }
+    if (patOk) {
+      try {
+        new RegExp(pat);
+      } catch (err) {
+        throw bad(`a valid regex (${(err as Error).message})`, e);
+      }
     }
   }
   return f;
 }
 
 function stageList() {
+  const foundations = readFoundations();
   console.log("[list] reading sources…");
   const infill = loadTsvCache(INFILL_CACHE);
   const summarize = loadTsvCache(SUMMARIZE_CACHE);
@@ -984,7 +1000,7 @@ function stageList() {
   // them into 284+ grade-specific variants, leaving no convergence point. Seed them
   // as first-class skills with curated descriptions.
   {
-    const f = readFoundations();
+    const f = foundations;
     const gradeTag = (g: number) =>
       `grade:${g === 0 ? "K" : g === -1 ? "PK" : String(g)}`;
     for (const fd of f.foundations) {
@@ -2123,11 +2139,19 @@ async function stageSeedEdges() {
         continue;
       }
       const re = new RegExp(e.dependent_pattern!);
+      const before = n;
       for (const id of idx.idSet) {
         if (id === e.prereq || !re.test(id)) continue;
         // resolveConcept matches ids directly; pass the id slug as the "label".
         addRaw(pre, id, "foundation", `${e.prereq}->${id}`);
         n++;
+      }
+      if (n === before) {
+        throw new Error(
+          `${FOUNDATIONS_PATH}: dependent_pattern ${
+            JSON.stringify(e.dependent_pattern)
+          } for "${e.prereq}" matches no skill id. Fix or delete that seed edge.`,
+        );
       }
     }
     console.log(`[seed-edges] foundation wiring: ${n} pairs`);
@@ -4976,7 +5000,7 @@ function stagePostproc() {
   // Load seed edges for exemption
   const seedEdgeKeys = new Set<string>();
   let seedLoaded = 0;
-  try {
+  {
     const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split(
       "\n",
     ).filter((l) => l.length).slice(1);
@@ -4989,7 +5013,7 @@ function stagePostproc() {
       seedEdgeKeys.add(`${dst}\t${src}`);
       seedLoaded++;
     }
-  } catch { /* none */ }
+  }
   const isSeed = (s: string, p: string): boolean =>
     seedEdgeKeys.has(`${s}\t${p}`);
   console.log(`[postproc] seed keys: ${seedLoaded}`);
@@ -5346,7 +5370,7 @@ function stagePostproc() {
 
   // Seed ingestion
   let seedAdded = 0, seedDup = 0, seedMissing = 0;
-  try {
+  {
     const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split(
       "\n",
     ).filter((l) => l.length);
@@ -5370,7 +5394,7 @@ function stagePostproc() {
       existing.add(key);
       seedAdded++;
     }
-  } catch { /* none */ }
+  }
   console.log(
     `[postproc] seeds: added=${seedAdded}, dup=${seedDup}, missing=${seedMissing}`,
   );
@@ -6074,26 +6098,37 @@ function stageFinalize() {
 
 const SKILLS_HEADER =
   "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end";
+const DIFFICULTY_HEADER = "id\tdifficulty\tdifficulty_raw";
 
 const STAGE_OF: Record<string, string> = {
   [`${BUILD}/1_skills.tsv`]: "list",
   [`${BUILD}/1e_seed_edges.tsv`]: "seed-edges",
   [`${BUILD}/2_ids.tsv`]: "embed",
   [`${BUILD}/2_embeddings.bin`]: "embed",
+  [`${BUILD}/3b_aliases.tsv`]: "dedupe",
   [`${BUILD}/4_difficulty.tsv`]: "difficulty",
   [`${BUILD}/4_stats.json`]: "difficulty",
   [`${BUILD}/5_prereqs.tsv`]: "prereq",
   "skills.tsv": "finalize",
 };
 
+function rerun(path: string): string {
+  const stage = STAGE_OF[path];
+  if (!stage) {
+    throw new Error(`status: no stage writes ${path}. Add it to STAGE_OF.`);
+  }
+  return `Run: deno run -A pipeline.ts ${stage}`;
+}
+
 // snitch convention: 1.0 at the passing threshold, 0.0 at total failure.
 function grade(value: number, pass: number, fail: number): number {
-  if (!Number.isFinite(value)) {
+  const score = (value - fail) / (pass - fail);
+  if (pass === fail || !Number.isFinite(score)) {
     throw new Error(
-      `expected a finite measurement, received ${value}. A count the condition divides by is 0.`,
+      `expected a finite measurement between distinct bounds, received value ${value}, pass ${pass}, fail ${fail}. A count the condition divides by is 0.`,
     );
   }
-  return Math.max(0, (value - fail) / (pass - fail));
+  return Math.max(0, score);
 }
 
 function need(path: string): string {
@@ -6101,10 +6136,7 @@ function need(path: string): string {
     Deno.statSync(path);
   } catch (e) {
     if (!(e instanceof Deno.errors.NotFound)) throw e;
-    const stage = STAGE_OF[path];
-    throw new Deno.errors.NotFound(
-      `${path}: missing. Stage ${stage} writes it. Run: deno run -A pipeline.ts ${stage}`,
-    );
+    throw new Deno.errors.NotFound(`${path}: missing. ${rerun(path)}`);
   }
   return path;
 }
@@ -6113,12 +6145,11 @@ function readRows(path: string, header: string): string[][] {
   const lines = Deno.readTextFileSync(need(path)).split("\n").filter((l) =>
     l.length
   );
-  const fix = `Run: deno run -A pipeline.ts ${STAGE_OF[path]}`;
   if (lines[0] !== header) {
     throw new Error(
       `${path}: unexpected header.\n  expected: ${header}\n  received: ${
         lines[0]
-      }\n  ${fix}`,
+      }\n  ${rerun(path)}`,
     );
   }
   const n = header.split("\t").length;
@@ -6126,7 +6157,9 @@ function readRows(path: string, header: string): string[][] {
     const c = l.split("\t");
     if (c.length !== n) {
       throw new Error(
-        `${path}:${i + 2}: expected ${n} columns, received ${c.length}. ${fix}`,
+        `${path}:${i + 2}: expected ${n} columns, received ${c.length}. ${
+          rerun(path)
+        }`,
       );
     }
     return c;
@@ -6143,13 +6176,70 @@ type StatusSkill = {
 
 function readSkillsTsv(): StatusSkill[] {
   const list = (c: string) => c ? c.split(",") : [];
-  return readRows("skills.tsv", SKILLS_HEADER).map((c) => ({
-    id: c[0],
-    band: Number(c[4]),
-    prereqs: list(c[5]),
-    occupations: list(c[6]),
-    topics: list(c[7]),
-  }));
+  const seen = new Set<string>();
+  return readRows("skills.tsv", SKILLS_HEADER).map((c, i) => {
+    const band = Number(c[4]);
+    if (!/^\d+$/.test(c[4]) || band < 1 || band > 20) {
+      throw new Error(
+        `skills.tsv:${
+          i + 2
+        }: expected difficulty as an integer 1–20, received "${c[4]}". ${
+          rerun("skills.tsv")
+        }`,
+      );
+    }
+    if (seen.has(c[0])) {
+      throw new Error(
+        `skills.tsv:${i + 2}: expected unique ids, received a second "${
+          c[0]
+        }". ${rerun("skills.tsv")}`,
+      );
+    }
+    seen.add(c[0]);
+    return {
+      id: c[0],
+      band,
+      prereqs: list(c[5]),
+      occupations: list(c[6]),
+      topics: list(c[7]),
+    };
+  });
+}
+
+function readDifficultyRaw(): Map<string, number> {
+  const path = `${BUILD}/4_difficulty.tsv`;
+  return new Map(
+    readRows(path, DIFFICULTY_HEADER).map((c, i) => {
+      const raw = Number(c[2]);
+      if (c[2] === "" || !Number.isFinite(raw)) {
+        throw new Error(
+          `${path}:${i + 2}: expected a finite difficulty_raw, received "${
+            c[2]
+          }". ${rerun(path)}`,
+        );
+      }
+      return [c[0], raw];
+    }),
+  );
+}
+
+// 5_prereqs.tsv has no header: `skill\tp1,p2` or `skill\tnone`.
+function readPrereqPicks(): { skill: string; picks: string[] }[] {
+  const path = `${BUILD}/5_prereqs.tsv`;
+  return Deno.readTextFileSync(need(path)).split("\n").filter((l) => l.length)
+    .map((l, i) => {
+      const c = l.split("\t");
+      if (c.length !== 2 || !c[0] || !c[1]) {
+        throw new Error(
+          `${path}:${
+            i + 1
+          }: expected "skill<TAB>p1,p2" or "skill<TAB>none", received "${l}". ${
+            rerun(path)
+          }`,
+        );
+      }
+      return { skill: c[0], picks: c[1] === "none" ? [] : c[1].split(",") };
+    });
 }
 
 // Kahn order, prereqs first. Nodes on a cycle never enter the order.
@@ -6181,7 +6271,9 @@ async function stageStatus() {
   const skills = () => cached ??= readSkillsTsv();
   const byId = () => new Map(skills().map((s) => [s.id, s]));
   const edgeCount = () => skills().reduce((n, s) => n + s.prereqs.length, 0);
+  const usedAsPrereq = () => new Set(skills().flatMap((s) => s.prereqs));
   const seeds = () => {
+    need(`${BUILD}/3b_aliases.tsv`);
     const alias = loadAliasesCollapsed();
     return readRows(
       `${BUILD}/1e_seed_edges.tsv`,
@@ -6191,8 +6283,18 @@ async function stageStatus() {
       dep: alias.get(c[1]) ?? c[1],
     }));
   };
-  const stats = (path: string) =>
-    JSON.parse(Deno.readTextFileSync(need(path))) as Record<string, number>;
+  const stat = (key: string): number => {
+    const path = `${BUILD}/4_stats.json`;
+    const v = JSON.parse(Deno.readTextFileSync(need(path)))[key];
+    if (typeof v !== "number" || !Number.isFinite(v)) {
+      throw new Error(
+        `${path}: expected "${key}" as a number, received ${
+          JSON.stringify(v)
+        }. ${rerun(path)}`,
+      );
+    }
+    return v;
+  };
 
   const conditions: [string, () => number | Promise<number>][] = [
     ["The prereq graph is a DAG, and every prereq names another skill.", () => {
@@ -6216,7 +6318,9 @@ async function stageStatus() {
         throw new Error(
           `${BUILD}/2_embeddings.bin: expected ${
             ids.length * DIM * 4
-          } bytes (${ids.length} ids × ${DIM} × 4), received ${bin.byteLength}. Run: deno run -A pipeline.ts embed`,
+          } bytes (${ids.length} ids × ${DIM} × 4), received ${bin.byteLength}. ${
+            rerun(`${BUILD}/2_embeddings.bin`)
+          }`,
         );
       }
       const f32 = new Float32Array(bin.buffer);
@@ -6225,47 +6329,31 @@ async function stageStatus() {
         const k = [0, 1, 2].map((j) => f32[i * DIM + j].toFixed(4)).join("_");
         groups.set(k, (groups.get(k) ?? 0) + 1);
       }
-      return grade(Math.max(...groups.values()), 5, ids.length);
+      return grade(Math.max(...groups.values()), 5, Math.max(ids.length, 6));
     }],
     ["Under 8% of LLM prereq picks sit above their skill's difficulty.", () => {
-      const raw = new Map(
-        readRows(
-          `${BUILD}/4_difficulty.tsv`,
-          "id\tdifficulty\tdifficulty_raw",
-        ).map((c) => [c[0], Number(c[2])]),
-      );
+      const raw = readDifficultyRaw();
       let picks = 0, reversed = 0;
-      for (
-        const line of Deno.readTextFileSync(need(`${BUILD}/5_prereqs.tsv`))
-          .split("\n")
-      ) {
-        const [s, rest] = line.split("\t");
-        if (!rest || rest === "none") continue;
-        for (const p of rest.split(",")) {
-          const rs = raw.get(s), rp = raw.get(p);
+      for (const { skill, picks: ps } of readPrereqPicks()) {
+        for (const p of ps) {
+          const rs = raw.get(skill), rp = raw.get(p);
+          // Stale ids score in the next condition.
           if (rs === undefined || rp === undefined) continue;
           picks++;
           if (rp >= rs) reversed++;
         }
       }
-      return picks ? grade(reversed / picks, 0.08, 1) : 0;
+      return grade(reversed / picks, 0.08, 1);
     }],
     [
-      "Every 5_prereqs.tsv row names a skill from the current difficulty stage.",
+      "Every 5_prereqs.tsv row names only skills from the current difficulty stage.",
       () => {
-        const ids = new Set(
-          readRows(
-            `${BUILD}/4_difficulty.tsv`,
-            "id\tdifficulty\tdifficulty_raw",
-          ).map((c) => c[0]),
+        const raw = readDifficultyRaw();
+        const rows = readPrereqPicks();
+        const stale = rows.filter((r) =>
+          !raw.has(r.skill) || r.picks.some((p) => !raw.has(p))
         );
-        const keys = Deno.readTextFileSync(need(`${BUILD}/5_prereqs.tsv`))
-          .split("\n").filter((l) => l.length).map((l) => l.split("\t")[0]);
-        return grade(
-          keys.filter((k) => !ids.has(k)).length / keys.length,
-          0,
-          1,
-        );
+        return grade(stale.length / rows.length, 0, 1);
       },
     ],
     ["Under 10% of seed edges put the prereq in a higher band.", () => {
@@ -6276,9 +6364,9 @@ async function stageStatus() {
     }],
     ["At least 80% of seed edges survive into skills.tsv.", () => {
       const m = byId();
-      const both = seeds().filter((e) => m.has(e.pre) && m.has(e.dep));
-      const kept = both.filter((e) => m.get(e.dep)!.prereqs.includes(e.pre));
-      return grade(kept.length / both.length, 0.8, 0);
+      const all = seeds();
+      const kept = all.filter((e) => m.get(e.dep)?.prereqs.includes(e.pre));
+      return grade(kept.length / all.length, 0.8, 0);
     }],
     [
       "At least 95% of skills sit at or above every transitive prereq's band.",
@@ -6290,7 +6378,10 @@ async function stageStatus() {
           const s = m.get(id)!;
           let top = -Infinity;
           for (const p of s.prereqs) {
-            top = Math.max(top, m.get(p)!.band, maxAbove.get(p) ?? -Infinity);
+            const ps = m.get(p);
+            // The DAG condition grades a dangling prereq.
+            if (!ps || p === id) continue;
+            top = Math.max(top, ps.band, maxAbove.get(p) ?? -Infinity);
           }
           maxAbove.set(id, top);
           if (!s.prereqs.length) continue;
@@ -6301,29 +6392,29 @@ async function stageStatus() {
       },
     ],
     ["Under 20% of skills have no prereqs and no dependents.", () => {
-      const used = new Set(skills().flatMap((s) => s.prereqs));
+      const used = usedAsPrereq();
       const alone = skills().filter((s) =>
         !s.prereqs.length && !used.has(s.id)
       );
       return grade(alone.length / skills().length, 0.2, 1);
     }],
     ["Under 20% of skills are roots.", () => {
-      const used = new Set(skills().flatMap((s) => s.prereqs));
+      const used = usedAsPrereq();
       const roots = skills().filter((s) => !s.prereqs.length && used.has(s.id));
       return grade(roots.length / skills().length, 0.2, 1);
     }],
     [
       "Difficulty agrees with grade anchors: Kendall τ above 0.5.",
-      () => grade(stats(`${BUILD}/4_stats.json`).kendall_tau_vs_anchor, 0.5, 0),
+      () => grade(stat("kendall_tau_vs_anchor"), 0.5, 0),
     ],
     [
       "Under 5% of grade-anchored skills miss their band by more than 5.",
-      () => {
-        const s = stats(`${BUILD}/4_stats.json`);
-        return s.grade_anchored_skills
-          ? grade(s.grade_band_inversions / s.grade_anchored_skills, 0.05, 1)
-          : 0;
-      },
+      () =>
+        grade(
+          stat("grade_band_inversions") / stat("grade_anchored_skills"),
+          0.05,
+          1,
+        ),
     ],
     ["At least 95% of OpenSALT skills carry a grade tag.", () => {
       const rows = readRows(
@@ -6346,7 +6437,7 @@ async function stageStatus() {
             [, n],
           ) => n),
         );
-        return grade(worst, 200, skills().length);
+        return grade(worst, 200, Math.max(skills().length, 201));
       },
     ],
     ["No language skill has another language as a prereq.", () => {
@@ -6421,11 +6512,12 @@ async function stageStatus() {
         signal: AbortSignal.timeout(10_000),
       }).output();
       if (!out.success) throw new Error(`df -k . exited ${out.code}`);
-      const kb = Number(
-        new TextDecoder().decode(out.stdout).split("\n")[1]?.split(/\s+/)[3],
-      );
+      const line = new TextDecoder().decode(out.stdout).split("\n")[1] ?? "";
+      const kb = Number(line.split(/\s+/)[3]);
       if (!Number.isFinite(kb)) {
-        throw new Error("df -k .: expected available KB in column 4 of line 2");
+        throw new Error(
+          `df -k .: expected available KB in column 4 of line 2, received "${line}"`,
+        );
       }
       return grade(kb / 1024 ** 2, 10, 0);
     }],
@@ -6448,7 +6540,7 @@ async function stageStatus() {
     report[name] = { "0": score };
   }
   console.log(JSON.stringify(report, null, 2));
-  if (Object.values(report).some((r) => r["0"] < 1)) Deno.exit(1);
+  if (Object.values(report).some((r) => !(r["0"] >= 1))) Deno.exit(1);
 }
 
 // ---------- dispatch ----------
@@ -6457,10 +6549,11 @@ const stages: Record<string, () => void | Promise<void>> = {
   list: stageList,
   enrich: stageEnrich,
   trees: stageTrees,
-  "seed-edges": stageSeedEdges,
   embed: stageEmbed,
   tag: stageTag,
   dedupe: stageDedupe,
+  // Reads the deduped ids and the embeddings, so it runs after dedupe.
+  "seed-edges": stageSeedEdges,
   difficulty: stageDifficulty,
   prereq: stagePrereq,
   postproc: stagePostproc,

@@ -187,9 +187,9 @@ Florida, etc.), plus specialty frameworks (CASEL, 21st Century Skills, AP CS).
 
 ### pipeline.ts — Unified Skill Extraction Pipeline
 
-`deno run -A pipeline.ts [stage]` — stages: `list`, `enrich`, `trees`,
-`seed-edges`, `embed`, `tag`, `dedupe`, `difficulty`, `prereq`, `postproc`,
-`finalize`, `status` (default: all).
+`deno run -A pipeline.ts [stage]` — stages: `list`, `enrich`, `trees`, `embed`,
+`tag`, `dedupe`, `seed-edges`, `difficulty`, `prereq`, `postproc`, `finalize`,
+`status` (default: all).
 
 Monolithic Deno script (Ollama-only). Parses datasets into a unified schema,
 embeds via Ollama `nomic-embed-text`, assigns occupations/topics, dedupes,
@@ -197,9 +197,9 @@ infers difficulty (isotonic PAV + kNN smoothing), ranks prerequisites via Ollama
 (`gpt-oss:20b` by default), breaks cycles, and emits `skills.tsv`. Stage outputs
 cached in `build/`.
 
-**Stages** (run in order or individually): `list`, `enrich`, `trees`,
-`seed-edges`, `embed`, `tag`, `dedupe`, `difficulty`, `prereq`, `postproc`,
-`finalize`, `status`.
+**Stages** (run in order or individually): `list`, `enrich`, `trees`, `embed`,
+`tag`, `dedupe`, `seed-edges`, `difficulty`, `prereq`, `postproc`, `finalize`,
+`status`.
 
 **Parsers**:
 

@@ -70,40 +70,168 @@ Deno.test("list: every code:* tag has at least 4 chars", () => {
   assertEquals(bad.slice(0, 5), [], `${bad.length} short code:* tags`);
 });
 
-Deno.test("status: scores a fixture build and exits 1 on a failing condition", async () => {
-  const dir = await Deno.makeTempDir();
-  const skills: [string, number, string][] = [
-    ["addition", 1, ""],
-    ["multiplication", 3, "addition"],
-    ["german-i", 4, ""],
+// A small build that passes every status condition. Each test mutates a copy.
+type Fixture = Record<string, string | Uint8Array>;
+const goodBuild = (): Fixture => {
+  const skills: [string, number, string, string, string][] = [
+    ["counting", 1, "", "", ""],
+    ["addition", 2, "counting", "", ""],
+    ["multiplication", 4, "addition", "", ""],
+    ["calculus", 15, "multiplication", "", ""],
+    ["biology", 8, "counting", "", "biology"],
+    ["javascript", 10, "counting", "software-developers", ""],
+  ];
+  const emb = new Float32Array(skills.length * 768);
+  skills.forEach((_, i) => emb[i * 768] = i + 1);
+  return {
+    "skills.tsv": [
+      "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end",
+      ...skills.map(([id, band, pre, occ, top]) =>
+        [id, id, id, "", band, pre, occ, top, "", ""].join("\t")
+      ),
+    ].join("\n") + "\n",
+    "build/1_skills.tsv":
+      "id\ttitle\tdescription\tsources\ttags\naddition\tAddition\t\topensalt\tgrade:1\n",
+    "build/1e_seed_edges.tsv":
+      "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback\ncounting\taddition\tkhan\t1.00\t0\t0\n",
+    "build/2_ids.tsv": skills.map(([id]) => id).join("\n") + "\n",
+    "build/2_embeddings.bin": new Uint8Array(emb.buffer),
+    "build/3b_aliases.tsv": "dropped_id\tcanonical_id\n",
+    "build/4_difficulty.tsv": [
+      "id\tdifficulty\tdifficulty_raw",
+      ...skills.map(([id, band]) => `${id}\t${band}\t${band}`),
+    ].join("\n") + "\n",
+    "build/4_stats.json": JSON.stringify({
+      kendall_tau_vs_anchor: 0.8,
+      grade_anchored_skills: 10,
+      grade_band_inversions: 0,
+    }),
+    "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\taddition\n",
+  };
+};
+
+const runStatus = async (fixture: Fixture) => {
+  const dir = Deno.makeTempDirSync();
+  Deno.mkdirSync(`${dir}/build`);
+  for (const [path, body] of Object.entries(fixture)) {
+    if (typeof body === "string") {
+      Deno.writeTextFileSync(`${dir}/${path}`, body);
+    } else Deno.writeFileSync(`${dir}/${path}`, body);
+  }
+  const out = await run(["status"], dir, 10_000);
+  Deno.removeSync(dir, { recursive: true });
+  const stderr = new TextDecoder().decode(out.stderr);
+  const stdout = new TextDecoder().decode(out.stdout);
+  const report = out.code === 0 || stdout.startsWith("{")
+    ? JSON.parse(stdout) as Record<string, { "0": number }>
+    : {};
+  return {
+    code: out.code,
+    stderr,
+    score: (name: string) => report[name]?.["0"],
+  };
+};
+
+Deno.test("status: a healthy build passes every condition and exits 0", async () => {
+  const { code, stderr } = await runStatus(goodBuild());
+  assertEquals(code, 0, stderr);
+});
+
+Deno.test("status: graph defects score below 1 and exit 1", async () => {
+  const build = goodBuild();
+  build["skills.tsv"] += [
+    ["german-i", 4, "counting"],
     ["french-i", 5, "german-i"],
     ["loop-a", 6, "loop-b"],
     ["loop-b", 6, "loop-a"],
-  ];
-  Deno.writeTextFileSync(
-    `${dir}/skills.tsv`,
-    [
-      "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end",
-      ...skills.map(([id, band, pre]) =>
-        [id, id, id, "", band, pre, "", "", "", ""].join("\t")
-      ),
-    ].join("\n") + "\n",
-  );
-  const out = await run(["status"], dir, 10_000);
-  Deno.removeSync(dir, { recursive: true });
-  assertEquals(out.code, 1, new TextDecoder().decode(out.stderr));
-  const report = JSON.parse(new TextDecoder().decode(out.stdout));
-  const score = (name: string) => report[name]["0"];
-  assertEquals(score("Addition is a transitive prereq of multiplication."), 1);
+    ["self", 6, "self,ghost"],
+  ].map(([id, band, pre]) =>
+    [id, id, id, "", band, pre, "", "", "", ""].join("\t")
+  ).join("\n") + "\n";
+  const { code, score, stderr } = await runStatus(build);
+  assertEquals(code, 1, stderr);
+  // 11 edges: loop-a, loop-b, self, and ghost are bad.
   assertEquals(
     score("The prereq graph is a DAG, and every prereq names another skill."),
-    0.5,
+    1 - 4 / 11,
   );
   assertEquals(
     score("No language skill has another language as a prereq."),
-    0.75,
+    1 - 1 / 11,
   );
-  assertEquals(score("At least 80% of seed edges survive into skills.tsv."), 0);
+  assertEquals(score("Addition is a transitive prereq of multiplication."), 1);
+});
+
+Deno.test("status: a missing build file scores 0 and names the stage to rerun", async () => {
+  const build = goodBuild();
+  delete build["build/4_stats.json"];
+  const { code, score, stderr } = await runStatus(build);
+  assertEquals(code, 1);
+  assertEquals(
+    score("Difficulty agrees with grade anchors: Kendall τ above 0.5."),
+    0,
+  );
+  assert(
+    stderr.includes("Run: deno run -A pipeline.ts difficulty"),
+    stderr,
+  );
+});
+
+Deno.test("status: a malformed build file crashes with the condition and the fix", async () => {
+  for (
+    const [path, body, expected] of [
+      ["skills.tsv", "id\ttitle\n", "unexpected header"],
+      [
+        "build/4_difficulty.tsv",
+        "id\tdifficulty\tdifficulty_raw\na\t1\tx\n",
+        "finite difficulty_raw",
+      ],
+      ["build/5_prereqs.tsv", "addition\n", "skill<TAB>p1,p2"],
+    ] as const
+  ) {
+    const build = goodBuild();
+    build[path] = body;
+    if (path === "skills.tsv") delete build["build/4_difficulty.tsv"];
+    const { code, stderr } = await runStatus(build);
+    assert(code !== 0 && stderr.includes(expected), `${path}: ${stderr}`);
+    assert(stderr.includes('status "'), stderr);
+  }
+});
+
+Deno.test("list: a malformed data/_foundations.json stops the stage", async () => {
+  const good = JSON.parse(Deno.readTextFileSync("data/_foundations.json"));
+  const cases: [string, (f: typeof good) => void, string][] = [
+    ["grade", (f) => f.foundations[0].grade_start = 99, "grades as integers"],
+    ["slug", (f) => f.foundations[0].id = "Counting", "the slug of the title"],
+    ["dup", (f) => f.foundations.push(f.foundations[0]), "unique ids"],
+    ["prereq", (f) => f.seed_edges[0].prereq = "nope", "a foundation prereq"],
+    [
+      "both",
+      (f) => f.seed_edges[0].dependent_pattern = "x",
+      "a foundation prereq",
+    ],
+    [
+      "empty",
+      (f) => f.seed_edges.push({ prereq: "addition", dependent_pattern: "" }),
+      "a foundation prereq",
+    ],
+    [
+      "regex",
+      (f) => f.seed_edges.push({ prereq: "addition", dependent_pattern: "(" }),
+      "a valid regex",
+    ],
+  ];
+  await Promise.all(cases.map(async ([name, mutate, expected]) => {
+    const f = structuredClone(good);
+    mutate(f);
+    const dir = Deno.makeTempDirSync();
+    Deno.mkdirSync(`${dir}/data`);
+    Deno.writeTextFileSync(`${dir}/data/_foundations.json`, JSON.stringify(f));
+    const out = await run(["list"], dir, 10_000);
+    Deno.removeSync(dir, { recursive: true });
+    const stderr = new TextDecoder().decode(out.stderr);
+    assert(out.code !== 0 && stderr.includes(expected), `${name}: ${stderr}`);
+  }));
 });
 
 // REG-MF1: OpenSALT splits these concepts into hundreds of grade variants and
