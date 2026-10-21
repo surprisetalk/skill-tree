@@ -105,34 +105,59 @@ const slugify = (s: string) => {
   return out ? `${out}-${hash}` : base.slice(0, 73) + "-" + hash;
 };
 
-const parseTsv = (text: string, tag?: string): string[][] => {
-  const rows = text.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) =>
-    l.length
-  ).map((l) => l.split("\t"));
-  if (rows.length < 2) return rows;
-  const expected = rows[0].length;
-  let mismatched = 0;
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i].length !== expected) {
-      if (mismatched < 3) {
-        console.warn(
-          `[parseTsv${tag ? ` ${tag}` : ""}] row ${i} has ${
-            rows[i].length
-          } cols, header has ${expected} — embedded newline/tab?`,
-        );
-      }
-      mismatched++;
-    }
-  }
-  if (mismatched > 0) {
-    console.warn(
-      `[parseTsv${tag ? ` ${tag}` : ""}] ${mismatched}/${
-        rows.length - 1
-      } rows have mismatched column count`,
-    );
-  }
-  return rows;
+const STAGE_OF: Record<string, string> = {
+  [`${BUILD}/1_skills.tsv`]: "list",
+  [`${BUILD}/1e_seed_edges.tsv`]: "seed-edges",
+  [`${BUILD}/1f_translate.tsv`]: "enrich",
+  [`${BUILD}/1j_lcsh_tree.tsv`]: "trees",
+  [`${BUILD}/1k_dbpedia_tree.tsv`]: "trees",
+  [`${BUILD}/2_ids.tsv`]: "embed",
+  [`${BUILD}/2_embeddings.bin`]: "embed",
+  [`${BUILD}/2_pathological.tsv`]: "embed",
+  [`${BUILD}/3_tagged.tsv`]: "tag",
+  [`${BUILD}/3b_tagged_deduped.tsv`]: "dedupe",
+  [`${BUILD}/3b_aliases.tsv`]: "dedupe",
+  [`${BUILD}/4_difficulty.tsv`]: "difficulty",
+  [`${BUILD}/4_stats.json`]: "difficulty",
+  [`${BUILD}/5_prereqs.tsv`]: "prereq",
+  [`${BUILD}/6_edges.tsv`]: "postproc",
+  "skills.tsv": "finalize",
 };
+
+function rerun(path: string): string {
+  const stage = STAGE_OF[path];
+  if (!stage) throw new Error(`no stage writes ${path}. Add it to STAGE_OF.`);
+  return `Run: deno run -A pipeline.ts ${stage}`;
+}
+
+// Status scores a NotFound as 0; every other caller crashes on it.
+function need(path: string): string {
+  try {
+    Deno.statSync(path);
+  } catch (e) {
+    if (!(e instanceof Deno.errors.NotFound)) throw e;
+    throw new Deno.errors.NotFound(`${path}: missing. ${rerun(path)}`);
+  }
+  return path;
+}
+
+const TAGGED = `${BUILD}/3b_tagged_deduped.tsv`;
+
+function readTsv(path: string): string[][] {
+  const rows = Deno.readTextFileSync(path).split("\n").map((l) =>
+    l.replace(/\r$/, "")
+  ).filter((l) => l.length).map((l) => l.split("\t"));
+  rows.forEach((r, i) => {
+    if (r.length !== rows[0].length) {
+      throw new Error(
+        `${path}:${i + 1}: expected ${
+          rows[0].length
+        } tab-separated fields like the header, received ${r.length}. Re-download the file.`,
+      );
+    }
+  });
+  return rows;
+}
 
 function readCsv(path: string): string[][] {
   try {
@@ -158,31 +183,37 @@ function writeStats(stage: string | number, stats: Record<string, unknown>) {
   console.log(`[stage ${stage}] stats → ${path}`);
 }
 
-function loadTsvCache(...paths: string[]): Map<string, string> {
-  const m = new Map<string, string>();
-  for (const path of paths) {
-    try {
-      for (const line of Deno.readTextFileSync(path).split("\n")) {
-        if (!line) continue;
-        const tab = line.indexOf("\t");
-        if (tab < 0) continue;
-        if (!m.has(line.slice(0, tab))) {
-          m.set(line.slice(0, tab), line.slice(tab + 1));
-        }
-      }
-    } catch { /* missing */ }
+// The text of a cache file, or "" before its first write.
+function readCache(path: string): string {
+  try {
+    return Deno.readTextFileSync(path);
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) return "";
+    throw e;
   }
+}
+
+function loadTsvCache(path: string): Map<string, string> {
+  const m = new Map<string, string>();
+  readCache(path).split("\n").forEach((line, i) => {
+    if (!line) return;
+    const tab = line.indexOf("\t");
+    if (tab < 0) {
+      throw new Error(
+        `${path}:${i + 1}: expected "key<TAB>value", received "${
+          line.slice(0, 80)
+        }". Delete that row and rerun the stage that writes it.`,
+      );
+    }
+    if (!m.has(line.slice(0, tab))) {
+      m.set(line.slice(0, tab), line.slice(tab + 1));
+    }
+  });
   return m;
 }
 
 function forEachLine(path: string, fn: (line: string) => void) {
-  try {
-    for (const l of Deno.readTextFileSync(path).split("\n")) if (l) fn(l);
-  } catch (e) {
-    if (!(e instanceof Deno.errors.NotFound)) {
-      console.warn(`[forEachLine] WARN: ${path} — ${(e as Error).message}`);
-    }
-  }
+  for (const l of Deno.readTextFileSync(need(path)).split("\n")) if (l) fn(l);
 }
 
 async function streamLines(cmd: string[], onLine: (line: string) => void) {
@@ -228,37 +259,65 @@ const CACHE_RECORD_BYTES = 32 + EMBED_DIM * 4;
 // A cold model load takes tens of seconds; a request past this bound has hung.
 const OLLAMA_TIMEOUT_MS = 300_000;
 
+// Retries a transient failure (network, timeout, 429, 5xx) once.
+async function ollama(
+  path: string,
+  body: { model: string; [key: string]: unknown },
+): Promise<Record<string, unknown>> {
+  const t0 = performance.now();
+  let received = "";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let status = 0;
+    try {
+      const res = await fetch(`${OLLAMA}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
+      });
+      if (res.ok) return await res.json();
+      status = res.status;
+      received = `HTTP ${status}: ${(await res.text()).slice(0, 200)}`;
+    } catch (e) {
+      received = (e as Error).message;
+    }
+    if (status && status !== 429 && status < 500) break;
+  }
+  throw new Error(
+    `ollama ${path}: expected HTTP 200, received ${received} after ${
+      ((performance.now() - t0) / 1000).toFixed(0)
+    }s. Check that ${OLLAMA} serves ${body.model}: ollama serve; ollama pull ${body.model}`,
+  );
+}
+
 async function embedOne(content: string): Promise<Float32Array> {
-  const res = await fetch(`${OLLAMA}/api/embeddings`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: EMBED_MODEL, prompt: content }),
-    signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
+  const { embedding } = await ollama("/api/embeddings", {
+    model: EMBED_MODEL,
+    prompt: content,
   });
-  if (!res.ok) {
-    throw new Error(`ollama embed ${res.status}: ${await res.text()}`);
+  if (!Array.isArray(embedding) || embedding.length !== EMBED_DIM) {
+    throw new Error(
+      `ollama ${EMBED_MODEL}: expected a ${EMBED_DIM}-float embedding, received length ${
+        Array.isArray(embedding) ? embedding.length : typeof embedding
+      } for "${content.slice(0, 60)}"`,
+    );
   }
-  const j = await res.json();
-  if (!j.embedding || j.embedding.length !== EMBED_DIM) {
-    throw new Error(`bad embedding: length=${j.embedding?.length}`);
-  }
-  return new Float32Array(j.embedding);
+  return new Float32Array(embedding);
 }
 
 async function generateOne(prompt: string, numPredict = 120): Promise<string> {
-  const res = await fetch(`${OLLAMA}/api/generate`, {
-    method: "POST",
-    body: JSON.stringify({
-      model: GEN_MODEL,
-      prompt,
-      stream: false,
-      options: { temperature: 0.1, num_predict: numPredict },
-    }),
-    signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
+  const { response } = await ollama("/api/generate", {
+    model: GEN_MODEL,
+    prompt,
+    stream: false,
+    options: { temperature: 0.1, num_predict: numPredict },
   });
-  if (!res.ok) throw new Error(`ollama gen ${res.status}: ${await res.text()}`);
-  const j = await res.json();
-  return (j.response || "").replace(/[\t\n\r]/g, " ").trim();
+  if (typeof response !== "string") {
+    throw new Error(
+      `ollama ${GEN_MODEL}: expected a string response, received ${typeof response}`,
+    );
+  }
+  return response.replace(/[\t\n\r]/g, " ").trim();
 }
 
 const REFUSAL_RE =
@@ -293,14 +352,7 @@ async function resumableOllama<T extends { id: string }>(
     clean?: (raw: string, item: T) => string;
   } = {},
 ): Promise<void> {
-  const cache = new Set<string>();
-  try {
-    for (const line of Deno.readTextFileSync(cachePath).split("\n")) {
-      if (!line) continue;
-      const tab = line.indexOf("\t");
-      if (tab > 0) cache.add(line.slice(0, tab));
-    }
-  } catch { /* fresh */ }
+  const cache = loadTsvCache(cachePath);
   const todo = targets.filter((t) => !cache.has(t.id));
   console.log(
     `[${label}] targets=${targets.length} cached=${cache.size} todo=${todo.length} → ${cachePath}`,
@@ -355,20 +407,11 @@ async function resumableOllama<T extends { id: string }>(
   );
 }
 
-function taggedTsvPath(): string {
-  try {
-    Deno.statSync(`${BUILD}/3b_tagged_deduped.tsv`);
-    return `${BUILD}/3b_tagged_deduped.tsv`;
-  } catch {
-    return `${BUILD}/3_tagged.tsv`;
-  }
-}
-
 // Stage dedupe can merge a canonical id again, so aliases form chains.
 function loadAliasesCollapsed(): Map<string, string> {
   const raw = new Map<string, string>();
   const path = `${BUILD}/3b_aliases.tsv`;
-  const aLines = Deno.readTextFileSync(path).split("\n").filter((l) =>
+  const aLines = Deno.readTextFileSync(need(path)).split("\n").filter((l) =>
     l.length
   );
   for (let i = 1; i < aLines.length; i++) {
@@ -402,8 +445,9 @@ function loadEmbCache(): Map<string, Float32Array> {
   let data: Uint8Array;
   try {
     data = Deno.readFileSync(CACHE_PATH);
-  } catch {
-    return cache;
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) return cache;
+    throw e;
   }
   if (data.byteLength % CACHE_RECORD_BYTES !== 0) {
     throw new Error(
@@ -492,10 +536,11 @@ function loadRawEmbeddings(): {
   emb: Float32Array;
   idToEmbIdx: Map<string, number>;
 } {
-  const ids = Deno.readTextFileSync(`${BUILD}/2_ids.tsv`).split("\n").filter((
-    l,
-  ) => l.length);
-  const bin = Deno.readFileSync(`${BUILD}/2_embeddings.bin`);
+  const ids = Deno.readTextFileSync(need(`${BUILD}/2_ids.tsv`)).split("\n")
+    .filter((
+      l,
+    ) => l.length);
+  const bin = Deno.readFileSync(need(`${BUILD}/2_embeddings.bin`));
   const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
   const idToEmbIdx = new Map<string, number>();
   for (let i = 0; i < ids.length; i++) idToEmbIdx.set(ids[i], i);
@@ -735,9 +780,7 @@ function stageList() {
 
   // O*NET Skills/Knowledge/Abilities
   {
-    const cmrRows = parseTsv(
-      Deno.readTextFileSync("data/onet/Content Model Reference.txt"),
-    );
+    const cmrRows = readTsv("data/onet/Content Model Reference.txt");
     const ch = cmrRows[0];
     const ci = ch.indexOf("Element ID"),
       cn = ch.indexOf("Element Name"),
@@ -754,7 +797,7 @@ function stageList() {
         { path: "data/onet/Abilities.txt", tag: "onet:ability" },
       ]
     ) {
-      const rows = parseTsv(Deno.readTextFileSync(path));
+      const rows = readTsv(path);
       const idI = rows[0].indexOf("Element ID");
       const seen = new Set<string>();
       let n = 0;
@@ -779,9 +822,7 @@ function stageList() {
 
   // O*NET Tasks
   {
-    const rows = parseTsv(
-      Deno.readTextFileSync("data/onet/Task Statements.txt"),
-    );
+    const rows = readTsv("data/onet/Task Statements.txt");
     const h = rows[0];
     const iTask = h.indexOf("Task"), iType = h.indexOf("Task Type");
     const seen = new Set<string>();
@@ -814,7 +855,7 @@ function stageList() {
 
   // O*NET DWAs
   {
-    const rows = parseTsv(Deno.readTextFileSync("data/onet/DWA Reference.txt"));
+    const rows = readTsv("data/onet/DWA Reference.txt");
     const iTitle = rows[0].indexOf("DWA Title");
     const seen = new Set<string>();
     let n = 0;
@@ -840,9 +881,7 @@ function stageList() {
   {
     const BRAND_RE =
       /^[!\d]|\b(Inc|LLC|Corp|Corporation|Ltd|GmbH|Co\.)\b|\bSoftware\s+\d/;
-    const rows = parseTsv(
-      Deno.readTextFileSync("data/onet/Technology Skills.txt"),
-    );
+    const rows = readTsv("data/onet/Technology Skills.txt");
     const h = rows[0];
     const iEx = h.indexOf("Example"),
       iCat = h.indexOf("Commodity Title"),
@@ -1415,7 +1454,7 @@ function stageList() {
 const OPENSALT_DESC_CACHE = `${BUILD}/1e_opensalt_desc.tsv`;
 
 async function stageEnrich() {
-  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n")
+  const lines = Deno.readTextFileSync(need(`${BUILD}/1_skills.tsv`)).split("\n")
     .filter((l) => l.length);
   const SUM_MAX = 120;
   const infillTargets: { id: string; title: string }[] = [];
@@ -1620,7 +1659,7 @@ function loadSkillIndex(): {
   titleToId: Map<string, string>;
   slugToId: Map<string, string>;
 } {
-  const lines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) =>
+  const lines = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((l) =>
     l.length
   );
   const idSet = new Set<string>();
@@ -1734,17 +1773,16 @@ async function stageSeedEdges() {
   // AL-CPL — per readme: "*.preqs: concept pairs with prerequisite relations.
   // The second concept (2nd column) is a prerequisite of the first concept (1st column)."
   for (const domain of ["data_mining", "geometry", "physics", "precalculus"]) {
-    let text: string;
-    try {
-      text = Deno.readTextFileSync(`data/al-cpl/data/${domain}.preqs`);
-    } catch {
-      continue;
-    }
-    for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
-      const [dependent, prereq] = line.split(",");
-      if (dependent && prereq) {
-        addRaw(prereq, dependent, `alcpl_${domain}`, line);
+    const path = `data/al-cpl/data/${domain}.preqs`;
+    for (const line of Deno.readTextFileSync(path).split("\n")) {
+      if (!line.trim()) continue;
+      const [dependent, prereq, extra] = line.trim().split(",");
+      if (!dependent || !prereq || extra !== undefined) {
+        throw new Error(
+          `${path}: expected "Dependent,Prereq", received "${line}". Re-download it: deno run -A data/download.ts`,
+        );
       }
+      addRaw(prereq, dependent, `alcpl_${domain}`, line.trim());
     }
   }
 
@@ -1764,22 +1802,12 @@ async function stageSeedEdges() {
     const CONCEPTS = "data/metacademy/metacademy-content/concepts";
     const titleByDir = new Map<string, string>();
     const dirs: string[] = [];
-    try {
-      for (const f of Deno.readDirSync(CONCEPTS)) {
-        if (!f.isDirectory || f.name === "ANNOTATED_EXAMPLE") continue;
-        dirs.push(f.name);
-        try {
-          titleByDir.set(
-            f.name,
-            Deno.readTextFileSync(`${CONCEPTS}/${f.name}/title.txt`).trim(),
-          );
-        } catch { /* title missing — fall back to dir name below */ }
-      }
-    } catch (e) {
-      console.warn(
-        `[seed-edges] WARN: Metacademy concepts dir unavailable — ${
-          (e as Error).message
-        }`,
+    for (const f of Deno.readDirSync(CONCEPTS)) {
+      if (!f.isDirectory || f.name === "ANNOTATED_EXAMPLE") continue;
+      dirs.push(f.name);
+      titleByDir.set(
+        f.name,
+        Deno.readTextFileSync(`${CONCEPTS}/${f.name}/title.txt`).trim(),
       );
     }
     const resolveTag = (tag: string): string => {
@@ -1796,12 +1824,7 @@ async function stageSeedEdges() {
     let emitted = 0;
     for (const dir of dirs) {
       const target = titleByDir.get(dir) || dir.replace(/_/g, " ");
-      let deps: string;
-      try {
-        deps = Deno.readTextFileSync(`${CONCEPTS}/${dir}/dependencies.txt`);
-      } catch {
-        continue;
-      }
+      const deps = Deno.readTextFileSync(`${CONCEPTS}/${dir}/dependencies.txt`);
       for (const line of deps.split("\n")) {
         const m = line.match(/^\s*tag:\s*(\S+)\s*$/);
         if (!m) continue;
@@ -1846,7 +1869,7 @@ async function stageSeedEdges() {
   {
     for (const f of Deno.readDirSync("data/opensalt")) {
       if (!f.name.endsWith(".json") || f.name === "index.json") continue;
-      let doc: {
+      const doc: {
         CFItems?: {
           identifier: string;
           humanCodingScheme?: string;
@@ -1857,17 +1880,7 @@ async function stageSeedEdges() {
           originNodeURI?: { identifier?: string; title?: string };
           destinationNodeURI?: { identifier?: string; title?: string };
         }[];
-      };
-      try {
-        doc = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`));
-      } catch (e) {
-        console.warn(
-          `[seed-edges] WARN: skipping OpenSALT framework ${f.name} — ${
-            (e as Error).message
-          }`,
-        );
-        continue;
-      }
+      } = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`));
       const itemMap = new Map<string, { code: string; statement: string }>();
       for (const it of doc.CFItems || []) {
         itemMap.set(it.identifier, {
@@ -1941,24 +1954,14 @@ async function stageSeedEdges() {
     let emitted = 0;
     outer: for (const f of Deno.readDirSync("data/opensalt")) {
       if (!f.name.endsWith(".json") || f.name === "index.json") continue;
-      let doc: {
+      const doc: {
         CFItems?: {
           identifier: string;
           humanCodingScheme?: string;
           fullStatement?: string;
           educationLevel?: string[];
         }[];
-      };
-      try {
-        doc = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`));
-      } catch (e) {
-        console.warn(
-          `[seed-edges] WARN: skipping OpenSALT grade ${f.name} — ${
-            (e as Error).message
-          }`,
-        );
-        continue;
-      }
+      } = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`));
       type Node = { label: string; grade: number; code: string };
       const nodes: Node[] = [];
       for (const it of doc.CFItems || []) {
@@ -2111,7 +2114,7 @@ async function stageSeedEdges() {
   };
   const titleById = new Map<string, string>();
   {
-    const tlines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((
+    const tlines = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((
       l,
     ) => l.length);
     for (let i = 1; i < tlines.length; i++) {
@@ -2120,7 +2123,6 @@ async function stageSeedEdges() {
     }
   }
   const dropReason = new Map<string, string>();
-  let embedErrors = 0;
   if (unresolved.size > 0) {
     const { ids: embIds } = loadRawEmbeddings();
     const matIds = embIds.filter((id) => idx.idSet.has(id));
@@ -2129,62 +2131,10 @@ async function stageSeedEdges() {
       `[seed-edges] active vectors: ${matIds.length}/${embIds.length}`,
     );
     const labels = [...unresolved];
-    const labelVecs = new Float32Array(labels.length * EMBED_DIM);
-    const embedOk = new Uint8Array(labels.length);
-    const CONC = 16;
-    const embedWithRetry = async (
-      lbl: string,
-    ): Promise<Float32Array | null> => {
-      let lastErr: unknown = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          return await embedOne(lbl);
-        } catch (e) {
-          lastErr = e;
-          if (attempt < 2) {
-            await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
-          }
-        }
-      }
-      embedErrors++;
-      if (embedErrors <= 5) {
-        console.warn(
-          `[seed-edges] embed failed after 3 tries: ${lbl.slice(0, 60)} — ${
-            (lastErr as Error).message
-          }`,
-        );
-      }
-      return null;
-    };
-    let done = 0;
-    const t0 = performance.now();
-    for (let s = 0; s < labels.length; s += CONC) {
-      const batch = labels.slice(s, s + CONC);
-      const results = await Promise.all(batch.map(embedWithRetry));
-      for (let j = 0; j < results.length; j++) {
-        const v = results[j];
-        if (v) {
-          labelVecs.set(normalize(v), (s + j) * EMBED_DIM);
-          embedOk[s + j] = 1;
-        }
-      }
-      done += batch.length;
-      if (done % 500 === 0 || done === labels.length) {
-        const rate = done / ((performance.now() - t0) / 1000);
-        console.log(
-          `[seed-edges] embedded ${done}/${labels.length} (${
-            rate.toFixed(1)
-          }/s)`,
-        );
-      }
-    }
+    const labelVecs = (await embedBatch(labels, "seed-edges")).map(normalize);
     let matched = 0;
     for (let li = 0; li < labels.length; li++) {
-      if (!embedOk[li]) {
-        dropReason.set(labels[li], "embed-failed");
-        continue;
-      }
-      const lv = labelVecs.subarray(li * EMBED_DIM, (li + 1) * EMBED_DIM);
+      const lv = labelVecs[li];
       let best = -1, bestScore = FALLBACK;
       for (let si = 0; si < matIds.length; si++) {
         const sv = mat.subarray(si * EMBED_DIM, (si + 1) * EMBED_DIM);
@@ -2211,9 +2161,7 @@ async function stageSeedEdges() {
       matched++;
     }
     console.log(
-      `[seed-edges] fallback matched ${matched}/${labels.length} @ cos≥${FALLBACK}${
-        embedErrors ? `, ${embedErrors} embed errors` : ""
-      }`,
+      `[seed-edges] fallback matched ${matched}/${labels.length} @ cos≥${FALLBACK}`,
     );
   }
 
@@ -2326,7 +2274,7 @@ function embedSignature(v: Float32Array): string {
 }
 
 async function stageEmbed() {
-  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n")
+  const lines = Deno.readTextFileSync(need(`${BUILD}/1_skills.tsv`)).split("\n")
     .filter((l) => l.length);
   const skills: {
     id: string;
@@ -2454,7 +2402,7 @@ function parseOccupationRefs(): { label: string; desc: string }[] {
   for (let i = 1; i < esco.length; i++) {
     push(esco[i][el] || "", esco[i][ed] || "");
   }
-  const onet = parseTsv(Deno.readTextFileSync("data/onet/Occupation Data.txt"));
+  const onet = readTsv("data/onet/Occupation Data.txt");
   const oh = onet[0], ot = oh.indexOf("Title"), od = oh.indexOf("Description");
   for (let i = 1; i < onet.length; i++) {
     push(onet[i][ot] || "", onet[i][od] || "");
@@ -2585,22 +2533,20 @@ function parseEscoSkillTopics(): Map<string, string[]> {
 function parseOnetSkillOccupations(): Map<string, string[]> {
   const occTitles = new Map<string, string>();
   for (
-    const r of parseTsv(Deno.readTextFileSync("data/onet/Occupation Data.txt"))
+    const r of readTsv("data/onet/Occupation Data.txt")
       .slice(1)
   ) {
     if (r[0] && r[1]) occTitles.set(r[0], r[1]);
   }
   const cmr = new Map<string, string>();
   for (
-    const r of parseTsv(
-      Deno.readTextFileSync("data/onet/Content Model Reference.txt"),
-    ).slice(1)
+    const r of readTsv("data/onet/Content Model Reference.txt").slice(1)
   ) {
     if (r[0] && r[1]) cmr.set(r[0], r[1]);
   }
   const bySkill = new Map<string, Map<string, number>>();
   for (const fname of ["Skills.txt", "Knowledge.txt", "Abilities.txt"]) {
-    const rows = parseTsv(Deno.readTextFileSync(`data/onet/${fname}`));
+    const rows = readTsv(`data/onet/${fname}`);
     const h = rows[0];
     const iS = h.indexOf("O*NET-SOC Code"),
       iE = h.indexOf("Element ID"),
@@ -2657,7 +2603,7 @@ function parseEscoSkillOccupations(): Map<string, string[]> {
 }
 
 async function stageTag() {
-  const lines = Deno.readTextFileSync(`${BUILD}/1_skills.tsv`).split("\n")
+  const lines = Deno.readTextFileSync(need(`${BUILD}/1_skills.tsv`)).split("\n")
     .filter((l) => l.length);
   const skills = lines.slice(1).map((l) => {
     const c = l.split("\t");
@@ -3095,15 +3041,18 @@ async function stageTag() {
     );
   }
   Deno.writeTextFileSync(`${BUILD}/3_tagged.tsv`, rows.join("\n") + "\n");
+  // A stale deduped file would let later stages skip the new tags.
   try {
-    Deno.removeSync(`${BUILD}/3b_tagged_deduped.tsv`);
-  } catch { /* ignore */ }
+    Deno.removeSync(TAGGED);
+  } catch (e) {
+    if (!(e instanceof Deno.errors.NotFound)) throw e;
+  }
 }
 
 // ---------- stage dedupe ----------
 
 function stageDedupe() {
-  const lines = Deno.readTextFileSync(`${BUILD}/3_tagged.tsv`).split("\n")
+  const lines = Deno.readTextFileSync(need(`${BUILD}/3_tagged.tsv`)).split("\n")
     .filter((l) => l.length);
   const hdr = lines[0];
   type Row = {
@@ -3538,7 +3487,7 @@ function stageDedupe() {
   for (
     const path of [`${BUILD}/1j_lcsh_tree.tsv`, `${BUILD}/1k_dbpedia_tree.tsv`]
   ) {
-    try {
+    {
       forEachLine(path, (line) => {
         const tab = line.indexOf("\t");
         if (tab < 0) return;
@@ -3546,7 +3495,7 @@ function stageDedupe() {
         const anc = line.slice(tab + 1).split(",").filter(Boolean);
         if (slug && anc.length && !lcshTree.has(slug)) lcshTree.set(slug, anc);
       });
-    } catch { /* tree not cached; skip */ }
+    }
   }
   if (lcshTree.size > 0) {
     for (const c of canons) {
@@ -3585,7 +3534,7 @@ function stageDedupe() {
     );
   }
   Deno.writeTextFileSync(
-    `${BUILD}/3b_tagged_deduped.tsv`,
+    TAGGED,
     outLines.join("\n") + "\n",
   );
 
@@ -3614,7 +3563,7 @@ function gradeToDifficulty(token: string): number | null {
 }
 
 function stageDifficulty() {
-  const lines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) =>
+  const lines = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((l) =>
     l.length
   );
   const hdr = lines[0].split("\t");
@@ -3651,7 +3600,7 @@ function stageDifficulty() {
       gradeAnchored++;
     }
   }
-  try {
+  {
     const lines = Deno.readTextFileSync("data/khanacademy/khandata.tsv").split(
       "\n",
     ).filter((l) => l.length);
@@ -3699,15 +3648,11 @@ function stageDifficulty() {
         seen.add(id);
       }
     }
-  } catch (e) {
-    console.warn(
-      `[difficulty] WARN: Khan anchors unavailable — ${(e as Error).message}`,
-    );
   }
 
   let zoneAnchored = 0;
-  try {
-    const zoneRows = parseTsv(Deno.readTextFileSync("data/onet/Job Zones.txt"));
+  {
+    const zoneRows = readTsv("data/onet/Job Zones.txt");
     const zh = zoneRows[0];
     const iZs = zh.indexOf("O*NET-SOC Code"), iZz = zh.indexOf("Job Zone");
     const socToZone = new Map<string, number>();
@@ -3717,15 +3662,13 @@ function stageDifficulty() {
     }
     const cmr = new Map<string, string>();
     for (
-      const r of parseTsv(
-        Deno.readTextFileSync("data/onet/Content Model Reference.txt"),
-      ).slice(1)
+      const r of readTsv("data/onet/Content Model Reference.txt").slice(1)
     ) {
       if (r[0] && r[1]) cmr.set(r[0], r[1]);
     }
     const skillZoneSum = new Map<string, { w: number; wz: number }>();
     for (const fname of ["Skills.txt", "Knowledge.txt", "Abilities.txt"]) {
-      const rows = parseTsv(Deno.readTextFileSync(`data/onet/${fname}`));
+      const rows = readTsv(`data/onet/${fname}`);
       const h = rows[0];
       const iS = h.indexOf("O*NET-SOC Code"),
         iE = h.indexOf("Element ID"),
@@ -3750,9 +3693,7 @@ function stageDifficulty() {
     const taskSocByTid = new Map<string, string>();
     const taskTextByTid = new Map<string, string>();
     {
-      const rows = parseTsv(
-        Deno.readTextFileSync("data/onet/Task Statements.txt"),
-      );
+      const rows = readTsv("data/onet/Task Statements.txt");
       const h = rows[0];
       const iS = h.indexOf("O*NET-SOC Code"),
         iTid = h.indexOf("Task ID"),
@@ -3773,18 +3714,14 @@ function stageDifficulty() {
         skillZoneSum.set(key, e);
       }
     }
-    try {
+    {
       const dwaTitle = new Map<string, string>();
       for (
-        const r of parseTsv(
-          Deno.readTextFileSync("data/onet/DWA Reference.txt"),
-        ).slice(1)
+        const r of readTsv("data/onet/DWA Reference.txt").slice(1)
       ) {
         if (r[0] && r[1]) dwaTitle.set(r[0] || "", r[1] || "");
       }
-      const t2d = parseTsv(
-        Deno.readTextFileSync("data/onet/Tasks to DWAs.txt"),
-      );
+      const t2d = readTsv("data/onet/Tasks to DWAs.txt");
       const h = t2d[0];
       const iTid = h.indexOf("Task ID"), iDid = h.indexOf("DWA ID");
       for (let i = 1; i < t2d.length; i++) {
@@ -3800,10 +3737,6 @@ function stageDifficulty() {
         e.wz += zone;
         skillZoneSum.set(key, e);
       }
-    } catch (e) {
-      console.warn(
-        `[difficulty] WARN: DWA zone mapping skipped — ${(e as Error).message}`,
-      );
     }
 
     const idToIdx = new Map<string, number>();
@@ -3814,12 +3747,6 @@ function stageDifficulty() {
       anchor[i] = 11.5 + 1.5 * (wz / w);
       zoneAnchored++;
     }
-  } catch (e) {
-    console.warn(
-      `[difficulty] WARN: Job Zone anchors unavailable — ${
-        (e as Error).message
-      }`,
-    );
   }
 
   const anchorIdxs: number[] = [];
@@ -3855,18 +3782,9 @@ function stageDifficulty() {
     }
     return seen.size ? [...seen] : [];
   };
-  let out: Float32Array;
-  try {
-    const cached = Deno.readFileSync(`${BUILD}/4_raw.bin`);
-    if (cached.byteLength === skills.length * 4) {
-      out = new Float32Array(cached.buffer, cached.byteOffset, skills.length);
-      console.log(`[difficulty] loaded cached raw scores`);
-    } else throw new Error("size mismatch");
-  } catch {
-    out = new Float32Array(skills.length);
-  }
+  const out = new Float32Array(skills.length);
   let withinTopic = 0, globalFallback = 0;
-  if (out.every((v) => v === 0)) {
+  {
     const anchorMat = new Float32Array(anchorIdxs.length * DIM);
     const anchorDiff = new Float32Array(anchorIdxs.length);
     for (let a = 0; a < anchorIdxs.length; a++) {
@@ -4004,13 +3922,14 @@ function stageDifficulty() {
   // MOOCCubeX concepts land on the professional plateau, where about a quarter
   // of seeds otherwise reverse.
   let seedAnchorAdjusted = 0;
-  try {
+  {
     const idToIdx = new Map<string, number>();
     for (let i = 0; i < skills.length; i++) idToIdx.set(skills[i].id, i);
     const alias = loadAliasesCollapsed();
-    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split(
-      "\n",
-    ).filter((l) => l.length).slice(1);
+    const seedLines = Deno.readTextFileSync(need(`${BUILD}/1e_seed_edges.tsv`))
+      .split(
+        "\n",
+      ).filter((l) => l.length).slice(1);
     for (const line of seedLines) {
       const c = line.split("\t");
       if (c[4] === "1") continue; // skip holdout seeds
@@ -4033,7 +3952,7 @@ function stageDifficulty() {
         if (Number.isFinite(c)) calibrated[i] = c;
       }
     }
-  } catch { /* no seeds available */ }
+  }
 
   const band = new Int32Array(skills.length);
   const bandCounts = new Array(20).fill(0);
@@ -4069,7 +3988,6 @@ function stageDifficulty() {
     rows.push(`${skills[i].id}\t${band[i]}\t${out[i].toFixed(4)}`);
   }
   Deno.writeTextFileSync(`${BUILD}/4_difficulty.tsv`, rows.join("\n") + "\n");
-  Deno.writeFileSync(`${BUILD}/4_raw.bin`, new Uint8Array(out.buffer));
 
   // Kendall-τ vs anchors
   let concordant = 0, discordant = 0;
@@ -4148,7 +4066,6 @@ function stageDifficulty() {
 
 // ---------- stage prereq ----------
 
-const PREREQ_CANDIDATES_CACHE = `${BUILD}/5_candidates.tsv`;
 const PREREQ_CACHE = `${BUILD}/5_prereqs.tsv`;
 
 type SkillWithDiff = {
@@ -4168,7 +4085,7 @@ function parseSkillsWithDifficulty(): {
   diff: Int32Array;
   raw: Float32Array;
 } {
-  const tagged = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((
+  const tagged = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((
     l,
   ) => l.length);
   const h = tagged[0].split("\t");
@@ -4200,7 +4117,9 @@ function parseSkillsWithDifficulty(): {
       gradeEnd: Number.isFinite(ge) ? ge : -2,
     };
   });
-  const dLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n")
+  const dLines = Deno.readTextFileSync(need(`${BUILD}/4_difficulty.tsv`)).split(
+    "\n",
+  )
     .filter((l) => l.length).slice(1);
   const dm = new Map<string, { band: number; raw: number }>();
   for (const l of dLines) {
@@ -4272,12 +4191,8 @@ const FOUNDATION_IDS = new Set([
 ]);
 
 function loadPathologicalIds(): Set<string> {
-  try {
-    const t = Deno.readTextFileSync(`${BUILD}/2_pathological.tsv`);
-    return new Set(t.split("\n").filter((l) => l.length));
-  } catch {
-    return new Set();
-  }
+  const t = Deno.readTextFileSync(need(`${BUILD}/2_pathological.tsv`));
+  return new Set(t.split("\n").filter((l) => l.length));
 }
 
 function computePrereqCandidates(): Map<string, number[]> {
@@ -4344,7 +4259,6 @@ function computePrereqCandidates(): Map<string, number[]> {
   };
 
   const out = new Map<string, number[]>();
-  const outLines: string[] = [];
   const t0 = performance.now();
   for (let i = 0; i < skills.length; i++) {
     const topics = skills[i].topics.split(",").filter(Boolean);
@@ -4550,7 +4464,6 @@ function computePrereqCandidates(): Map<string, number[]> {
     const kept = allPicks.filter((_, k) => !dropped.has(k));
     const idxs = kept.map((p) => p.idx).slice(0, K);
     out.set(skills[i].id, idxs);
-    outLines.push(`${skills[i].id}\t${idxs.join(",")}`);
     if ((i + 1) % 5000 === 0) {
       const el = (performance.now() - t0) / 1000;
       console.log(
@@ -4560,29 +4473,7 @@ function computePrereqCandidates(): Map<string, number[]> {
       );
     }
   }
-  Deno.writeTextFileSync(PREREQ_CANDIDATES_CACHE, outLines.join("\n") + "\n");
   return out;
-}
-
-function loadPrereqCandidates(): Map<string, number[]> {
-  try {
-    const text = Deno.readTextFileSync(PREREQ_CANDIDATES_CACHE);
-    const m = new Map<string, number[]>();
-    for (const line of text.split("\n")) {
-      if (!line) continue;
-      const tab = line.indexOf("\t");
-      if (tab < 0) continue;
-      const id = line.slice(0, tab);
-      const rest = line.slice(tab + 1);
-      m.set(
-        id,
-        rest ? rest.split(",").map(Number).filter(Number.isFinite) : [],
-      );
-    }
-    return m;
-  } catch {
-    return new Map();
-  }
 }
 
 const PREREQ_PROMPT =
@@ -4607,19 +4498,12 @@ function parsePrereqResponse(text: string, n: number): number[] {
 
 async function stagePrereq() {
   const { skills } = parseSkillsWithDifficulty();
-  let candidates = loadPrereqCandidates();
-  if (candidates.size !== skills.length) {
-    console.log(`[prereq] computing candidates for ${skills.length} skills`);
-    candidates = computePrereqCandidates();
-  } else {
-    console.log(`[prereq] loaded ${candidates.size} cached candidate lists`);
-  }
-
   // SKIP_LLM=1 reuses the cache as is: a regression build needs no generator.
   if (Deno.env.get("SKIP_LLM") === "1") {
     console.log("[prereq] SKIP_LLM=1: using existing cache only");
     return;
   }
+  const candidates = computePrereqCandidates();
   const jobs = skills.flatMap((s) => {
     const cands = candidates.get(s.id);
     return cands?.length ? [{ ...s, cands }] : [];
@@ -4650,7 +4534,7 @@ async function stagePrereq() {
 // ---------- stage postproc ----------
 
 function stagePostproc() {
-  const tagLines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((
+  const tagLines = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((
     l,
   ) => l.length);
   const hdr = tagLines[0].split("\t");
@@ -4669,9 +4553,10 @@ function stagePostproc() {
       topics: new Set(c[iTopics].split(",").filter(Boolean)),
     });
   }
-  const diffLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split(
-    "\n",
-  ).filter((l) => l.length);
+  const diffLines = Deno.readTextFileSync(need(`${BUILD}/4_difficulty.tsv`))
+    .split(
+      "\n",
+    ).filter((l) => l.length);
   const rawDiff = new Map<string, number>();
   const band = new Map<string, number>();
   for (let i = 1; i < diffLines.length; i++) {
@@ -4719,9 +4604,10 @@ function stagePostproc() {
   const seedEdgeKeys = new Set<string>();
   let seedLoaded = 0;
   {
-    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split(
-      "\n",
-    ).filter((l) => l.length).slice(1);
+    const seedLines = Deno.readTextFileSync(need(`${BUILD}/1e_seed_edges.tsv`))
+      .split(
+        "\n",
+      ).filter((l) => l.length).slice(1);
     const alias = loadAliasesCollapsed();
     for (const line of seedLines) {
       const c = line.split("\t");
@@ -5087,9 +4973,10 @@ function stagePostproc() {
   // Seed ingestion
   let seedAdded = 0, seedDup = 0, seedMissing = 0;
   {
-    const seedLines = Deno.readTextFileSync(`${BUILD}/1e_seed_edges.tsv`).split(
-      "\n",
-    ).filter((l) => l.length);
+    const seedLines = Deno.readTextFileSync(need(`${BUILD}/1e_seed_edges.tsv`))
+      .split(
+        "\n",
+      ).filter((l) => l.length);
     const existing = new Set(final.map(([s, p]) => `${s}\t${p}`));
     const alias = loadAliasesCollapsed();
     for (let i = 1; i < seedLines.length; i++) {
@@ -5336,7 +5223,7 @@ function stagePostproc() {
 // ---------- stage finalize ----------
 
 function stageFinalize() {
-  const lines = Deno.readTextFileSync(taggedTsvPath()).split("\n").filter((l) =>
+  const lines = Deno.readTextFileSync(need(TAGGED)).split("\n").filter((l) =>
     l.length
   );
   const h = lines[0].split("\t");
@@ -5356,7 +5243,9 @@ function stageFinalize() {
       tags: iTg >= 0 ? (c[iTg] || "") : "",
     };
   });
-  const dLines = Deno.readTextFileSync(`${BUILD}/4_difficulty.tsv`).split("\n")
+  const dLines = Deno.readTextFileSync(need(`${BUILD}/4_difficulty.tsv`)).split(
+    "\n",
+  )
     .filter((l) => l.length);
   const diff = new Map<string, number>();
   for (let i = 1; i < dLines.length; i++) {
@@ -5376,7 +5265,9 @@ function stageFinalize() {
   const remap = (id: string) => aliasMap.get(id) ?? id;
 
   const skillIdSet = new Set<string>(skills.map((s) => s.id));
-  const edgeLines = Deno.readTextFileSync(`${BUILD}/6_edges.tsv`).split("\n")
+  const edgeLines = Deno.readTextFileSync(need(`${BUILD}/6_edges.tsv`)).split(
+    "\n",
+  )
     .filter((l) => l.length).slice(1);
   const prereqs = new Map<string, string[]>();
   for (const l of edgeLines) {
@@ -5724,27 +5615,6 @@ const SKILLS_HEADER =
   "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end";
 const DIFFICULTY_HEADER = "id\tdifficulty\tdifficulty_raw";
 
-const STAGE_OF: Record<string, string> = {
-  [`${BUILD}/1_skills.tsv`]: "list",
-  [`${BUILD}/1e_seed_edges.tsv`]: "seed-edges",
-  [TRANSLATE_CACHE]: "enrich",
-  [`${BUILD}/2_ids.tsv`]: "embed",
-  [`${BUILD}/2_embeddings.bin`]: "embed",
-  [`${BUILD}/3b_aliases.tsv`]: "dedupe",
-  [`${BUILD}/4_difficulty.tsv`]: "difficulty",
-  [`${BUILD}/4_stats.json`]: "difficulty",
-  [`${BUILD}/5_prereqs.tsv`]: "prereq",
-  "skills.tsv": "finalize",
-};
-
-function rerun(path: string): string {
-  const stage = STAGE_OF[path];
-  if (!stage) {
-    throw new Error(`status: no stage writes ${path}. Add it to STAGE_OF.`);
-  }
-  return `Run: deno run -A pipeline.ts ${stage}`;
-}
-
 // snitch convention: 1.0 at the passing threshold, 0.0 at total failure.
 function grade(value: number, pass: number, fail: number): number {
   const score = (value - fail) / (pass - fail);
@@ -5754,16 +5624,6 @@ function grade(value: number, pass: number, fail: number): number {
     );
   }
   return Math.max(0, score);
-}
-
-function need(path: string): string {
-  try {
-    Deno.statSync(path);
-  } catch (e) {
-    if (!(e instanceof Deno.errors.NotFound)) throw e;
-    throw new Deno.errors.NotFound(`${path}: missing. ${rerun(path)}`);
-  }
-  return path;
 }
 
 function readRows(path: string, header: string): string[][] {
