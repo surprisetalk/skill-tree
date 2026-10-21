@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertGreater } from "@std/assert";
 
-// Stage list is the only stage that runs without Ollama. The other stages
-// answer to `deno task status`.
+// Stage list runs in seconds without Ollama. The other stages need Ollama or
+// minutes, so they answer to `deno task status`.
 const PIPELINE = new URL("./pipeline.ts", import.meta.url).pathname;
 const CONFIG = new URL("./deno.json", import.meta.url).pathname;
 const run = (args: string[], cwd: string, boundMs: number) =>

@@ -18,20 +18,17 @@ deno task test                     # runs stage list for real, in seconds
 deno task status                   # grades the last full build; exits 1 on a failing condition
 ```
 
-Stages (run in order, all cached resumable): `list` → `enrich` → `trees` →
-`embed` → `tag` → `dedupe` → `seed-edges` → `difficulty` → `prereq` → `postproc`
-→ `finalize` → `status`
+Stages, in order: `list` → `enrich` → `trees` → `embed` → `tag` → `dedupe` →
+`seed-edges` → `difficulty` → `prereq` → `postproc` → `finalize` → `status`.
+`pipeline.ts` dispatches them; `sources.ts`, `graph.ts`, and `prereq.ts` hold
+them; `lib.ts` holds what they share.
 
 Final output: `skills.tsv`
 (`id title display_title description difficulty prereqs occupations topics grade_start grade_end`).
-Intermediate per-stage caches in `build/`; stats in `build/N_stats.json`.
+Per-stage caches live in `build/`.
 
-Requires a local Ollama with `nomic-embed-text` (embeddings) and `gpt-oss:20b`
-(default generator). Override via env:
-
-- `OLLAMA_HOST`, `OLLAMA_GEN_MODEL`, `OLLAMA_CONCURRENCY`, `EMBED_CONCURRENCY`
-- `SKIP_LLM=1`, `SKILL_LIMIT=N`
-- Stage knobs: `PREREQ_K`, `PREREQ_PICK_CAP`, `KNN_K`, `DEDUPE_COSINE`,
-  `PER_TOPIC_CAP`, `HUB_CAP`, `SEED_FALLBACK_COS`, `SMOOTH_W`
+Requires a local Ollama at `localhost:11434` with `nomic-embed-text`
+(embeddings) and `gpt-oss:20b` (generation). `SKIP_LLM=1` makes stage `prereq`
+reuse `build/5_prereqs.tsv` as is.
 
 See `claude.md` for the full dataset catalog and schemas.

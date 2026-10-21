@@ -188,54 +188,53 @@ Florida, etc.), plus specialty frameworks (CASEL, 21st Century Skills, AP CS).
 
 ### pipeline.ts — Unified Skill Extraction Pipeline
 
-`deno run -A pipeline.ts [stage]` — stages: `list`, `enrich`, `trees`, `embed`,
-`tag`, `dedupe`, `seed-edges`, `difficulty`, `prereq`, `postproc`, `finalize`,
-`status` (default: all).
+`deno run -A pipeline.ts [stage]` runs one stage, or every stage in order:
+`list`, `enrich`, `trees`, `embed`, `tag`, `dedupe`, `seed-edges`, `difficulty`,
+`prereq`, `postproc`, `finalize`, `status`.
 
-Monolithic Deno script (Ollama-only). Parses datasets into a unified schema,
-embeds via Ollama `nomic-embed-text`, assigns occupations/topics, dedupes,
-infers difficulty (isotonic PAV + kNN smoothing), ranks prerequisites via Ollama
-(`gpt-oss:20b` by default), breaks cycles, and emits `skills.tsv`. Stage outputs
-cached in `build/`.
+| File          | Holds                                                                  |
+| ------------- | ---------------------------------------------------------------------- |
+| `pipeline.ts` | Entry point: stage dispatch and stage `status`.                        |
+| `lib.ts`      | Names that two files share: text cleanup, TSV/CSV, Ollama, embeddings. |
+| `sources.ts`  | Stages `list`, `enrich`, `trees`, `seed-edges`.                        |
+| `graph.ts`    | Stages `embed`, `tag`, `dedupe`, `difficulty`.                         |
+| `prereq.ts`   | Stages `prereq`, `postproc`, `finalize`.                               |
 
-**Stages** (run in order or individually): `list`, `enrich`, `trees`, `embed`,
-`tag`, `dedupe`, `seed-edges`, `difficulty`, `prereq`, `postproc`, `finalize`,
-`status`.
+Parses datasets into a unified schema, embeds via Ollama `nomic-embed-text`,
+assigns occupations/topics, dedupes, infers difficulty (isotonic PAV + kNN
+smoothing), ranks prerequisites via Ollama `gpt-oss:20b`, breaks cycles, and
+emits `skills.tsv`. Ollama runs at `localhost:11434`. Stage outputs live in
+`build/`.
+
+**Errors**: a missing build file names the stage that writes it. A missing cache
+reads as empty. Any other read error, a ragged TSV or CSV row, or an Ollama call
+that fails twice stops the stage.
 
 **Parsers**:
 
 - Stage `list`: ESCO, O\*NET (Skills/Knowledge/Abilities/Tasks/DWAs/Tech),
   Lightcast, OpenSALT, and the hubs in `data/_foundations.json`.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, OpenSALT
-  precedes, OpenSALT within-framework grade ordering. Pairs resolved to skill
-  IDs via exact match then embedding fallback (cosine ≥ `SEED_FALLBACK_COS`
-  default 0.90 + token overlap). Unresolved pairs quarantined to
-  `build/1e_unresolved.tsv` with per-label reason; embedding requests retry up
-  to 3× with exponential backoff.
-- Stage `trees`: LCSH (gunzip + stream N-Triples) and DBpedia (bzcat + stream)
-  SKOS broader chains, cached as `slug → ancestors[]`.
+  precedes, OpenSALT within-framework grade ordering. Pairs resolve to skill IDs
+  by exact match, then by embedding (cosine ≥ 0.90 and a shared token).
+  Unresolved pairs go to `build/1e_unresolved.tsv` with a reason per label.
+- Stage `trees`: LCSH (gunzip) and DBpedia (bzcat) SKOS broader chains, cached
+  as `slug → ancestors[]`. The same pass picks each dump's 5000 most-used
+  broader targets as the topic refs of stage `tag`.
 
-**LLM enrichment** (stage `enrich`, Ollama): fill missing Lightcast
-descriptions; summarize long OpenSALT/O\*NET-task titles into 3-7 word names;
-expand short O\*NET task statements; translate MOOCCubeX labels. Resumable via
-tab-separated cache files (`1b_infill.tsv`, `1c_summarize.tsv`,
-`1d_onet_desc.tsv`). Applied back by re-running `list`.
+**LLM enrichment** (stage `enrich`): fill missing Lightcast descriptions;
+summarize long OpenSALT/O\*NET-task titles into 3-7 word names; expand short
+O\*NET task statements and OpenSALT standards; translate MOOCCubeX labels.
+Resumable via the `1b`–`1f` caches. Stage `list` applies them on its next run.
 
-**Prereq inference** (stage `prereq`, Ollama): per-skill top-K candidate ranking
-via cosine similarity (within-topic + ancestor + cross-topic pools), then LLM
-picks true prerequisites. Resumable via `5_prereqs.tsv` cache. Set `SKIP_LLM=1`
-to use existing cache only.
+**Prereq inference** (stage `prereq`): per-skill top-K candidates by cosine
+similarity (within-topic + ancestor + cross-topic pools), then the LLM picks
+true prerequisites. Resumable via `5_prereqs.tsv`. `SKIP_LLM=1` reuses that
+cache as is, for a regression build without the generator.
 
 **Merge step** (stage `dedupe`): token-sort signature merge + per-topic
 Jaccard+cosine merge. Canonical ID = shortest title. Dropped IDs become aliases
-in `3b_aliases.tsv`; stages 6/7 remap edges through it.
-
-**Env vars**: `OLLAMA_HOST` (default `http://localhost:11434`),
-`OLLAMA_GEN_MODEL` (default `gpt-oss:20b`), `OLLAMA_CONCURRENCY`,
-`EMBED_CONCURRENCY`, `SKIP_LLM`, `SKILL_LIMIT`, plus stage-specific tuning knobs
-(`OCC_TOP_K`, `TOPIC_TOP_K`, `PREREQ_K`, `PREREQ_PICK_CAP`, `KNN_K`,
-`DEDUPE_COSINE`, `PER_TOPIC_CAP`, `HUB_CAP`, `SEED_FALLBACK_COS`, `BF_SIM`,
-`BF_SIM_ZERO_ZERO` etc.).
+in `3b_aliases.tsv`; stages `postproc` and `finalize` remap edges through it.
 
 ### data/download.ts — Dataset Downloader
 
@@ -280,20 +279,20 @@ Columns:
 Caches for per-stage resumption. Key files:
 
 - `1_skills.tsv` — post-parse, post-dedupe skill list (id, title, description,
-  sources, tags).
-- `1b_infill.tsv`, `1c_summarize.tsv`, `1d_onet_desc.tsv`, `1f_translate.tsv` —
-  Ollama enrichment caches.
+  sources, tags). `1_stats.json` — its per-source counts.
+- `1b_infill.tsv`, `1c_summarize.tsv`, `1d_onet_desc.tsv`,
+  `1e_opensalt_desc.tsv`, `1f_translate.tsv` — Ollama enrichment caches,
+  `key<TAB>value`.
 - `1e_seed_edges.tsv` — resolved expert-labeled prereq pairs from
   Khan/AL-CPL/Metacademy/MOOCCubeX/OpenSALT.
-- `1e_unresolved.tsv` — seed pairs that failed to resolve, with per-label reason
-  (embed-failed / below-cos / no-token-overlap / no-match).
+- `1e_unresolved.tsv` — seed pairs that failed to resolve, with a reason per
+  label (below-cos / no-token-overlap / no-match).
 - `1j_lcsh_tree.tsv`, `1k_dbpedia_tree.tsv` — SKOS broader-chain caches:
-  `slug → ancestor_slugs`.
-- `2_embeddings.bin` (float32 × 768 × N), `2_ids.tsv`, `2_cache.bin` (SHA256 →
-  vector).
-- `3_tagged.tsv` (+ `3b_tagged_deduped.tsv`, `3b_aliases.tsv`).
-- `4_difficulty.tsv` (id, band, raw).
-- `5_candidates.tsv` (skill → candidate prereq indexes), `5_prereqs.tsv` (Ollama
-  responses as resolved IDs).
+  `slug → ancestor_slugs`. `1l_topic_refs.tsv` — topic labels, one per line.
+- `2_embeddings.bin` (float32 × 768 × N), `2_ids.tsv`, `2_pathological.tsv` (ids
+  whose vectors collide), `2_cache.bin` (SHA256 → vector).
+- `3_tagged.tsv`, then `3b_tagged_deduped.tsv` and `3b_aliases.tsv`.
+- `4_difficulty.tsv` (id, band, raw), `4_stats.json` (anchor agreement, read by
+  stage `status`).
+- `5_prereqs.tsv` — LLM picks: `skill<TAB>p1,p2` or `skill<TAB>none`.
 - `6_edges.tsv` — post-processed DAG edges (skill_id, prereq_id).
-- `7_stats.json` — final graph stats (emitted, edges, roots, reachable).

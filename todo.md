@@ -7,14 +7,16 @@
       `5_prereqs.tsv` applies the R1–R10 and DR1 candidate fixes to every skill.
       Deleting the Haiku enrichment caches removes the ~10% wrong descriptions
       (E2) and applies the ENR1–4 prompts.
-  1. `git rm build/1b_infill.tsv build/1c_summarize.tsv build/1d_onet_desc.tsv build/5_prereqs.tsv`.
-  2. Run `deno run -A pipeline.ts enrich`. It now also translates the MOOCCubeX
+  1. `ollama pull gpt-oss:20b`. The Mac has only `nomic-embed-text` today, so
+     stages `enrich` and `prereq` stop on their first request.
+  2. `git rm build/1b_infill.tsv build/1c_summarize.tsv build/1d_onet_desc.tsv build/5_prereqs.tsv`.
+  3. Run `deno run -A pipeline.ts enrich`. It now also translates the MOOCCubeX
      labels into `build/1f_translate.tsv`; commit that cache. Stage `list` drops
      25k long titles today, because the summarize cache has only 3.4k rows and
      the OpenSALT description cache is empty.
-  3. Run `deno run -A pipeline.ts`. Stage `seed-edges` now runs after `dedupe`
+  4. Run `deno run -A pipeline.ts`. Stage `seed-edges` now runs after `dedupe`
      for the first time; watch its foundation-wiring count and quarantine.
-  4. Run `deno task status`. Write a todo entry for each condition below 1.0.
+  5. Run `deno task status`. Write a todo entry for each condition below 1.0.
 
 - [ ] Skills from every US state standard set appear in `skills.tsv`, merged
       with OpenSALT where they repeat. Decision: approved design. Common
@@ -48,3 +50,24 @@
   1. Check whether the key belongs to your CSP account.
   2. If yes: rotate it at CSP. The API answers without a key today, so new code
      sends none.
+
+## Backlog
+
+- [ ] OpenSALT titles and descriptions lose their HTML markup, and Lightcast
+      descriptions keep the tags they quote.
+  1. Today `normalizeText` deletes every `<…>` with a regex, for every source.
+     OpenSALT fields hold real markup (`<b>`, `<sup>`, `<li>`). Lightcast
+     descriptions quote tags in backticks ("like `<table>`"), and the regex
+     deletes those.
+  2. Parse OpenSALT `fullStatement`, `abbreviatedStatement`, and `notes` as HTML
+     (`jsr:@b-fuze/deno-dom`) and keep the text content. Leave the other sources
+     as they are.
+  3. Byte-diff `build/1_skills.tsv`. Only OpenSALT rows with markup and the
+     Lightcast rows with quoted tags may change.
+
+- [ ] Ids keep accented letters as their ASCII base: "Prepare canapés" →
+      `prepare-canapes`, not `prepare-canap-s`.
+  1. `slugify` maps every char outside `[a-z0-9]` to a space. Fold first with
+     NFKD and drop combining marks, as `fuzzyKey` in stage `list` does.
+  2. Do it before the cache regen above: `1b`/`1c`/`1d` key on slugs, so the
+     regen absorbs the id change.
