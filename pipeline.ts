@@ -111,6 +111,7 @@ const STAGE_OF: Record<string, string> = {
   [`${BUILD}/1f_translate.tsv`]: "enrich",
   [`${BUILD}/1j_lcsh_tree.tsv`]: "trees",
   [`${BUILD}/1k_dbpedia_tree.tsv`]: "trees",
+  [`${BUILD}/1l_topic_refs.tsv`]: "trees",
   [`${BUILD}/2_ids.tsv`]: "embed",
   [`${BUILD}/2_embeddings.bin`]: "embed",
   [`${BUILD}/2_pathological.tsv`]: "embed",
@@ -216,19 +217,6 @@ function forEachLine(path: string, fn: (line: string) => void) {
   for (const l of Deno.readTextFileSync(need(path)).split("\n")) if (l) fn(l);
 }
 
-async function streamLines(cmd: string[], onLine: (line: string) => void) {
-  const p = new Deno.Command(cmd[0], {
-    args: cmd.slice(1),
-    stdout: "piped",
-    stderr: "null",
-  }).spawn();
-  const lines = p.stdout.pipeThrough(new TextDecoderStream()).pipeThrough(
-    new TextLineStream(),
-  );
-  for await (const line of lines) onLine(line);
-  await p.status;
-}
-
 async function sha256(s: string): Promise<Uint8Array> {
   const buf = await crypto.subtle.digest(
     "SHA-256",
@@ -236,6 +224,37 @@ async function sha256(s: string): Promise<Uint8Array> {
   );
   return new Uint8Array(buf);
 }
+
+const STOPWORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "of",
+  "in",
+  "on",
+  "for",
+  "to",
+  "and",
+  "or",
+  "is",
+  "at",
+  "by",
+  "with",
+  "from",
+  "as",
+  "be",
+  "that",
+  "this",
+]);
+
+const SIG_STOP = new Set([
+  ...STOPWORDS,
+  "are",
+  "their",
+  "its",
+  "these",
+  "those",
+]);
 
 // ---------- ollama ----------
 
@@ -641,7 +660,7 @@ async function readMoocPairs(): Promise<MoocPair[]> {
 const INFILL_CACHE = `${BUILD}/1b_infill.tsv`;
 const SUMMARIZE_CACHE = `${BUILD}/1c_summarize.tsv`;
 const ONET_DESC_CACHE = `${BUILD}/1d_onet_desc.tsv`;
-const OPENSALT_DESC_CACHE_PATH = `${BUILD}/1e_opensalt_desc.tsv`;
+const OPENSALT_DESC_CACHE = `${BUILD}/1e_opensalt_desc.tsv`;
 
 const SHORT_TECH_WHITELIST = new Set([
   "r",
@@ -748,7 +767,7 @@ function stageList() {
   const infill = loadTsvCache(INFILL_CACHE);
   const summarize = loadTsvCache(SUMMARIZE_CACHE);
   const onetDesc = loadTsvCache(ONET_DESC_CACHE);
-  const opensaltDesc = loadTsvCache(OPENSALT_DESC_CACHE_PATH);
+  const opensaltDesc = loadTsvCache(OPENSALT_DESC_CACHE);
   console.log(
     `[list] caches: infill=${infill.size} summarize=${summarize.size} onet_desc=${onetDesc.size} opensalt_desc=${opensaltDesc.size}`,
   );
@@ -1451,8 +1470,6 @@ function stageList() {
 
 // ---------- stage enrich: Ollama infill + summarize + onet-desc ----------
 
-const OPENSALT_DESC_CACHE = `${BUILD}/1e_opensalt_desc.tsv`;
-
 async function stageEnrich() {
   const lines = Deno.readTextFileSync(need(`${BUILD}/1_skills.tsv`)).split("\n")
     .filter((l) => l.length);
@@ -1553,32 +1570,65 @@ async function stageEnrich() {
 
 // ---------- stage trees: LCSH + DBpedia SKOS broader chains ----------
 
+const TOPIC_REFS = `${BUILD}/1l_topic_refs.tsv`;
+
+// One pass over a SKOS dump. Writes slug → ancestor slugs to outPath, and
+// returns the labels of the most-used broader targets as topic candidates.
 async function buildTree(
   label: string,
   cmd: string[],
   outPath: string,
   depth: number,
   junkRe?: RegExp,
-) {
+): Promise<string[]> {
   console.log(`[trees] ${label}: streaming…`);
   const labels = new Map<string, string>();
   const parents = new Map<string, string[]>();
+  const inDeg = new Map<string, number>();
+  const topicLabels = new Map<string, string>();
   const PREF = "skos/core#prefLabel";
   const BROADER = "skos/core#broader";
   const rxPref =
     /^<([^>]+)>\s+<[^>]+prefLabel>\s+"((?:[^"\\]|\\.)*)"(?:@en)?\s*\.$/;
   const rxBroader = /^<([^>]+)>\s+<[^>]+broader>\s+<([^>]+)>\s*\.$/;
+  const rxAnyUri = /^<[^>]+>\s+<[^>]+>\s+<([^>]+)>\s*\.$/;
+  const rxAnyLit = /^<([^>]+)>\s+<[^>]+>\s+"((?:[^"\\]|\\.)*)"(?:@en)?\s*\.$/;
+  const BADCAT =
+    /^(Wikipedia|Lists of|List of|Categories |Redirects|Articles |Stubs|Templates|Commons|Set indices)/i;
+  const unquote = (s: string) => s.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  const p = new Deno.Command(cmd[0], {
+    args: cmd.slice(1),
+    stdout: "piped",
+    stderr: "inherit",
+  }).spawn();
   let n = 0;
-  await streamLines(cmd, (line) => {
+  for await (
+    const line of p.stdout.pipeThrough(new TextDecoderStream()).pipeThrough(
+      new TextLineStream(),
+    )
+  ) {
     n++;
     if (n % 2000000 === 0) {
       console.log(`  ${label}: ${n} lines, ${labels.size} labels`);
     }
-    if (line.length < 50 || line[0] !== "<") return;
+    if (line.length < 40 || line[0] === "#") continue;
+    if (line.includes(BROADER)) {
+      const m = rxAnyUri.exec(line);
+      if (m) inDeg.set(m[1], (inDeg.get(m[1]) ?? 0) + 1);
+    }
+    if (line.includes(PREF)) {
+      const m = rxAnyLit.exec(line);
+      const lbl = m && unquote(m[2]);
+      if (
+        m && lbl && lbl.length >= 2 && lbl.length <= 50 && !BADCAT.test(lbl) &&
+        lbl.split(/\s+/).length <= 4 && !lbl.includes("(") && !lbl.includes(",")
+      ) topicLabels.set(m[1], lbl);
+    }
+    if (line.length < 50 || line[0] !== "<") continue;
     if (line.includes(PREF)) {
       const m = rxPref.exec(line);
       if (m) {
-        const lbl = m[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        const lbl = unquote(m[2]);
         if (lbl.length >= 2 && lbl.length <= 80 && !lbl.includes("--")) {
           labels.set(m[1], lbl);
         }
@@ -1591,10 +1641,31 @@ async function buildTree(
         parents.set(m[1], arr);
       }
     }
-  });
+  }
+  const { code } = await p.status;
+  if (code !== 0) {
+    throw new Error(
+      `${
+        cmd.join(" ")
+      }: expected exit 0, received ${code} after ${n} lines. The dump is truncated or corrupt; re-download it.`,
+    );
+  }
   console.log(
     `[trees] ${label}: ${labels.size} labels, ${parents.size} with parents`,
   );
+
+  // The 5000 labelled targets with the most broader edges, from the 25000
+  // targets with the most. Pick them now and free both maps: DBpedia nears
+  // the 4 GB heap limit in the ancestor walk below.
+  const PER_SOURCE = 5000;
+  const topSet = new Map(
+    [...inDeg].sort((a, b) => b[1] - a[1]).slice(0, PER_SOURCE * 5),
+  );
+  const topics = [...topicLabels].filter(([uri]) => topSet.has(uri))
+    .sort((a, b) => topSet.get(b[0])! - topSet.get(a[0])!)
+    .slice(0, PER_SOURCE).map(([, lbl]) => lbl);
+  inDeg.clear();
+  topicLabels.clear();
 
   const slugToAncestors = new Map<string, string[]>();
   for (const [uri, lbl] of labels) {
@@ -1632,24 +1703,34 @@ async function buildTree(
   }
   fh.close();
   console.log(`[trees] ${label}: ${slugToAncestors.size} slugs → ${outPath}`);
+  return topics;
 }
 
 async function stageTrees() {
-  await buildTree(
+  const lcsh = await buildTree(
     "lcsh",
-    ["sh", "-c", "gunzip -c data/lcsh/subjects.skosrdf.nt.gz"],
+    ["gunzip", "-c", "data/lcsh/subjects.skosrdf.nt.gz"],
     `${BUILD}/1j_lcsh_tree.tsv`,
     4,
   );
   const JUNK =
     /_by_country$|_by_region$|_by_type$|_by_year$|_introduced_in_|_established_in_|_disestablished_in_|_founded_in_|_born_in_|_died_in_|_set_in_|^Category:People_in_|_people$|_in_history$/i;
-  await buildTree(
+  const dbp = await buildTree(
     "dbpedia",
-    ["sh", "-c", "bzcat data/dbpedia/skos_categories_en.ttl.bz2"],
+    ["bzcat", "data/dbpedia/skos_categories_en.ttl.bz2"],
     `${BUILD}/1k_dbpedia_tree.tsv`,
     3,
     JUNK,
   );
+  const seen = new Set<string>();
+  const refs = [...lcsh, ...dbp].filter((l) => {
+    const k = l.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  Deno.writeTextFileSync(TOPIC_REFS, refs.join("\n") + "\n");
+  console.log(`[trees] ${refs.length} topic refs → ${TOPIC_REFS}`);
 }
 
 // ---------- stage seed-edges ----------
@@ -1911,25 +1992,7 @@ async function stageSeedEdges() {
   // OpenSALT within-framework grade ordering
   {
     const STOPT = new Set([
-      "the",
-      "a",
-      "an",
-      "of",
-      "in",
-      "on",
-      "for",
-      "to",
-      "and",
-      "or",
-      "is",
-      "at",
-      "by",
-      "with",
-      "from",
-      "as",
-      "be",
-      "that",
-      "this",
+      ...STOPWORDS,
       "which",
       "can",
       "will",
@@ -2081,34 +2144,13 @@ async function stageSeedEdges() {
 
   // Embedding fallback.
   const FALLBACK = 0.90;
-  const STOP = new Set([
-    "the",
-    "a",
-    "an",
-    "of",
-    "in",
-    "on",
-    "for",
-    "to",
-    "and",
-    "or",
-    "is",
-    "at",
-    "by",
-    "with",
-    "from",
-    "as",
-    "be",
-    "that",
-    "this",
-  ]);
   const sigTokens = (s: string): Set<string> => {
     const out = new Set<string>();
     for (
       const t of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
         .filter(Boolean)
     ) {
-      if (t.length >= 3 && !STOP.has(t)) out.add(t);
+      if (t.length >= 3 && !STOPWORDS.has(t)) out.add(t);
     }
     return out;
   };
@@ -2416,71 +2458,6 @@ function parseOccupationRefs(): { label: string; desc: string }[] {
 const TOPIC_BADCAT2 =
   /(\b(in|of|from|by|for)\b\s+(Europe|Asia|Africa|America|Oceania|Antarctica|England|France|Germany|China|Japan|India|Russia|USSR|USA|Britain|Scotland|Ireland|Italy|Spain|Canada|Australia|Mexico|Brazil|Argentina|Iran|Iraq|Egypt|Turkey|Greece))|(\bcentury|centuries|\bdecade|\b\d{4}s\b|\b\d{3,4}\s*(BC|AD|BCE|CE)\b)|(\bpeople\b|\bbiography|\bbiographies|\bdeaths\b|\bbirths\b|\bmarriage|\bfamily\b)|(\bdisasters|\bincidents|\baccidents|\bwars\b|\bbattles|\belections)|^(19|20)\d{2}s?\b|^\d{1,2}(st|nd|rd|th)\s*(century|millennium)/i;
 
-async function parseTopicRefs(
-  perSource: number,
-): Promise<{ label: string; desc: string }[]> {
-  const BADCAT =
-    /^(Wikipedia|Lists of|List of|Categories |Redirects|Articles |Stubs|Templates|Commons|Set indices)/i;
-  const topSource = async (cmd: string[]) => {
-    const BROADER = "skos/core#broader", PREF = "skos/core#prefLabel";
-    const inDeg = new Map<string, number>();
-    await streamLines(cmd, (line) => {
-      if (line.length < 40 || line[0] === "#") return;
-      if (!line.includes(BROADER)) return;
-      const m = line.match(/^<[^>]+>\s+<[^>]+>\s+<([^>]+)>\s*\.$/);
-      if (m) inDeg.set(m[1], (inDeg.get(m[1]) ?? 0) + 1);
-    });
-    const top = [...inDeg.entries()].sort((a, b) => b[1] - a[1]).slice(
-      0,
-      perSource * 5,
-    );
-    const topSet = new Map(top.map(([uri, d]) => [uri, d]));
-    inDeg.clear();
-    const labels = new Map<string, string>();
-    await streamLines(cmd, (line) => {
-      if (line.length < 40 || line[0] === "#") return;
-      if (!line.includes(PREF)) return;
-      const m = line.match(
-        /^<([^>]+)>\s+<[^>]+>\s+"((?:[^"\\]|\\.)*)"(?:@en)?\s*\.$/,
-      );
-      if (!m || !topSet.has(m[1])) return;
-      const lbl = m[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-      if (lbl.length < 2 || lbl.length > 50) return;
-      if (BADCAT.test(lbl)) return;
-      const words = lbl.split(/\s+/);
-      if (words.length > 4) return;
-      if (lbl.includes("(") || lbl.includes(",")) return;
-      labels.set(m[1], lbl);
-    });
-    const scored: { uri: string; label: string; inDeg: number }[] = [];
-    for (const [uri, label] of labels) {
-      scored.push({ uri, label, inDeg: topSet.get(uri)! });
-    }
-    scored.sort((a, b) => b.inDeg - a.inDeg);
-    return scored.slice(0, perSource);
-  };
-  const tL = await topSource([
-    "sh",
-    "-c",
-    "gunzip -c data/lcsh/subjects.skosrdf.nt.gz",
-  ]);
-  const tD = await topSource([
-    "sh",
-    "-c",
-    "bzcat data/dbpedia/skos_categories_en.ttl.bz2",
-  ]);
-  const refs: { label: string; desc: string }[] = [];
-  const seen = new Set<string>();
-  for (const r of [...tL, ...tD]) {
-    const k = r.label.toLowerCase();
-    if (seen.has(k)) continue;
-    seen.add(k);
-    refs.push({ label: r.label, desc: "" });
-  }
-  console.log(`[tag] topic refs: ${refs.length}`);
-  return refs;
-}
-
 function parseEscoSkillTopics(): Map<string, string[]> {
   const rows = readCsv("data/esco/broaderRelationsSkillPillar_en.csv");
   const h = rows[0];
@@ -2619,7 +2596,8 @@ async function stageTag() {
   const skillVecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
 
   const occRefs = parseOccupationRefs();
-  const topicRefs = await parseTopicRefs(5000);
+  const topicRefs = Deno.readTextFileSync(need(TOPIC_REFS)).split("\n")
+    .filter((l) => l.length).map((label) => ({ label, desc: "" }));
   // Retroactively filter topic refs by geographic/temporal patterns. Their embeddings are
   // already in the cache, so we keep them in-place but mark them as "poisoned" so they
   // are never matched.
@@ -2655,26 +2633,8 @@ async function stageTag() {
   const IDF_MAX = 0.015;
 
   const TAG_STOP = new Set([
-    "the",
-    "a",
-    "an",
-    "and",
-    "or",
-    "of",
-    "to",
-    "for",
-    "in",
-    "on",
-    "at",
-    "by",
-    "with",
-    "from",
-    "as",
-    "is",
+    ...STOPWORDS,
     "are",
-    "be",
-    "that",
-    "this",
     "these",
     "those",
     "their",
@@ -3215,32 +3175,6 @@ function stageDedupe() {
   }
 
   // Token-sort signature merge
-  const SIG_STOP = new Set([
-    "a",
-    "an",
-    "the",
-    "of",
-    "to",
-    "for",
-    "in",
-    "on",
-    "at",
-    "by",
-    "with",
-    "is",
-    "are",
-    "be",
-    "or",
-    "and",
-    "from",
-    "as",
-    "their",
-    "its",
-    "this",
-    "that",
-    "these",
-    "those",
-  ]);
   const tokenSig = (title: string): string => {
     const toks = title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(
       /\s+/,
@@ -4710,36 +4644,10 @@ function stagePostproc() {
   );
 
   // Filter 0b: hypernym
-  const HYP_STOP = new Set([
-    "a",
-    "an",
-    "the",
-    "of",
-    "to",
-    "for",
-    "in",
-    "on",
-    "at",
-    "by",
-    "with",
-    "and",
-    "or",
-    "from",
-    "as",
-    "is",
-    "are",
-    "be",
-    "that",
-    "this",
-    "these",
-    "those",
-    "their",
-    "its",
-  ]);
   const sigSlugToks = (id: string): Set<string> => {
     const out = new Set<string>();
     for (const w of id.split("-")) {
-      if (w.length >= 3 && !HYP_STOP.has(w)) out.add(w);
+      if (w.length >= 3 && !SIG_STOP.has(w)) out.add(w);
     }
     return out;
   };
@@ -5282,32 +5190,7 @@ function stageFinalize() {
   }
 
   // Framework/wiki-category filters (module-scope FRAMEWORK_RE, WIKI_CAT_RE, YEAR_RE)
-  const frameworkRe = FRAMEWORK_RE;
-  const wikiCatRe = WIKI_CAT_RE;
-  const yearRe = YEAR_RE;
-  const STOP = new Set([
-    "the",
-    "a",
-    "an",
-    "of",
-    "to",
-    "for",
-    "in",
-    "on",
-    "and",
-    "or",
-    "with",
-    "by",
-    "at",
-    "from",
-    "as",
-    "is",
-    "be",
-    "that",
-    "this",
-    "these",
-    "those",
-  ]);
+  const STOP = new Set([...STOPWORDS, "these", "those"]);
   const sigTokens = (id: string) =>
     new Set(id.split("-").filter((t) => t.length >= 4 && !STOP.has(t)));
 
@@ -5416,7 +5299,7 @@ function stageFinalize() {
       }
     }
     const filtered = existing.filter((t) =>
-      !frameworkRe.test(t) && !wikiCatRe.test(t) && !yearRe.test(t) &&
+      !FRAMEWORK_RE.test(t) && !WIKI_CAT_RE.test(t) && !YEAR_RE.test(t) &&
       sigTokens(t).size > 0
     );
     // LCSH/DBpedia ancestor enrichment
@@ -5426,8 +5309,8 @@ function stageFinalize() {
       if (!anc) continue;
       for (const a of anc) {
         if (
-          lcshTopics.includes(a) || yearRe.test(a) || wikiCatRe.test(a) ||
-          frameworkRe.test(a)
+          lcshTopics.includes(a) || YEAR_RE.test(a) || WIKI_CAT_RE.test(a) ||
+          FRAMEWORK_RE.test(a)
         ) continue;
         if (sigTokens(a).size === 0) continue;
         const aToks = sigTokens(a);
