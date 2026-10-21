@@ -1,11 +1,3 @@
-- [ ] You read claude.md and readme.md, and each count in them is a command, not
-      a number that goes stale.
-  1. Replace counts in claude.md (`~3,000 lines`, `~65k rows`, `13,890+`, etc.)
-     with the command that prints them, or delete them.
-  2. Change `CLAUDE.md` references in readme.md and claude.md to `claude.md`.
-  3. Correct the `translations.json` text in claude.md: the file is not in the
-     repo.
-
 - [ ] OpenSALT text with math symbols reads correctly, e.g. `x²⋅x⁵`, not
       `x ²â‹…xâµ`.
   1. Add a failing test: no `build/1_skills.tsv` field contains `â` or `Ã`.

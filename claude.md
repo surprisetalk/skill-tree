@@ -1,4 +1,4 @@
-# CLAUDE.md
+# claude.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with
 code in this repository.
@@ -15,13 +15,13 @@ All data lives in `data/`. Schemas below.
 
 ### data/esco/ — European Skills/Occupations (19 CSVs)
 
-EU taxonomy of 13,890+ skills linked to ~3,000 occupations. Key files:
+EU taxonomy of skills linked to occupations. Key files:
 
 - **skills_en.csv** —
   `conceptType, conceptUri, skillType, reuseLevel, preferredLabel, altLabels, hiddenLabels, status, modifiedDate, scopeNote, definition, inScheme, description`
 - **occupations_en.csv** —
   `conceptType, conceptUri, iscoGroup, preferredLabel, altLabels, hiddenLabels, status, modifiedDate, regulatedProfessionNote, scopeNote, definition, inScheme, description, code, naceCode`
-- **occupationSkillRelations_en.csv** (largest, 28M) —
+- **occupationSkillRelations_en.csv** (largest) —
   `occupationUri, occupationLabel, relationType, skillType, skillUri, skillLabel`.
   relationType is "essential" or "optional"; skillType is "knowledge" or
   "skill/competence"
@@ -35,19 +35,19 @@ EU taxonomy of 13,890+ skills linked to ~3,000 occupations. Key files:
 
 All entities use URI identifiers for semantic linkage.
 
-### data/onet/ — U.S. O*NET (44 TSV files)
+### data/onet/ — U.S. O*NET (TSV files)
 
-1,016 occupations with quantitative ratings. Common column structure:
+Occupations with quantitative ratings. Common column structure:
 `O*NET-SOC Code, Element ID, Element Name, Scale ID, Data Value, N, Standard Error, Lower CI Bound, Upper CI Bound, Recommend Suppress, Not Relevant, Date, Domain Source`.
 Scale IDs: IM (Importance), LV (Level).
 
 Key files:
 
 - **Occupation Data.txt** — `O*NET-SOC Code, Title, Description`
-- **Skills.txt** — 35 skills rated per occupation
-- **Knowledge.txt** — 33 knowledge areas rated per occupation
-- **Abilities.txt** — 52 abilities rated per occupation
-- **Work Activities.txt** (37M, largest) — activity ratings
+- **Skills.txt** — skills rated per occupation
+- **Knowledge.txt** — knowledge areas rated per occupation
+- **Abilities.txt** — abilities rated per occupation
+- **Work Activities.txt** (largest) — activity ratings
 - **Task Statements.txt** —
   `O*NET-SOC Code, Task ID, Task, Task Type, Incumbents Responding, Date, Domain Source`
 - **Task Ratings.txt** — frequency/importance ratings per task
@@ -55,9 +55,9 @@ Key files:
 - **Education, Training, and Experience.txt** — requirements
 - **Interests.txt** — RIASEC codes
 
-### data/lightcast/ — Lightcast Open Skills (1 JSON file)
+### data/lightcast/ — Lightcast Open Skills
 
-**skills.json** — Array of 32,000+ skill objects:
+**skills.json** — Array of skill objects:
 
 ```json
 {
@@ -70,40 +70,38 @@ Key files:
 
 Top-level also has `attributions` array.
 
-### data/lcsh/ — Library of Congress Subject Headings (1 gzipped N-Triples file)
+### data/lcsh/ — Library of Congress Subject Headings (gzipped N-Triples)
 
-~512,000 SKOS concepts spanning all fields of knowledge, curated by the Library
-of Congress. Downloaded from https://id.loc.gov/download/.
+SKOS concepts spanning all fields of knowledge, curated by the Library of
+Congress. Downloaded from https://id.loc.gov/download/.
 
-**subjects.skosrdf.nt.gz** (95M compressed, ~1GB decompressed) — N-Triples RDF.
-Each subject heading is a `skos:Concept` with:
+**subjects.skosrdf.nt.gz** — N-Triples RDF. Each subject heading is a
+`skos:Concept` with:
 
 - `skos:prefLabel` — canonical English label
 - `skos:altLabel` — variant forms
-- `skos:broader` / `skos:narrower` — hierarchical relations (~300k broader
-  links)
+- `skos:broader` / `skos:narrower` — hierarchical relations
 - `skos:related` — associative relations
 - `skos:inScheme` — all belong to `<http://id.loc.gov/authorities/subjects>`
 - `skos:changeNote` — provenance/revision metadata via blank nodes
 
 URI pattern: `http://id.loc.gov/authorities/subjects/sh{id}`
 
-### data/dbpedia/ — DBpedia Category Hierarchy (2 bzip2 Turtle files)
+### data/dbpedia/ — DBpedia Category Hierarchy (bzip2 Turtle)
 
 Wikipedia's category graph extracted by DBpedia (2016-10 release). Downloaded
 from https://downloads.dbpedia.org/2016-10/core-i18n/en/.
 
-**skos_categories_en.ttl.bz2** (44M compressed) — ~1.47M SKOS categories with
-~3.08M `skos:broader` edges. Each category is a `skos:Concept` with
-`skos:prefLabel` and `skos:broader` links to parent categories. URI pattern:
-`http://dbpedia.org/resource/Category:{Name}`
+**skos_categories_en.ttl.bz2** — SKOS categories with `skos:broader` edges. Each
+category is a `skos:Concept` with `skos:prefLabel` and `skos:broader` links to
+parent categories. URI pattern: `http://dbpedia.org/resource/Category:{Name}`
 
-**article_categories_en.ttl.bz2** (225M compressed, gitignored) — maps Wikipedia
-articles to categories via `dcterms:subject`. URI pattern:
+**article_categories_en.ttl.bz2** (gitignored) — maps Wikipedia articles to
+categories via `dcterms:subject`. URI pattern:
 `http://dbpedia.org/resource/{Article_Name}` →
 `http://dbpedia.org/resource/Category:{Category_Name}`
 
-### data/al-cpl/ — Expert Prerequisite Pairs (8 files)
+### data/al-cpl/ — Expert Prerequisite Pairs
 
 From github.com/harrylclc/AL-CPL-dataset. Expert-labeled concept prerequisite
 pairs across 4 domains: Data Mining, Geometry, Physics, Precalculus. CC BY 4.0.
@@ -114,23 +112,22 @@ pairs across 4 domains: Data Mining, Geometry, Physics, Precalculus. CC BY 4.0.
   of .pairs where experts agreed A is prerequisite of B)
 - **features/** — precomputed features for prerequisite prediction models
 
-### data/metacademy/ — ML/AI Concept Prerequisite Graph (393 concepts)
+### data/metacademy/ — ML/AI Concept Prerequisite Graph
 
 Two sources combined:
 
-**metacademy-content/concepts/{name}/** — 393 ML/AI concepts, each a directory
-with:
+**metacademy-content/concepts/{name}/** — ML/AI concepts, each a directory with:
 
 - `title.txt` — concept name
 - `dependencies.txt` — prerequisite concepts as `tag: {concept_id}` + `reason:`
   pairs
 - `summary.txt`, `goals.txt`, `resources.txt`
 
-**Metacademy-prerequisite-pairs-transformed-to-wikipedia.csv** — 7,947
-prerequisite pairs mapped to Wikipedia:
+**Metacademy-prerequisite-pairs-transformed-to-wikipedia.csv** — prerequisite
+pairs mapped to Wikipedia:
 `prereq_wiki_canonical_title preq, MA preq, MA concept, concept_wiki_canonical_title_concept`
 
-### data/mooccubex/ — MOOCCubeX Prerequisites (3 JSONL files, gzipped in git)
+### data/mooccubex/ — MOOCCubeX Prerequisites (JSONL, gzipped in git)
 
 From github.com/THU-KEG/MOOCCubeX. Concept prerequisite pairs with model
 predictions for CS, math, and psychology (Chinese university MOOCs). Each line
@@ -147,22 +144,21 @@ is a JSON object:
 ```
 
 - `c1` → `c2` prerequisite direction; `ground_truth`: 1 = confirmed prerequisite
-- **cs.json.gz** (24M), **math.json.gz** (16M), **psy.json.gz** (27M)
+- **cs.json.gz**, **math.json.gz**, **psy.json.gz**
 - Uncompressed .json files are gitignored
-- **translations.json** — Chinese→English translations of concept labels,
-  generated by `data/translate.ts`. Labels are translated to English in
-  `pipeline.ts` to enable cross-dataset merging
+- `data/mooccubex/translations.json` is not in the repo, so stage `seed-edges`
+  passes Chinese labels through untranslated. todo.md tracks the fix.
 
-### data/khanacademy/ — Khan Academy Math Prerequisite Graph (1 TSV)
+### data/khanacademy/ — Khan Academy Math Prerequisite Graph (TSV)
 
-Community-mapped prerequisite graph of 1,487 Khan Academy math exercises, from
+Community-mapped prerequisite graph of Khan Academy math exercises, from
 counting (K) through calculus (AP). Source:
 [Google Sheets data map](https://docs.google.com/spreadsheets/d/1YiRwrDAuLx7K2NmPySs1K1GpR7Kxzfk5KjDTxpvP0rM/).
 
 **khandata.tsv** — columns:
 `Code, Data Name, Prereq(s), H-Position, V-Position, Display Name, Link to Practice problem`
 
-- `Code` — numeric ID (1–1487)
+- `Code` — numeric ID
 - `Data Name` — exercise slug (e.g. `counting-out-1-20-objects`)
 - `Prereq(s)` — semicolon-separated prerequisite references; mixed numeric Codes
   and Data Name slugs
@@ -171,9 +167,9 @@ counting (K) through calculus (AP). Source:
 - `Display Name` — human-readable exercise title
 - `root` in Prereq(s) means no prerequisites
 
-### data/opensalt/ — OpenSALT Standards Frameworks (96 CASE JSON files)
+### data/opensalt/ — OpenSALT Standards Frameworks (CASE JSON)
 
-95 K-12 standards frameworks from opensalt.net in 1EdTech CASE format. Includes
+K-12 standards frameworks from opensalt.net in 1EdTech CASE format. Includes
 CCSS Math, NGSS, state standards (Alabama, Georgia, Indiana, Virginia, Oklahoma,
 Florida, etc.), plus specialty frameworks (CASEL, 21st Century Skills, AP CS).
 
@@ -193,22 +189,22 @@ Florida, etc.), plus specialty frameworks (CASEL, 21st Century Skills, AP CS).
 
 `deno run -A pipeline.ts [stage]` — stages: `list`, `enrich`, `trees`,
 `seed-edges`, `embed`, `tag`, `dedupe`, `difficulty`, `prereq`, `postproc`,
-`finalize` (default: all).
+`finalize`, `status` (default: all).
 
-Monolithic Deno script (~3,000 lines, Ollama-only). Parses datasets into a
-unified schema, embeds via Ollama `nomic-embed-text`, assigns
-occupations/topics, dedupes, infers difficulty (isotonic PAV + kNN smoothing),
-ranks prerequisites via Ollama (`gpt-oss:20b` by default), breaks cycles, and
-emits `skills.tsv`. Stage outputs cached in `build/`.
+Monolithic Deno script (Ollama-only). Parses datasets into a unified schema,
+embeds via Ollama `nomic-embed-text`, assigns occupations/topics, dedupes,
+infers difficulty (isotonic PAV + kNN smoothing), ranks prerequisites via Ollama
+(`gpt-oss:20b` by default), breaks cycles, and emits `skills.tsv`. Stage outputs
+cached in `build/`.
 
 **Stages** (run in order or individually): `list`, `enrich`, `trees`,
 `seed-edges`, `embed`, `tag`, `dedupe`, `difficulty`, `prereq`, `postproc`,
-`finalize`.
+`finalize`, `status`.
 
 **Parsers**:
 
 - Stage `list`: ESCO, O\*NET (Skills/Knowledge/Abilities/Tasks/DWAs/Tech),
-  Lightcast, OpenSALT (96 frameworks).
+  Lightcast, OpenSALT, and the hubs in `data/_foundations.json`.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, OpenSALT
   precedes, OpenSALT within-framework grade ordering. Pairs resolved to skill
   IDs via exact match then embedding fallback (cosine ≥ `SEED_FALLBACK_COS`
@@ -244,10 +240,10 @@ in `3b_aliases.tsv`; stages 6/7 remap edges through it.
 
 `ANTHROPIC_API_KEY=... deno run --allow-read --allow-write --allow-net --allow-run data/translate.ts`
 
-One-time script that extracts Chinese labels from MOOCCubeX (~2k Simplified
-Chinese concepts), translates them to English via Claude API (Haiku, batches of
-100), and writes `data/mooccubex/translations.json`. Caches results — skips
-labels already in the existing JSON file.
+One-time script that extracts Chinese labels from MOOCCubeX (Simplified Chinese
+concepts), translates them to English via Claude API (Haiku, batches of 100),
+and writes `data/mooccubex/translations.json`. Caches results — skips labels
+already in the existing JSON file.
 
 ### data/download.ts — Dataset Downloader
 
@@ -256,13 +252,21 @@ labels already in the existing JSON file.
 Downloads all datasets from their sources. Implements caching (skips existing
 files).
 
+### Checks
+
+- `deno task check` — fmt, lint, typecheck.
+- `deno task test` — runs stage `list` for real (no Ollama) and asserts on its
+  output, plus a fixture run of stage `status`.
+- `deno task status` — grades the last full build; exits 1 when any condition
+  scores below 1.0. snitch runs it hourly.
+
 ## Output Files
 
 Generated by `pipeline.ts` into the project root. Gitignored.
 
 ### skills.tsv / skills.tsv.gz — Unified Skill Table
 
-~65k rows. Columns:
+Columns:
 `id, title, display_title, description, difficulty, prereqs, occupations, topics, grade_start, grade_end`
 
 - `id` — slugified title (lowercase, hyphens, ≤80 chars; hex-hashed suffix for

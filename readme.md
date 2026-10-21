@@ -34,4 +34,4 @@ Requires a local Ollama with `nomic-embed-text` (embeddings) and `gpt-oss:20b`
 - Stage knobs: `PREREQ_K`, `PREREQ_PICK_CAP`, `KNN_K`, `DEDUPE_COSINE`,
   `PER_TOPIC_CAP`, `HUB_CAP`, `SEED_FALLBACK_COS`, `SMOOTH_W`
 
-See `CLAUDE.md` for the full dataset catalog and schemas.
+See `claude.md` for the full dataset catalog and schemas.
