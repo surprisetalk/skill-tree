@@ -125,7 +125,7 @@ const goodBuild = (): Fixture => {
   };
 };
 
-const runStatus = async (fixture: Fixture) => {
+const runIn = async (stage: string, fixture: Fixture) => {
   const dir = Deno.makeTempDirSync();
   for (const [path, body] of Object.entries(fixture)) {
     const parent = path.slice(0, path.lastIndexOf("/") + 1);
@@ -134,22 +134,24 @@ const runStatus = async (fixture: Fixture) => {
       Deno.writeTextFileSync(`${dir}/${path}`, body);
     } else Deno.writeFileSync(`${dir}/${path}`, body);
   }
-  const out = await run(["status"], dir, 10_000);
+  const out = await run([stage], dir, 10_000);
+  const skills = Deno.readTextFileSync(`${dir}/skills.tsv`);
   Deno.removeSync(dir, { recursive: true });
   const stderr = new TextDecoder().decode(out.stderr);
   const stdout = new TextDecoder().decode(out.stdout);
-  const report = out.code === 0 || stdout.startsWith("{")
+  const report = stdout.startsWith("{")
     ? JSON.parse(stdout) as Record<string, { "0": number }>
     : {};
   return {
     code: out.code,
     stderr,
+    skills,
     score: (name: string) => report[name]?.["0"],
   };
 };
 
 Deno.test("status: a healthy build passes every condition and exits 0", async () => {
-  const { code, stderr } = await runStatus(goodBuild());
+  const { code, stderr } = await runIn("status", goodBuild());
   assertEquals(code, 0, stderr);
 });
 
@@ -164,7 +166,7 @@ Deno.test("status: graph defects score below 1 and exit 1", async () => {
   ].map(([id, band, pre]) =>
     [id, id, id, "", band, pre, "", "", "", ""].join("\t")
   ).join("\n") + "\n";
-  const { code, score, stderr } = await runStatus(build);
+  const { code, score, stderr } = await runIn("status", build);
   assertEquals(code, 1, stderr);
   // 11 edges: loop-a, loop-b, self, and ghost are bad.
   assertEquals(
@@ -184,7 +186,7 @@ Deno.test("status: a missing or still-Chinese translation scores below 1", async
   ) {
     const build = goodBuild();
     build["build/1f_translate.tsv"] = cache;
-    const { code, score } = await runStatus(build);
+    const { code, score } = await runIn("status", build);
     assertEquals(code, 1);
     assertEquals(
       score("Every Chinese MOOCCubeX label has an English translation."),
@@ -196,7 +198,7 @@ Deno.test("status: a missing or still-Chinese translation scores below 1", async
 Deno.test("status: a missing build file scores 0 and names the stage to rerun", async () => {
   const build = goodBuild();
   delete build["build/4_stats.json"];
-  const { code, score, stderr } = await runStatus(build);
+  const { code, score, stderr } = await runIn("status", build);
   assertEquals(code, 1);
   assertEquals(
     score("Difficulty agrees with grade anchors: Kendall τ above 0.5."),
@@ -228,7 +230,7 @@ Deno.test("status: a malformed build file crashes with the condition and the fix
     const build = goodBuild();
     build[path] = body;
     if (path === "skills.tsv") delete build["build/4_difficulty.tsv"];
-    const { code, stderr } = await runStatus(build);
+    const { code, stderr } = await runIn("status", build);
     assert(code !== 0 && stderr.includes(expected), `${path}: ${stderr}`);
     assert(stderr.includes('status "'), stderr);
   }
@@ -268,6 +270,65 @@ Deno.test("list: a malformed data/_foundations.json stops the stage", async () =
     const stderr = new TextDecoder().decode(out.stderr);
     assert(out.code !== 0 && stderr.includes(expected), `${name}: ${stderr}`);
   }));
+});
+
+// A small postproc output that finalize turns into skills.tsv.
+const finalBuild = (): Fixture => {
+  const ids = ["counting", "addition", "multiplication"];
+  return {
+    "skills.tsv": "",
+    "build/3b_tagged_deduped.tsv": [
+      "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+      ...ids.map((id) =>
+        `${id}\t${id}\tThe arithmetic skill ${id}.\tfoundation\tgrade:1\t\tarithmetic,mathematics`
+      ),
+    ].join("\n") + "\n",
+    "build/4_difficulty.tsv": [
+      "id\tdifficulty\tdifficulty_raw",
+      ...ids.map((id, i) => `${id}\t${i + 1}\t${i + 1}`),
+    ].join("\n") + "\n",
+    "build/3b_aliases.tsv": "dropped_id\tcanonical_id\n",
+    "build/6_edges.tsv":
+      "skill_id\tprereq_id\naddition\tcounting\nmultiplication\taddition\n",
+    "build/1j_lcsh_tree.tsv": "counting\tarithmetic\n",
+    "build/1k_dbpedia_tree.tsv": "addition\tarithmetic\n",
+  };
+};
+
+// Each of these wrote a skills.tsv that breaks its own invariants, exit 0.
+Deno.test("finalize: writes a DAG of unique skills, or stops", async () => {
+  const good = await runIn("finalize", finalBuild());
+  assertEquals(good.code, 0, good.stderr);
+  assertEquals(good.skills.split("\n")[2].split("\t")[5], "counting");
+  const cases: [string, string, string][] = [
+    ["build/6_edges.tsv", "counting\tmultiplication\n", "expected a DAG"],
+    [
+      "build/6_edges.tsv",
+      "addition\tghost\n",
+      'expected a skill id, received "ghost"',
+    ],
+    [
+      "build/3b_tagged_deduped.tsv",
+      "counting\tcounting\td\tfoundation\t\t\tarithmetic\n",
+      'expected unique ids, received a second "counting"',
+    ],
+    [
+      "build/4_difficulty.tsv",
+      "counting\t1\t1\n",
+      'expected unique ids, received a second "counting"',
+    ],
+  ];
+  for (const [path, extra, expected] of cases) {
+    const build = finalBuild();
+    build[path] += extra;
+    const { code, stderr } = await runIn("finalize", build);
+    assert(code !== 0 && stderr.includes(expected), `${expected}: ${stderr}`);
+  }
+  const empty = finalBuild();
+  empty["build/3b_tagged_deduped.tsv"] =
+    "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\n";
+  const { code, stderr } = await runIn("finalize", empty);
+  assert(code !== 0 && stderr.includes("expected at least one row"), stderr);
 });
 
 // The repo's data/ as symlinks, with the given data/ and build/ files written

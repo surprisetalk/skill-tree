@@ -20,6 +20,7 @@ import {
   SKILLS_HEADER,
   slugify,
   STOPWORDS,
+  topoOrder,
   WIKI_CAT_RE,
   YEAR_RE,
 } from "./lib.ts";
@@ -1062,13 +1063,32 @@ export function stageFinalize() {
 
   const skillIdSet = new Set<string>(skills.map((s) => s.id));
   const prereqs = new Map<string, string[]>();
-  for (const [s0, p0] of readRows(`${BUILD}/6_edges.tsv`, EDGES_HEADER)) {
+  const edgesPath = `${BUILD}/6_edges.tsv`;
+  readRows(edgesPath, EDGES_HEADER).forEach(([s0, p0], i) => {
     const s = remap(s0), p = remap(p0);
-    if (!skillIdSet.has(s) || !skillIdSet.has(p) || s === p) continue;
+    // postproc wrote these edges from the same skills and aliases.
+    for (const id of [s, p]) {
+      if (!skillIdSet.has(id)) {
+        throw new Error(
+          `${edgesPath}:${i + 2}: expected a skill id, received "${id}". ${
+            rerun(edgesPath)
+          }`,
+        );
+      }
+    }
+    if (s === p) {
+      throw new Error(
+        `${edgesPath}:${
+          i + 2
+        }: expected two skills, received "${s0}" → "${p0}", which aliases to one. ${
+          rerun(edgesPath)
+        }`,
+      );
+    }
     const arr = prereqs.get(s) ?? [];
     if (!arr.includes(p)) arr.push(p);
     prereqs.set(s, arr);
-  }
+  });
 
   // Framework/wiki-category filters (module-scope FRAMEWORK_RE, WIKI_CAT_RE, YEAR_RE)
   const STOP = new Set([...STOPWORDS, "these", "those"]);
@@ -1343,6 +1363,18 @@ export function stageFinalize() {
   if (violations > 0) {
     throw new Error(
       `finalize: expected every prereq to name an emitted skill, received ${violations} that do not (first 5 above). skills.tsv is unchanged. Rerun: deno run -A pipeline.ts postproc`,
+    );
+  }
+  const graph = pending.map((r) => ({
+    id: r.id,
+    prereqs: r.ps ? r.ps.split(",") : [],
+  }));
+  const ordered = topoOrder(graph).length;
+  if (!pending.length || ordered < pending.length) {
+    throw new Error(
+      `finalize: expected a DAG of at least one skill, received ${pending.length} skills of which ${
+        pending.length - ordered
+      } sit on or below a cycle. skills.tsv is unchanged. Rerun: deno run -A pipeline.ts postproc`,
     );
   }
 

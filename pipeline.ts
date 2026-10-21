@@ -14,12 +14,14 @@ import {
   loadTsvCache,
   need,
   readDifficulty,
+  readJson,
   readMoocPairs,
   readPrereqPicks,
   readRows,
   readSeeds,
   rerun,
   SKILLS_HEADER,
+  topoOrder,
   TRANSLATE_CACHE,
 } from "./lib.ts";
 import {
@@ -42,7 +44,7 @@ function grade(value: number, pass: number, fail: number): number {
   const score = (value - fail) / (pass - fail);
   if (pass === fail || !Number.isFinite(score)) {
     throw new Error(
-      `expected a finite measurement between distinct bounds, received value ${value}, pass ${pass}, fail ${fail}. A count the condition divides by is 0.`,
+      `expected a finite measurement between distinct bounds, received value ${value}, pass ${pass}, fail ${fail}. A count the condition divides by is 0: a build file it reads is empty. Rerun the full build: deno run -A pipeline.ts`,
     );
   }
   return Math.max(0, score);
@@ -91,27 +93,6 @@ function readSkillsTsv(): StatusSkill[] {
 const readDifficultyRaw = () =>
   new Map([...readDifficulty()].map(([id, d]) => [id, d.raw]));
 
-// Kahn order, prereqs first. Nodes on a cycle never enter the order.
-function topoOrder(skills: StatusSkill[]): string[] {
-  const ids = new Set(skills.map((s) => s.id));
-  const indeg = new Map<string, number>();
-  const dependents = new Map<string, string[]>();
-  for (const s of skills) {
-    const ps = s.prereqs.filter((p) => p !== s.id && ids.has(p));
-    indeg.set(s.id, ps.length);
-    for (const p of ps) dependents.set(p, [...dependents.get(p) ?? [], s.id]);
-  }
-  const order = [...indeg].filter(([, d]) => d === 0).map(([id]) => id);
-  for (let i = 0; i < order.length; i++) {
-    for (const d of dependents.get(order[i]) ?? []) {
-      const left = indeg.get(d)! - 1;
-      indeg.set(d, left);
-      if (left === 0) order.push(d);
-    }
-  }
-  return order;
-}
-
 const ANOMALOUS_HUB_RE =
   /retell-stories-related-to.*-day|^sced-|language-immersion-prior|understand-object-naming-and-naming-conventions|^(leadership|assisted-reading|corrective-reading|study-hall)$/;
 
@@ -124,7 +105,7 @@ async function stageStatus() {
   const seeds = readSeeds;
   const stat = (key: string): number => {
     const path = `${BUILD}/4_stats.json`;
-    const v = JSON.parse(Deno.readTextFileSync(need(path)))[key];
+    const v = (readJson(need(path)) as Record<string, unknown>)[key];
     if (typeof v !== "number" || !Number.isFinite(v)) {
       throw new Error(
         `${path}: expected "${key}" as a number, received ${

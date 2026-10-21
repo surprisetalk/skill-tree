@@ -15,6 +15,7 @@ import {
   normalize,
   normalizedEmbeddingsForSkills,
   readCsv,
+  readJson,
   readMoocPairs,
   readRows,
   readTagged,
@@ -143,7 +144,7 @@ type Foundations = {
 const FOUNDATIONS_PATH = "data/_foundations.json";
 
 function readFoundations(): Foundations {
-  const f = JSON.parse(Deno.readTextFileSync(FOUNDATIONS_PATH)) as Foundations;
+  const f = readJson(FOUNDATIONS_PATH) as Foundations;
   const bad = (expected: string, received: unknown) =>
     new Error(
       `${FOUNDATIONS_PATH}: expected ${expected}.\n  received: ${
@@ -388,7 +389,8 @@ export function stageList() {
   // Lightcast
   {
     const path = "data/lightcast/skills.json";
-    const j = JSON.parse(Deno.readTextFileSync(path));
+    // deno-lint-ignore no-explicit-any -- checked field by field below
+    const j = readJson(path) as any;
     if (!Array.isArray(j?.data) || !j.data.length) {
       throw new Error(
         `${path}: expected {"data": [skill, …]}, received keys ${
@@ -398,7 +400,13 @@ export function stageList() {
     }
     let n = 0, infilled = 0, placeholdered = 0, certsDropped = 0;
     for (const s of j.data) {
-      if (!s.name) continue;
+      if (typeof s.name !== "string" || !s.name.trim()) {
+        throw new Error(
+          `${path}: expected every skill to have a name, received ${
+            JSON.stringify(s).slice(0, 120)
+          }. Re-download the file.`,
+        );
+      }
       const title = s.name.trim();
       const id = slugify(title);
       const typeName = s.type?.name ?? "";
@@ -562,8 +570,17 @@ export function stageList() {
       frameDropped = 0;
     for (const e of Deno.readDirSync("data/opensalt")) {
       if (!e.name.endsWith(".json") || e.name === "index.json") continue;
-      const j = JSON.parse(Deno.readTextFileSync(`data/opensalt/${e.name}`));
-      const items = j.CFItems || [];
+      const path = `data/opensalt/${e.name}`;
+      // deno-lint-ignore no-explicit-any -- CASE items, read field by field
+      const j = readJson(path) as any;
+      if (!Array.isArray(j?.CFItems) || !j.CFItems.length) {
+        throw new Error(
+          `${path}: expected a CASE package with CFItems, received keys ${
+            JSON.stringify(Object.keys(j ?? {}))
+          }. Re-download it: deno run -A data/download.ts`,
+        );
+      }
+      const items = j.CFItems;
       const docSlug = slugify(j.CFDocument?.title || "opensalt");
       if (FRAMEWORK_BLOCKLIST.has(docSlug)) {
         frameDropped += items.length;
@@ -1059,6 +1076,15 @@ async function buildTree(
   const BADCAT =
     /^(Wikipedia|Lists of|List of|Categories |Redirects|Articles |Stubs|Templates|Commons|Set indices)/i;
   const unquote = (s: string) => s.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  const dump = cmd[cmd.length - 1];
+  try {
+    Deno.statSync(dump);
+  } catch (e) {
+    if (!(e instanceof Deno.errors.NotFound)) throw e;
+    throw new Error(
+      `${dump}: expected a SKOS dump, received no file. Download it from the source listed in claude.md.`,
+    );
+  }
   const p = new Deno.Command(cmd[0], {
     args: cmd.slice(1),
     stdout: "piped",
@@ -1386,7 +1412,7 @@ export async function stageSeedEdges() {
           originNodeURI?: { identifier?: string; title?: string };
           destinationNodeURI?: { identifier?: string; title?: string };
         }[];
-      } = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`));
+      } = readJson(`data/opensalt/${f.name}`);
       const itemMap = new Map<string, { code: string; statement: string }>();
       for (const it of doc.CFItems || []) {
         itemMap.set(it.identifier, {
@@ -1449,7 +1475,7 @@ export async function stageSeedEdges() {
           fullStatement?: string;
           educationLevel?: string[];
         }[];
-      } = JSON.parse(Deno.readTextFileSync(`data/opensalt/${f.name}`));
+      } = readJson(`data/opensalt/${f.name}`);
       type Node = { label: string; grade: number; code: string };
       const nodes: Node[] = [];
       for (const it of doc.CFItems || []) {

@@ -407,18 +407,14 @@ export async function resumableOllama<T extends { id: string }>(
 
 // Stage dedupe can merge a canonical id again, so aliases form chains.
 export function loadAliasesCollapsed(): Map<string, string> {
-  const raw = new Map<string, string>();
   const path = `${BUILD}/3b_aliases.tsv`;
-  const aLines = Deno.readTextFileSync(need(path)).split("\n").filter((l) =>
-    l.length
-  );
-  for (let i = 1; i < aLines.length; i++) {
-    const [d, c, extra] = aLines[i].split("\t");
-    if (!d || !c || extra !== undefined) {
+  const raw = new Map<string, string>();
+  for (const [d, c] of uniqueIds(path, readRows(path, ALIAS_HEADER))) {
+    if (d === c) {
       throw new Error(
-        `${path}:${i + 1}: expected "dropped_id<TAB>canonical_id", received "${
-          aLines[i]
-        }". Run: deno run -A pipeline.ts dedupe`,
+        `${path}: expected an alias to name another id, received "${d}" → itself. ${
+          rerun(path)
+        }`,
       );
     }
     raw.set(d, c);
@@ -427,9 +423,14 @@ export function loadAliasesCollapsed(): Map<string, string> {
   for (const [d] of raw) {
     let cur = d;
     const seen = new Set<string>([cur]);
-    for (let hops = 0; hops < 64; hops++) {
-      const next = raw.get(cur);
-      if (!next || seen.has(next)) break;
+    for (let next = raw.get(cur); next !== undefined; next = raw.get(cur)) {
+      if (seen.has(next) || seen.size > 64) {
+        throw new Error(
+          `${path}: expected alias chains to end, received a ${
+            seen.has(next) ? "cycle" : "chain over 64 hops"
+          } from "${d}" through "${next}". ${rerun(path)}`,
+        );
+      }
       seen.add(next);
       cur = next;
     }
@@ -664,6 +665,43 @@ export async function readMoocPairs(): Promise<MoocPair[]> {
   return pairs;
 }
 
+// Unchecked: each caller validates the fields it reads.
+export function readJson<T = unknown>(path: string): T {
+  const text = Deno.readTextFileSync(path);
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(
+      `${path}: expected JSON, received ${(e as Error).message}. ${
+        path.startsWith(`${BUILD}/`) ? rerun(path) : "Re-download the file."
+      }`,
+    );
+  }
+}
+
+// Kahn order, prereqs first. Nodes on a cycle never enter the order.
+export function topoOrder(
+  skills: { id: string; prereqs: string[] }[],
+): string[] {
+  const ids = new Set(skills.map((s) => s.id));
+  const indeg = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
+  for (const s of skills) {
+    const ps = s.prereqs.filter((p) => p !== s.id && ids.has(p));
+    indeg.set(s.id, ps.length);
+    for (const p of ps) dependents.set(p, [...dependents.get(p) ?? [], s.id]);
+  }
+  const order = [...indeg].filter(([, d]) => d === 0).map(([id]) => id);
+  for (let i = 0; i < order.length; i++) {
+    for (const d of dependents.get(order[i]) ?? []) {
+      const left = indeg.get(d)! - 1;
+      indeg.set(d, left);
+      if (left === 0) order.push(d);
+    }
+  }
+  return order;
+}
+
 // ---------- build tables ----------
 
 export const LIST_HEADER = "id\ttitle\tdescription\tsources\ttags";
@@ -681,8 +719,10 @@ export function readRows(path: string, header: string): string[][] {
   );
   if (lines[0] !== header) {
     throw new Error(
-      `${path}: unexpected header.\n  expected: ${header}\n  received: ${
-        lines[0]
+      `${path}: unexpected header.\n  expected: ${
+        JSON.stringify(header)
+      }\n  received: ${
+        lines[0] === undefined ? "an empty file" : JSON.stringify(lines[0])
       }\n  ${rerun(path)}`,
     );
   }
@@ -700,6 +740,36 @@ export function readRows(path: string, header: string): string[][] {
   });
 }
 
+export const ALIAS_HEADER = "dropped_id\tcanonical_id";
+
+// A skill table with no rows means its stage failed upstream.
+function nonEmpty(path: string, rows: string[][]): string[][] {
+  if (!rows.length) {
+    throw new Error(
+      `${path}: expected at least one row after the header, received none. ${
+        rerun(path)
+      }`,
+    );
+  }
+  return rows;
+}
+
+// The rows, after a check that the first column is unique and present.
+export function uniqueIds(path: string, rows: string[][]): string[][] {
+  const seen = new Set<string>();
+  rows.forEach((c, i) => {
+    if (!c[0] || seen.has(c[0])) {
+      throw new Error(
+        `${path}:${i + 2}: expected unique ids, received a second "${c[0]}". ${
+          rerun(path)
+        }`,
+      );
+    }
+    seen.add(c[0]);
+  });
+  return rows;
+}
+
 export type Tagged = {
   id: string;
   title: string;
@@ -711,7 +781,7 @@ export type Tagged = {
 };
 
 export function readTagged(path = TAGGED): Tagged[] {
-  return readRows(path, TAGGED_HEADER).map((
+  return nonEmpty(path, uniqueIds(path, readRows(path, TAGGED_HEADER))).map((
     [id, title, description, sources, tags, occupations, topics],
   ) => ({ id, title, description, sources, tags, occupations, topics }));
 }
@@ -719,44 +789,65 @@ export function readTagged(path = TAGGED): Tagged[] {
 export function readDifficulty(): Map<string, { band: number; raw: number }> {
   const path = `${BUILD}/4_difficulty.tsv`;
   return new Map(
-    readRows(path, DIFFICULTY_HEADER).map((c, i) => {
-      const band = Number(c[1]), raw = Number(c[2]);
-      if (!/^\d+$/.test(c[1]) || band < 1 || band > 20) {
-        throw new Error(
-          `${path}:${
-            i + 2
-          }: expected difficulty as an integer 1–20, received "${c[1]}". ${
-            rerun(path)
-          }`,
-        );
-      }
-      if (c[2] === "" || !Number.isFinite(raw)) {
-        throw new Error(
-          `${path}:${i + 2}: expected a finite difficulty_raw, received "${
-            c[2]
-          }". ${rerun(path)}`,
-        );
-      }
-      return [c[0], { band, raw }];
-    }),
+    nonEmpty(path, uniqueIds(path, readRows(path, DIFFICULTY_HEADER))).map(
+      (c, i) => {
+        const band = Number(c[1]), raw = Number(c[2]);
+        if (!/^\d+$/.test(c[1]) || band < 1 || band > 20) {
+          throw new Error(
+            `${path}:${
+              i + 2
+            }: expected difficulty as an integer 1–20, received "${c[1]}". ${
+              rerun(path)
+            }`,
+          );
+        }
+        if (c[2] === "" || !Number.isFinite(raw)) {
+          throw new Error(
+            `${path}:${i + 2}: expected a finite difficulty_raw, received "${
+              c[2]
+            }". ${rerun(path)}`,
+          );
+        }
+        return [c[0], { band, raw }];
+      },
+    ),
   );
 }
 
 // 5_prereqs.tsv has no header: `skill\tp1,p2` or `skill\tnone`.
 export function readPrereqPicks(): { skill: string; picks: string[] }[] {
-  return Deno.readTextFileSync(need(PREREQ_CACHE)).split("\n").filter((l) =>
-    l.length
-  ).map((l, i) => {
+  const text = Deno.readTextFileSync(need(PREREQ_CACHE));
+  if (!text.endsWith("\n")) {
+    throw new Error(
+      `${PREREQ_CACHE}: expected rows that end in a newline, received ${
+        text
+          ? `a torn last row "${text.slice(text.lastIndexOf("\n") + 1)}"`
+          : "an empty file"
+      }. Delete the torn row. ${rerun(PREREQ_CACHE)}`,
+    );
+  }
+  const seen = new Set<string>();
+  return text.split("\n").filter((l) => l.length).map((l, i) => {
     const c = l.split("\t");
-    if (c.length !== 2 || !c[0] || !c[1]) {
+    if (c.length !== 2 || !c[0] || !c[1] || l.includes("\r")) {
       throw new Error(
         `${PREREQ_CACHE}:${
           i + 1
-        }: expected "skill<TAB>p1,p2" or "skill<TAB>none", received "${l}". ${
-          rerun(PREREQ_CACHE)
-        }`,
+        }: expected "skill<TAB>p1,p2" or "skill<TAB>none", received ${
+          JSON.stringify(l)
+        }. ${rerun(PREREQ_CACHE)}`,
       );
     }
+    if (seen.has(c[0])) {
+      throw new Error(
+        `${PREREQ_CACHE}:${
+          i + 1
+        }: expected one row per skill, received a second "${
+          c[0]
+        }". Delete one of the two rows.`,
+      );
+    }
+    seen.add(c[0]);
     return { skill: c[0], picks: c[1] === "none" ? [] : c[1].split(",") };
   });
 }
@@ -764,11 +855,20 @@ export function readPrereqPicks(): { skill: string; picks: string[] }[] {
 // Expert seed edges outside the holdout, with dedupe aliases applied.
 export function readSeeds(): { pre: string; dep: string }[] {
   const alias = loadAliasesCollapsed();
-  return readRows(`${BUILD}/1e_seed_edges.tsv`, SEED_HEADER)
-    .filter((c) => c[4] === "0").map((c) => ({
-      pre: alias.get(c[0]) ?? c[0],
-      dep: alias.get(c[1]) ?? c[1],
-    }));
+  const path = `${BUILD}/1e_seed_edges.tsv`;
+  return readRows(path, SEED_HEADER).filter((c, i) => {
+    if (c[4] !== "0" && c[4] !== "1") {
+      throw new Error(
+        `${path}:${i + 2}: expected holdout 0 or 1, received "${c[4]}". ${
+          rerun(path)
+        }`,
+      );
+    }
+    return c[4] === "0";
+  }).map((c) => ({
+    pre: alias.get(c[0]) ?? c[0],
+    dep: alias.get(c[1]) ?? c[1],
+  }));
 }
 
 // A stage-trees file: slug → ancestor slugs, nearest first.
