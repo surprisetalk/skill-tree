@@ -496,11 +496,18 @@ export function stagePostproc() {
 
   // Both tables name skills from before dedupe, so an alias maps them in.
   const alias = loadAliasesCollapsed();
+  // Stage prereq resumes from its cache, so a rerun keeps a stale row.
+  const fix = (path: string) =>
+    path === PREREQS.path
+      ? `Delete the rows of ${path} that name ids outside ${TAGGED_DEDUPED.path}, then ${
+        rerun(path).replace("Run", "run")
+      }`
+      : rerun(path);
   const inSkills = (id: string, path: string, line: number) => {
     if (!skill.has(alias.get(id) ?? id)) {
       throw new Error(
-        `${path}:${line}: expected a skill id, received "${id}". ${
-          rerun(path)
+        `${path}:${line}: expected a skill id from ${TAGGED_DEDUPED.path}, received "${id}". ${
+          fix(path)
         }`,
       );
     }

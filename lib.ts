@@ -785,11 +785,6 @@ const SLUG: Cell<string> = {
   parse: (s) =>
     s.length <= 80 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s) ? s : undefined,
 };
-// A stale cache holds ids from an older slugify (length cap, edge hyphens), so only the alphabet is checked.
-const STALE_SLUG: Cell<string> = {
-  as: "a slug (lowercase letters, digits and hyphens)",
-  parse: (s) => /^[a-z0-9-]+$/.test(s) ? s : undefined,
-};
 const text: Cell<string> = { as: "text", parse: (s) => s };
 const filled: Cell<string> = {
   as: "non-empty text",
@@ -814,9 +809,9 @@ const grade: Cell<number | null> = {
   as: "an integer or empty",
   parse: (s) => s === "" ? null : /^-?\d+$/.test(s) ? Number(s) : undefined,
 };
-const slugs = (s: string, cell = SLUG): string[] | undefined => {
+const slugs = (s: string): string[] | undefined => {
   const ids = s.split(",");
-  return ids.every((i) => cell.parse(i) !== undefined) ? ids : undefined;
+  return ids.every((i) => SLUG.parse(i) !== undefined) ? ids : undefined;
 };
 const slugList: Cell<string[]> = {
   as: "slugs joined by commas, or empty",
@@ -824,7 +819,7 @@ const slugList: Cell<string[]> = {
 };
 const picks: Cell<string[]> = {
   as: '"none" or slugs joined by commas',
-  parse: (s) => s === "none" ? [] : slugs(s, STALE_SLUG),
+  parse: (s) => s === "none" ? [] : slugs(s),
 };
 
 type Columns = Record<string, Cell<unknown>>;
@@ -922,7 +917,7 @@ export const PREREQS = table({
   path: PREREQ_CACHE,
   key: "skill",
   headerless: true,
-  columns: { skill: STALE_SLUG, picks },
+  columns: { skill: SLUG, picks },
 });
 export const SKILLS_OUT = table({
   path: "skills.tsv",

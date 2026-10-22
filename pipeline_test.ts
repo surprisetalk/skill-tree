@@ -342,27 +342,6 @@ Deno.test("status: a malformed build file crashes with the condition and the fix
   }));
 });
 
-Deno.test("status: a stale id in 5_prereqs.tsv scores below 1 and still reports", async () => {
-  const ids = ["counting-" + "x".repeat(80), "counting-"];
-  await Promise.all(ids.map(async (id) => {
-    const build = goodBuild();
-    build["build/5_prereqs.tsv"] = `addition\t${id}\n`;
-    const { code, stderr, score } = await runIn("status", build);
-    assertEquals(code, 1, id);
-    assert(!stderr.includes("Uncaught"), stderr);
-    assertEquals(
-      score(
-        "Every 5_prereqs.tsv row names only skills from the current difficulty stage.",
-      ),
-      0,
-    );
-    assertEquals(
-      score("Under 8% of LLM prereq picks sit above their skill's difficulty."),
-      0,
-    );
-  }));
-});
-
 Deno.test("list: a malformed data/_foundations.json stops the stage", async () => {
   const good = JSON.parse(Deno.readTextFileSync("data/_foundations.json"));
   const cases: [string, (f: typeof good) => void, string][] = [
@@ -597,7 +576,7 @@ Deno.test("build tables: a bad cell stops the reading stage with a message that 
         "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\tghost\n",
         "build/1e_seed_edges.tsv": seedHeader,
       }),
-      'build/5_prereqs.tsv:2: expected a skill id, received "ghost". Run: deno run -A pipeline.ts prereq',
+      'build/5_prereqs.tsv:2: expected a skill id from build/3b_tagged_deduped.tsv, received "ghost". Delete the rows of build/5_prereqs.tsv that name ids outside build/3b_tagged_deduped.tsv, then run: deno run -A pipeline.ts prereq',
     ],
     [
       "postproc",
@@ -607,7 +586,7 @@ Deno.test("build tables: a bad cell stops the reading stage with a message that 
         "build/1e_seed_edges.tsv": seedHeader +
           "counting\taddition\tkhan\t1.00\t0\t0\nghost\taddition\tkhan\t1.00\t1\t0\n",
       }),
-      'build/1e_seed_edges.tsv:3: expected a skill id, received "ghost". Run: deno run -A pipeline.ts seed-edges',
+      'build/1e_seed_edges.tsv:3: expected a skill id from build/3b_tagged_deduped.tsv, received "ghost". Run: deno run -A pipeline.ts seed-edges',
     ],
     [
       "finalize",
