@@ -40,10 +40,12 @@ const FOLD: Record<string, string> = {
   þ: "th",
 };
 
+const FOLD_RE = new RegExp(`[${Object.keys(FOLD).join("")}]`, "g");
+
 export const slugify = (s: string) => {
   const base = decodeEntities(s).normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "").toLowerCase()
-    .replace(/[ßøłđıæœðþ]/g, (c) => FOLD[c])
+    .replace(FOLD_RE, (c) => FOLD[c])
     .replace(/[^a-z0-9\s-]/g, " ")
     .trim()
     .replace(/\s+/g, "-")
