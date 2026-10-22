@@ -119,20 +119,17 @@ async function stageStatus() {
     }],
     ["Under 8% of LLM prereq picks sit above their skill's difficulty.", () => {
       const raw = readDifficultyRaw();
-      let picks = 0, reversed = 0, stale = 0;
+      let picks = 0, reversed = 0;
       for (const { skill, picks: ps } of readTable(PREREQS)) {
         for (const p of ps) {
           const rs = raw.get(skill), rp = raw.get(p);
           // Stale ids score in the next condition.
-          if (rs === undefined || rp === undefined) {
-            stale++;
-            continue;
-          }
+          if (rs === undefined || rp === undefined) continue;
           picks++;
           if (rp >= rs) reversed++;
         }
       }
-      if (!picks && stale) return 1;
+      if (!picks) return 0;
       return grade(reversed / picks, 0.08, 1);
     }],
     [

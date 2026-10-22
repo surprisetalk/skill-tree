@@ -791,10 +791,10 @@ const SLUG: Cell<string> = {
   parse: (s) =>
     s.length <= 80 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s) ? s : undefined,
 };
-// A stale cache holds ids from an older length cap, so shape is all it checks.
+// A stale cache holds ids from an older slugify (length cap, edge hyphens), so only the alphabet is checked.
 const STALE_SLUG: Cell<string> = {
-  as: "a slug (lowercase letters and digits joined by single hyphens)",
-  parse: (s) => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s) ? s : undefined,
+  as: "a slug (lowercase letters, digits and hyphens)",
+  parse: (s) => /^[a-z0-9-]+$/.test(s) ? s : undefined,
 };
 const text: Cell<string> = { as: "text", parse: (s) => s };
 const filled: Cell<string> = { as: "text", parse: (s) => s || undefined };
