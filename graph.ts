@@ -1400,39 +1400,43 @@ export function stageDifficulty() {
   }
 
   const SMOOTH_W = 0.3;
-  const smoothed = new Float32Array(out);
-  if (SMOOTH_W > 0) {
-    const topicSum = new Map<string, { sum: number; n: number }>();
-    for (let i = 0; i < skills.length; i++) {
-      for (const t of skills[i].topics.split(",")) {
-        if (!t) continue;
-        const e = topicSum.get(t) ?? { sum: 0, n: 0 };
-        e.sum += out[i];
-        e.n++;
-        topicSum.set(t, e);
+  const smoothJitter = (out: Float32Array) => {
+    const smoothed = new Float32Array(out);
+    if (SMOOTH_W > 0) {
+      const topicSum = new Map<string, { sum: number; n: number }>();
+      for (let i = 0; i < skills.length; i++) {
+        for (const t of skills[i].topics.split(",")) {
+          if (!t) continue;
+          const e = topicSum.get(t) ?? { sum: 0, n: 0 };
+          e.sum += out[i];
+          e.n++;
+          topicSum.set(t, e);
+        }
+      }
+      for (let i = 0; i < skills.length; i++) {
+        let sum = 0, n = 0;
+        for (const t of skills[i].topics.split(",")) {
+          if (!t) continue;
+          const e = topicSum.get(t);
+          if (!e || e.n < 3) continue;
+          sum += (e.sum - out[i]) / (e.n - 1);
+          n++;
+        }
+        if (n > 0) smoothed[i] = (1 - SMOOTH_W) * out[i] + SMOOTH_W * (sum / n);
       }
     }
-    for (let i = 0; i < skills.length; i++) {
-      let sum = 0, n = 0;
-      for (const t of skills[i].topics.split(",")) {
-        if (!t) continue;
-        const e = topicSum.get(t);
-        if (!e || e.n < 3) continue;
-        sum += (e.sum - out[i]) / (e.n - 1);
-        n++;
-      }
-      if (n > 0) smoothed[i] = (1 - SMOOTH_W) * out[i] + SMOOTH_W * (sum / n);
-    }
-  }
 
-  const jittered = new Float32Array(skills.length);
-  for (let i = 0; i < skills.length; i++) {
-    let h = 0;
-    for (let k = 0; k < skills[i].id.length; k++) {
-      h = ((h * 31) + skills[i].id.charCodeAt(k)) | 0;
+    const jittered = new Float32Array(skills.length);
+    for (let i = 0; i < skills.length; i++) {
+      let h = 0;
+      for (let k = 0; k < skills[i].id.length; k++) {
+        h = ((h * 31) + skills[i].id.charCodeAt(k)) | 0;
+      }
+      jittered[i] = smoothed[i] + (((h >>> 0) % 1000) / 1000 - 0.5) * 0.001;
     }
-    jittered[i] = smoothed[i] + (((h >>> 0) % 1000) / 1000 - 0.5) * 0.001;
-  }
+    return { smoothed, jittered };
+  };
+  const { smoothed, jittered } = smoothJitter(out);
 
   // Isotonic PAV
   const pairs: [number, number][] = [];
@@ -1507,10 +1511,19 @@ export function stageDifficulty() {
       console.log(
         `[difficulty] seed-anchored ${seedAnchorAdjusted} prereqs below their dependents`,
       );
-      // Re-run calibration on adjusted raws
+      const { smoothed, jittered } = smoothJitter(out);
       for (let i = 0; i < skills.length; i++) {
-        const c = calibrate(out[i] + (jittered[i] - out[i])); // preserve jitter
-        if (Number.isFinite(c)) calibrated[i] = c;
+        const c = calibrate(jittered[i]);
+        if (!Number.isFinite(c)) {
+          throw new Error(
+            `[difficulty] non-finite calibrated value for ${
+              skills[i].id
+            } after seed anchoring (raw=${out[i]}, smoothed=${
+              smoothed[i]
+            }, jittered=${jittered[i]})`,
+          );
+        }
+        calibrated[i] = c;
       }
     }
   }

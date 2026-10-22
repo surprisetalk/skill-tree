@@ -495,7 +495,7 @@ const difficultyBuild = (): Fixture => {
   };
 };
 
-Deno.test("difficulty: a DWA title anchors its skill", async () => {
+Deno.test("difficulty: a DWA title anchors its skill, and a seed prereq sits in a lower band", async () => {
   const { code, stderr, files } = await runIn("difficulty", difficultyBuild(), [
     "build/4_difficulty.tsv",
     "build/4_stats.json",
@@ -506,5 +506,15 @@ Deno.test("difficulty: a DWA title anchors its skill", async () => {
     JSON.parse(files["build/4_stats.json"]).anchors.zone,
     2,
     "the DWA title skill has no job-zone anchor",
+  );
+  const band = new Map(
+    files["build/4_difficulty.tsv"].split("\n").slice(1).filter((l) => l)
+      .map((l) => l.split("\t")).map((c) => [c[0], Number(c[1])]),
+  );
+  assert(
+    band.get("pre")! < band.get("dep")!,
+    `seed prereq band ${band.get("pre")} is not below dependent band ${
+      band.get("dep")
+    }`,
   );
 });
