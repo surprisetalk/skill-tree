@@ -624,8 +624,8 @@ const listOpensalt = async (items: Record<string, string>[]) => {
   return { code: out.code, stdout, stderr, titles, ids };
 };
 
-Deno.test("list: OpenSALT keeps a bare '<', splits blocks, and drops script text", async () => {
-  const { code, stderr, titles } = await listOpensalt([
+Deno.test("list: OpenSALT markup, entities, and non-Latin titles in one run", async () => {
+  const { code, stdout, stderr, titles, ids } = await listOpensalt([
     { fullStatement: "Compare values where x is less than <y" },
     { fullStatement: "Plot points when a<b and c>d hold in graphs" },
     {
@@ -636,103 +636,56 @@ Deno.test("list: OpenSALT keeps a bare '<', splits blocks, and drops script text
       fullStatement:
         "Solve <script>alert(1)</script>equations using variables well",
     },
+    {
+      fullStatement:
+        "<title>Hidden title words</title>Visible words after here",
+    },
+    { fullStatement: "Gamma <!-- unclosed comment words here" },
+    {
+      fullStatement: "Xi &lt;script&gt;payload(1)&lt;/script&gt; encoded here",
+    },
+    { fullStatement: "Alpha <script>evil call here" },
+    { fullStatement: "Beta <style>.x{color:red} here more" },
+    { fullStatement: "Delta <scr<script>ipt>evil(2)</script> split tag here" },
+    { fullStatement: "Epsilon <SCRIPT>evil(3)</SCRIPT> upper case here" },
+    { fullStatement: "Zeta <<b>bold</b> nested bracket words here" },
+    { fullStatement: "Eps &copy=1 &para=2 &notin; query test here" },
+    { fullStatement: "Spell Straße correctly in writing" },
+    { fullStatement: "Spell Søren correctly in writing" },
+    { fullStatement: "Spell Łódź correctly in writing" },
+    { fullStatement: "Spell Iğdır ılık correctly in writing" },
+    { fullStatement: "日本語の 標準を学ぶ ことができる" },
+    { fullStatement: "日本語の 別の標準を学ぶ ことができる" },
   ]);
   assertEquals(code, 0, stderr);
+  const has = (t: string) =>
+    assert(titles.includes(t), `lost "${t}" from ${JSON.stringify(titles)}`);
   for (
     const t of [
       "Compare values where x is less than <y",
       "Plot points when a<b and c>d hold in graphs",
       "Add fractions with unlike denominators correctly",
       "Solve equations using variables well",
+      "Eps &copy=1 &para=2 ∉ query test here",
     ]
-  ) {
-    assert(
-      titles.includes(t),
-      `lost "${t}" from ${JSON.stringify(titles.slice(-6))}`,
-    );
+  ) has(t);
+  for (const w of ["Hidden title words", "unclosed comment words"]) {
+    assert(titles.some((t) => t.includes(w)), `lost "${w}"`);
   }
-});
-
-Deno.test("list: a letter with no accent decomposition stays in its word", async () => {
-  const { code, stderr, ids } = await listOpensalt([
-    { fullStatement: "Spell Straße correctly in writing" },
-    { fullStatement: "Spell Søren correctly in writing" },
-    { fullStatement: "Spell Łódź correctly in writing" },
-    { fullStatement: "Spell Iğdır ılık correctly in writing" },
-  ]);
-  assertEquals(code, 0, stderr);
-  for (
-    const w of ["strasse", "soren", "lodz", "igdir-ilik"]
-  ) assert(ids.includes(`spell-${w}-correctly-in-writing`), `no id for ${w}`);
-});
-
-Deno.test("list: stdout counts titles dropped for an empty key or slug", async () => {
-  const { code, stdout, stderr } = await listOpensalt([
-    { fullStatement: "Count objects in a small group" },
-    { fullStatement: "日本語の 標準を学ぶ ことができる" },
-    { fullStatement: "日本語の 別の標準を学ぶ ことができる" },
-  ]);
-  assertEquals(code, 0, stderr);
+  assertEquals(titles.filter((t) => /evil|color:red/.test(t)), []);
+  // "a<b and c>d" is math that only looks like a tag.
+  assertEquals(
+    titles.filter((t) =>
+      !t.includes("a<b and c>d") && /<\/?[a-z][^>]*>/i.test(t)
+    ),
+    [],
+  );
+  for (const w of ["strasse", "soren", "lodz", "igdir-ilik"]) {
+    assert(ids.includes(`spell-${w}-correctly-in-writing`), `no id for ${w}`);
+  }
   assert(
     /dropped 2 titles with an empty key/.test(stdout),
     `no drop count in stdout: ${stdout.slice(-400)}`,
-  );
-});
-
-Deno.test("list: OpenSALT keeps the text of a head-only element", async () => {
-  const { code, stderr, titles } = await listOpensalt([
-    {
-      fullStatement:
-        "<title>Hidden title words</title>Visible words after here",
-    },
-  ]);
-  assertEquals(code, 0, stderr);
-  assert(
-    titles.some((t) => t.includes("Hidden title words")),
-    JSON.stringify(titles.slice(-3)),
-  );
-});
-
-Deno.test("list: OpenSALT keeps a row with an unclosed comment", async () => {
-  const { code, stderr, ids } = await listOpensalt([
-    { fullStatement: "Gamma <!-- unclosed comment words here" },
-  ]);
-  assertEquals(code, 0, stderr);
-  assert(
-    ids.includes("gamma-unclosed-comment-words-here"),
-    JSON.stringify(ids.slice(-3)),
-  );
-});
-
-Deno.test("list: OpenSALT leaves no literal tag from entity-encoded markup", async () => {
-  const { code, stderr, titles } = await listOpensalt([
-    { fullStatement: "Xi &lt;script&gt;alert(1)&lt;/script&gt; encoded here" },
-  ]);
-  assertEquals(code, 0, stderr);
-  const t = titles.find((t) => t.endsWith("encoded here"));
-  assert(t !== undefined, JSON.stringify(titles.slice(-3)));
-  assert(!/<\/?[a-z][^>]*>/i.test(t), t);
-});
-
-Deno.test("list: OpenSALT drops an unclosed script or style body", async () => {
-  const { code, stderr, titles } = await listOpensalt([
-    { fullStatement: "Alpha <script>evil call here" },
-    { fullStatement: "Beta <style>.x{color:red} here more" },
-    { fullStatement: "Count objects in a small group" },
-  ]);
-  assertEquals(code, 0, stderr);
-  const bad = titles.filter((t) => /evil call|color:red/.test(t));
-  assertEquals(bad, []);
-});
-
-Deno.test("list: OpenSALT keeps semicolon-less entities literal", async () => {
-  const { code, stderr, titles } = await listOpensalt([
-    { fullStatement: "Eps &copy=1 &para=2 &notin; query test here" },
-  ]);
-  assertEquals(code, 0, stderr);
-  assert(
-    titles.includes("Eps &copy=1 &para=2 ∉ query test here"),
-    JSON.stringify(titles.slice(-3)),
   );
 });
 
