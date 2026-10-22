@@ -91,6 +91,12 @@ const stripStudentPrefix = (s: string): string => {
   return t[0].toUpperCase() + t.slice(1);
 };
 
+// Deno.readDirSync order is the filesystem's; sort so builds match across hosts.
+const readDirSorted = (path: string): Deno.DirEntry[] =>
+  [...Deno.readDirSync(path)].sort((a, b) =>
+    a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+  );
+
 function pct(arr: number[], p: number): number {
   if (!arr.length) return 0;
   const s = [...arr].sort((a, b) => a - b);
@@ -571,7 +577,7 @@ export function stageList() {
       stuPrefix = 0,
       pureVerb = 0,
       frameDropped = 0;
-    for (const e of Deno.readDirSync("data/opensalt")) {
+    for (const e of readDirSorted("data/opensalt")) {
       if (!e.name.endsWith(".json") || e.name === "index.json") continue;
       const path = `data/opensalt/${e.name}`;
       // deno-lint-ignore no-explicit-any -- CASE items, read field by field
@@ -1338,7 +1344,7 @@ export async function stageSeedEdges() {
     const CONCEPTS = "data/metacademy/metacademy-content/concepts";
     const titleByDir = new Map<string, string>();
     const dirs: string[] = [];
-    for (const f of Deno.readDirSync(CONCEPTS)) {
+    for (const f of readDirSorted(CONCEPTS)) {
       if (!f.isDirectory || f.name === "ANNOTATED_EXAMPLE") continue;
       dirs.push(f.name);
       titleByDir.set(
@@ -1403,7 +1409,7 @@ export async function stageSeedEdges() {
 
   // OpenSALT precedes
   {
-    for (const f of Deno.readDirSync("data/opensalt")) {
+    for (const f of readDirSorted("data/opensalt")) {
       if (!f.name.endsWith(".json") || f.name === "index.json") continue;
       const doc: {
         CFItems?: {
@@ -1470,7 +1476,9 @@ export async function stageSeedEdges() {
         ),
       );
     let emitted = 0;
-    outer: for (const f of Deno.readDirSync("data/opensalt")) {
+    let capDroppedPairs = 0;
+    const capDroppedFrameworks = new Set<string>();
+    for (const f of readDirSorted("data/opensalt")) {
       if (!f.name.endsWith(".json") || f.name === "index.json") continue;
       const doc: {
         CFItems?: {
@@ -1525,6 +1533,11 @@ export async function stageSeedEdges() {
           const k = `${ai.grade}->${aj.grade}`;
           const c = perGradePair.get(k) ?? 0;
           if (c >= PAIR_CAP) continue;
+          if (emitted > 50000) {
+            capDroppedPairs++;
+            capDroppedFrameworks.add(f.name);
+            continue;
+          }
           perGradePair.set(k, c + 1);
           addRaw(
             ai.label,
@@ -1533,11 +1546,15 @@ export async function stageSeedEdges() {
             `${ai.code || "c"}_g${ai.grade}->${aj.code || "c"}_g${aj.grade}`,
           );
           emitted++;
-          if (emitted > 50000) break outer;
         }
       }
     }
     console.log(`[seed-edges] opensalt_grade: ${emitted} pairs`);
+    if (capDroppedPairs) {
+      console.log(
+        `[seed-edges] opensalt_grade: 50000 cap dropped ${capDroppedPairs} pairs in ${capDroppedFrameworks.size} frameworks`,
+      );
+    }
   }
 
   // Foundation wiring: each hub becomes a prereq of its variants (add-within-5).
