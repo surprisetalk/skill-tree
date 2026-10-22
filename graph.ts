@@ -1526,13 +1526,10 @@ export function stageDifficulty() {
     stronglyConnected(adj).forEach((comp, c) =>
       comp.forEach((n) => cycleOf.set(n, c))
     );
-    seedCyclePairs =
-      allSeeds.filter(([si, di]) =>
-        cycleOf.has(si) && cycleOf.get(si) === cycleOf.get(di)
-      ).length;
     const acyclic = allSeeds.filter(([si, di]) =>
-      !(cycleOf.has(si) && cycleOf.get(si) === cycleOf.get(di))
+      !cycleOf.has(si) || cycleOf.get(si) !== cycleOf.get(di)
     );
+    seedCyclePairs = seedTotal - acyclic.length;
     // A seed moves only the side with no grade anchor, by 1.0 per link. A path
     // from an anchored skill through unanchored skills to a lower anchored
     // skill cannot hold. lo[v] and hi[v] bound v by its anchored neighbors.
