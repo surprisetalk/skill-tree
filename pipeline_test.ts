@@ -616,11 +616,21 @@ Deno.test("difficulty: a seed self-loop or unknown id stops the stage", async ()
 
 Deno.test("difficulty: a seed cycle is skipped and counted, and a seed never moves an anchored skill", async () => {
   const outs = ["build/4_difficulty.tsv", "build/4_stats.json"];
-  const [cycle, conflict, none] = await Promise.all([
+  const [cycle, conflict, none, chain] = await Promise.all([
     runIn("difficulty", withSeeds([["a", "b"], ["b", "a"]]), outs),
     runIn("difficulty", withSeeds([["grade-high", "grade-low"]]), outs),
     runIn("difficulty", withSeeds([]), outs),
+    runIn(
+      "difficulty",
+      withSeeds([["grade-high", "a"], ["a", "grade-low"]]),
+      outs,
+    ),
   ]);
+  assertEquals(chain.code, 0, chain.stderr);
+  assertEquals(
+    JSON.parse(chain.files["build/4_stats.json"]).seed_anchor_conflicts,
+    2,
+  );
   assertEquals(cycle.code, 0, cycle.stderr);
   const stats = (r: typeof cycle) => JSON.parse(r.files["build/4_stats.json"]);
   assertEquals(stats(cycle).seed_cycle_pairs, 2);

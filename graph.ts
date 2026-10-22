@@ -1525,15 +1525,41 @@ export function stageDifficulty() {
       allSeeds.filter(([si, di]) =>
         cycleOf.has(si) && cycleOf.get(si) === cycleOf.get(di)
       ).length;
-    const seeds = allSeeds.filter(([si, di]) =>
+    const acyclic = allSeeds.filter(([si, di]) =>
       !(cycleOf.has(si) && cycleOf.get(si) === cycleOf.get(di))
     );
-    // A seed moves only the side with no grade anchor.
-    seedAnchorConflicts =
-      seeds.filter(([si, di]) =>
-        !Number.isNaN(anchor[si]) && !Number.isNaN(anchor[di]) &&
-        anchor[si] >= anchor[di]
-      ).length;
+    // A seed moves only the side with no grade anchor, by 1.0 per link. A path
+    // from an anchored skill through unanchored skills to a lower anchored
+    // skill cannot hold. lo[v] and hi[v] bound v by its anchored neighbors.
+    const lo = Float64Array.from(
+      anchor,
+      (a) => Number.isNaN(a) ? -Infinity : a,
+    );
+    const hi = Float64Array.from(anchor, (a) => Number.isNaN(a) ? Infinity : a);
+    for (let pass = 0, moved = true; moved; pass++) {
+      if (pass > acyclic.length + 1) {
+        throw new Error(
+          `[difficulty] seed bounds never settle after ${pass} passes over ${acyclic.length} seeds. Expected a DAG outside the cycles. Received a pair chain that keeps moving. Fix: report a bug in the seed cycle filter.`,
+        );
+      }
+      moved = false;
+      for (const [si, di] of acyclic) {
+        if (Number.isNaN(anchor[di]) && lo[si] + 1 > lo[di]) {
+          lo[di] = lo[si] + 1;
+          moved = true;
+        }
+        if (Number.isNaN(anchor[si]) && hi[di] - 1 < hi[si]) {
+          hi[si] = hi[di] - 1;
+          moved = true;
+        }
+      }
+    }
+    const holds = ([si, di]: number[]) =>
+      !Number.isNaN(anchor[si]) && !Number.isNaN(anchor[di])
+        ? anchor[si] < anchor[di]
+        : lo[si] + 1 <= hi[di];
+    const seeds = acyclic.filter(holds);
+    seedAnchorConflicts = acyclic.length - seeds.length;
     // One pass per chain link at most. The seeds are a DAG, so a pass that
     // still moves a skill after seeds.length + 1 passes is a bug.
     const lowered = new Set<number>();
