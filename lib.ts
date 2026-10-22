@@ -49,7 +49,8 @@ export const slugify = (s: string) => {
     .replace(/[^a-z0-9\s-]/g, " ")
     .trim()
     .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
   if (base.length <= 80) return base;
   const hash = h32(base).toString(16).padStart(8, "0").slice(0, 6);
   let out = "";

@@ -35,7 +35,14 @@ Deno.test("list: every row has 5 fields, a slug id, a title, and sources; ids ar
   assertGreater(rows.length, 20000, "too few rows");
   for (const [i, c] of rows.entries()) {
     assertEquals(c.length, 5, `row ${i + 2} has ${c.length} fields`);
-    assert(/^[a-z0-9-]+$/.test(c[0]), `row ${i + 2} bad slug: ${c[0]}`);
+    assert(
+      /^[a-z0-9]+(-[a-z0-9]+)*$/.test(c[0]) && c[0].length <= 80,
+      `row ${
+        i + 2
+      } bad slug (expected ^[a-z0-9]+(-[a-z0-9]+)*$, at most 80 chars): ${
+        c[0]
+      }`,
+    );
     assert(c[1] && c[3], `row ${i + 2} lacks a title or sources`);
   }
   assertEquals(
