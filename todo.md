@@ -70,9 +70,13 @@
 ## Backlog
 
 - [ ] No stage reads a build row that its writer would reject. Decision:
-      approved design, all 10 build TSVs. Out of scope: LLM caches, trees,
-      `2_embeddings.bin`. Three break-it rounds each found a new unchecked
-      field, because each reader checks a few fields at its own call site.
+      `slugify` trims edge hyphens and fits the `-N` collision suffix inside 80
+      chars, so `SLUG` holds for every real id; the committed `5_prereqs.tsv`
+      fails the schema until the regen deletes it. `readTable` throws on a
+      missing final newline in every table. approved design, all 10 build TSVs.
+      Out of scope: LLM caches, trees, `2_embeddings.bin`. Three break-it rounds
+      each found a new unchecked field, because each reader checks a few fields
+      at its own call site.
   1. One schema record per build table in `lib.ts`. Example:
      `{ path: "build/4_difficulty.tsv", key: "id", columns: { id: SLUG, difficulty: int(1, 20), difficulty_raw: finite } }`.
      `SLUG` is `^[a-z0-9]+(-[a-z0-9]+)*$`, 80 chars or fewer.
@@ -95,22 +99,30 @@
   7. Test: one table-driven case per schema, a bad cell in, the message out.
      Then run the break-it agent again.
 
-- [ ] Stage `difficulty` orders the seed pairs outside cycles, and a seed never
-      moves a grade-anchored skill. Decision: postproc breaks seed cycles, as
-      before; the anchor wins over a seed; status counts the conflicts. The
-      throws on a seed self-loop or an unknown seed id stay, because stage
-      `seed-edges` already quarantines self-loops and resolves ids against
-      `3b_tagged_deduped.tsv`.
-  1. Today the seed settle in `graph.ts` throws on a seed cycle. Postproc breaks
-     seed cycles by rank (`cyclesSeedDropped` in `prereq.ts`), and OpenSALT
-     grade order across frameworks likely makes real cycles. Find the seed SCCs,
-     settle only the pairs outside them, and write `seed_cycle_pairs` to
-     `4_stats.json`.
-  2. A seed moves only the side with no grade anchor (`anchor[i]` is NaN). When
-     both sides have anchors and the seed contradicts them, nothing moves, and
-     `4_stats.json` counts it as `seed_anchor_conflicts`.
-  3. Stage `status` grades `seed_anchor_conflicts`: 1.0 at 1% of seed pairs.
-     Revisit the bound after the first full build.
-  4. Tests, as fixture runs of stage `difficulty`: a 2-cycle exits 0 and reports
-     `seed_cycle_pairs: 2`; a grade-8 prereq of a grade-3 dependent keeps its
-     grade-8 band.
+- [ ] Stage `difficulty` orders seed pairs in one pass, and no seed shape stops
+      the stage. Decision: approved design. Four break-it rounds in a row found
+      a new seed shape that never settles, because three passes enforce the
+      order on three scales (raw, calibrated, band) and each clamp can undo the
+      pass before it.
+  1. Compute bands from the calibrated values first, with no seed work before.
+     `difficulty_raw` stays the model's raw value.
+  2. Kept seeds: drop the pairs inside a cycle (`stronglyConnected`, lib.ts), as
+     today. They form a DAG.
+  3. An anchored skill keeps its anchor's band. For every other skill, one
+     forward and one backward pass over `topoOrder` give `lo` (1, or 1 above
+     each prereq's `lo`) and `hi` (20, or 1 below each dependent's `hi`).
+  4. In topo order, drop a seed pair whose ends cannot fit: `lo > hi`, or an
+     anchored end outside its bound. Count it in `seed_anchor_conflicts`.
+     Example: a grade-PK dependent at band 1 with an unanchored prereq drops the
+     pair, so the anchor wins with no tie.
+  5. One forward pass sets `band = max(clamp(band, lo, hi), prereq band + 1)`.
+     No loop and no "never settles" throw.
+  6. Delete `settle`, `bound`, the band fix-up loop, their three throws, and the
+     seed adjustment of `out`. Keep the self-loop and unknown-id throws: stage
+     `seed-edges` quarantines self-loops and resolves ids against
+     `3b_tagged_deduped.tsv`, so either one means a stale file.
+  7. Stage `status` grades `seed_cycle_pairs` beside `seed_anchor_conflicts`:
+     1.0 at 1% of seed pairs. The first full build revisits both bounds.
+  8. Tests: keep the fixture cases from the batch-2 commits (chains in any
+     order, cycles, anchored chains through unanchored skills, band 1). Each
+     asserts prereq band < dependent band or a counted drop.
