@@ -45,9 +45,10 @@ const BLOCK_TAG = new RegExp(
   "gi",
 );
 // The leading <body> keeps <title>, <meta>, <link>, and <base> text out of <head>.
+const DOM = new DOMParser();
 const htmlText = (s: string): string =>
   // The parser decodes `&lt;b&gt;` to `<b>`, so a second strip removes it.
-  new DOMParser().parseFromString(
+  DOM.parseFromString(
     "<body>" +
       s.replace(/<(script|style)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, " ")
         .replace(BLOCK_TAG, " ")
