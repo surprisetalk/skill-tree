@@ -59,6 +59,30 @@
 
 ## Backlog
 
+- [ ] No stage reads a build row that its writer would reject. Design, not yet
+      approved. Three break-it rounds each found a new unchecked field, because
+      each reader checks a few fields at its own call site.
+  1. One schema record per build table in `lib.ts`. Example:
+     `{ path: "build/4_difficulty.tsv", key: "id", columns: { id: SLUG, difficulty: int(1, 20), difficulty_raw: finite } }`.
+     `SLUG` is `^[a-z0-9]+(-[a-z0-9]+)*$`, 80 chars or fewer.
+  2. `readTable(schema)` returns typed records and throws on the first bad cell:
+     `build/4_difficulty.tsv:7: expected difficulty as an integer 1–20, received "21". Run: deno run -A pipeline.ts difficulty`.
+  3. `writeTable(schema, rows)` runs the same checks, writes `path.tmp`, then
+     renames. A stage with several outputs renames them last, dependents last.
+     This also covers backlog item 5 below (crash-safe writes).
+  4. Where two tables meet, the reader checks ids against the skill table:
+     postproc throws on a `5_prereqs.tsv` pick or a seed id outside
+     `3b_tagged_deduped.tsv`; finalize throws on a `4_difficulty.tsv` id outside
+     it. Message:
+     `build/5_prereqs.tsv:12: expected a skill id, received "ghost". Run: deno run -A pipeline.ts prereq`.
+  5. Data readers: `readCsv`/`readTsv` throw on a row equal to the header; stage
+     `trees` throws when a tree has 0 slugs; the CMR lookup error in stage
+     `list` names its file and line.
+  6. Delete the per-site checks that the schemas replace: `uniqueIds`,
+     `nonEmpty`, `readDifficulty`'s range checks, `readSeeds`'s holdout check.
+  7. Test: one table-driven case per schema, a bad cell in, the message out.
+     Then run the break-it agent again.
+
 - [ ] Fixes that change `skills.tsv`. Do them after the golden diff of the
       refactor passes, one commit each, and judge each by `deno task status` on
       a full build.
