@@ -518,6 +518,13 @@ const difficultyBuild = (): Fixture => {
   };
 };
 
+// Column `i` of build/4_difficulty.tsv by skill id: 1 is the band, 2 the raw.
+const difficultyCol = (files: Record<string, string>, i: number) =>
+  new Map(
+    files["build/4_difficulty.tsv"].split("\n").slice(1).filter((l) => l)
+      .map((l) => l.split("\t")).map((c) => [c[0], Number(c[i])]),
+  );
+
 Deno.test("difficulty: a DWA title anchors its skill, and a seed prereq sits in a lower band", async () => {
   const { code, stderr, files } = await runIn("difficulty", difficultyBuild(), [
     "build/4_difficulty.tsv",
@@ -530,10 +537,7 @@ Deno.test("difficulty: a DWA title anchors its skill, and a seed prereq sits in 
     2,
     "the DWA title skill has no job-zone anchor",
   );
-  const band = new Map(
-    files["build/4_difficulty.tsv"].split("\n").slice(1).filter((l) => l)
-      .map((l) => l.split("\t")).map((c) => [c[0], Number(c[1])]),
-  );
+  const band = difficultyCol(files, 1);
   assert(
     band.get("pre")! < band.get("dep")!,
     `seed prereq band ${band.get("pre")} is not below dependent band ${
@@ -557,10 +561,7 @@ Deno.test("difficulty: a seed chain is ordered in any seed order", async () => {
       ["build/4_difficulty.tsv"],
     );
     assertEquals(code, 0, stderr);
-    const raw = new Map(
-      files["build/4_difficulty.tsv"].split("\n").slice(1).filter((l) => l)
-        .map((l) => l.split("\t")).map((c) => [c[0], Number(c[2])]),
-    );
+    const raw = difficultyCol(files, 2);
     assert(
       raw.get("a")! < raw.get("b")! && raw.get("b")! < raw.get("c")!,
       `chain raws a=${raw.get("a")} b=${raw.get("b")} c=${raw.get("c")}`,
@@ -577,10 +578,7 @@ Deno.test("difficulty: a seed dependent at the lowest band still ranks above its
     "build/4_difficulty.tsv",
   ]);
   assertEquals(code, 0, stderr);
-  const band = new Map(
-    files["build/4_difficulty.tsv"].split("\n").slice(1).filter((l) => l)
-      .map((l) => l.split("\t")).map((c) => [c[0], Number(c[1])]),
-  );
+  const band = difficultyCol(files, 1);
   assert(
     band.get("pre")! < band.get("dep")!,
     `pre band ${band.get("pre")} is not below dep band ${band.get("dep")}`,
@@ -726,10 +724,7 @@ Deno.test("difficulty: a seed prereq in a high topic still lands below its depen
     "build/1e_seed_edges.tsv": seedHeader + "p\td\tkhan\t1.00\t0\t0\n",
   }, ["build/4_difficulty.tsv"]);
   assertEquals(code, 0, stderr);
-  const band = new Map(
-    files["build/4_difficulty.tsv"].split("\n").slice(1).filter((l) => l)
-      .map((l) => l.split("\t")).map((c) => [c[0], Number(c[1])]),
-  );
+  const band = difficultyCol(files, 1);
   assert(
     band.get("p")! < band.get("d")!,
     `p band ${band.get("p")} is not below d band ${band.get("d")}`,
