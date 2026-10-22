@@ -297,6 +297,16 @@ Deno.test("status: a malformed build file crashes with the condition and the fix
       'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received "x"',
     ],
     [
+      "build/4_difficulty.tsv",
+      "id\tdifficulty\tdifficulty_raw\na\t1\t 7\n",
+      'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received " 7"',
+    ],
+    [
+      "build/4_difficulty.tsv",
+      "id\tdifficulty\tdifficulty_raw\na\t1\t0x10\n",
+      'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received "0x10"',
+    ],
+    [
       "build/5_prereqs.tsv",
       "addition\n",
       "build/5_prereqs.tsv:1: expected 2 tab-separated fields, received 1",

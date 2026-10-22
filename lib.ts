@@ -802,7 +802,7 @@ const int = (lo: number, hi: number): Cell<number> => ({
 });
 const finite: Cell<number> = {
   as: "a finite number",
-  parse: (s) => s.trim() && Number.isFinite(Number(s)) ? Number(s) : undefined,
+  parse: (s) => /^-?\d+(\.\d+)?$/.test(s) ? Number(s) : undefined,
 };
 const bit: Cell<boolean> = {
   as: "0 or 1",
