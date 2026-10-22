@@ -651,3 +651,14 @@ Deno.test("list: OpenSALT keeps the text of a head-only element", async () => {
     JSON.stringify(titles.slice(-3)),
   );
 });
+
+Deno.test("list: OpenSALT keeps a row with an unclosed comment", async () => {
+  const { code, stderr, ids } = await listOpensalt([
+    { fullStatement: "Gamma <!-- unclosed comment words here" },
+  ]);
+  assertEquals(code, 0, stderr);
+  assert(
+    ids.includes("gamma-unclosed-comment-words-here"),
+    JSON.stringify(ids.slice(-3)),
+  );
+});
