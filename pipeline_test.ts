@@ -229,16 +229,27 @@ Deno.test("status: a missing or still-Chinese translation scores below 1", async
   }
 });
 
-Deno.test("status: seed pairs that contradict both grade anchors score below 1", async () => {
-  const build = goodBuild();
-  build["build/4_stats.json"] = (build["build/4_stats.json"] as string)
-    .replace('"seed_anchor_conflicts":0', '"seed_anchor_conflicts":50');
-  const { code, score } = await runIn("status", build);
-  assertEquals(code, 1);
+Deno.test("status: seed pairs that contradict the anchors or sit in a cycle score below 1", async () => {
+  const stats = (key: string) => {
+    const build = goodBuild();
+    build["build/4_stats.json"] = (build["build/4_stats.json"] as string)
+      .replace(`"${key}":0`, `"${key}":50`);
+    return runIn("status", build);
+  };
+  const [conflicts, cycles] = await Promise.all([
+    stats("seed_anchor_conflicts"),
+    stats("seed_cycle_pairs"),
+  ]);
+  assertEquals(conflicts.code, 1);
+  assertEquals(cycles.code, 1);
   assertEquals(
-    score(
+    conflicts.score(
       "Under 1% of seed pairs contradict the grade anchors of both skills.",
     ),
+    (0.5 - 1) / (0.01 - 1),
+  );
+  assertEquals(
+    cycles.score("Under 1% of seed pairs sit inside a cycle."),
     (0.5 - 1) / (0.01 - 1),
   );
 });
@@ -586,28 +597,29 @@ Deno.test("difficulty: a seed chain is ordered in any seed order", async () => {
         ["build/4_difficulty.tsv"],
       );
       assertEquals(code, 0, stderr);
-      const raw = difficultyCol(files, 2);
+      const band = difficultyCol(files, 1);
       assert(
-        raw.get("a")! < raw.get("b")! && raw.get("b")! < raw.get("c")!,
-        `chain raws a=${raw.get("a")} b=${raw.get("b")} c=${raw.get("c")}`,
+        band.get("a")! < band.get("b")! && band.get("b")! < band.get("c")!,
+        `chain bands a=${band.get("a")} b=${band.get("b")} c=${band.get("c")}`,
       );
     }),
   );
 });
 
-Deno.test("difficulty: a seed dependent at the lowest band still ranks above its prereq", async () => {
+Deno.test("difficulty: a seed dependent anchored at the lowest band drops the pair", async () => {
   const build = withSeeds([["pre", "dep"]]);
   build["build/3b_tagged_deduped.tsv"] =
     (build["build/3b_tagged_deduped.tsv"] as string)
       .replace("dep\tDep\t\ttest\t\t", "dep\tDep\t\ttest\tgrade:PK\t");
   const { code, stderr, files } = await runIn("difficulty", build, [
     "build/4_difficulty.tsv",
+    "build/4_stats.json",
   ]);
   assertEquals(code, 0, stderr);
-  const band = difficultyCol(files, 1);
-  assert(
-    band.get("pre")! < band.get("dep")!,
-    `pre band ${band.get("pre")} is not below dep band ${band.get("dep")}`,
+  assertEquals(difficultyCol(files, 1).get("dep"), 1);
+  assertEquals(
+    JSON.parse(files["build/4_stats.json"]).seed_anchor_conflicts,
+    1,
   );
 });
 
@@ -635,12 +647,17 @@ Deno.test("difficulty: a seed cycle is skipped and counted, and a seed never mov
     runIn("difficulty", withSeeds([["grade-high", "a"], ["a", "b"]]), outs),
   ]);
   assertEquals(anchoredChain.code, 0, anchoredChain.stderr);
-  const raw = difficultyCol(anchoredChain.files, 2);
+  const band = difficultyCol(anchoredChain.files, 1);
   assert(
-    raw.get("grade-high")! < raw.get("a")! && raw.get("a")! < raw.get("b")!,
-    `chain raws grade-high=${raw.get("grade-high")} a=${raw.get("a")} b=${
-      raw.get("b")
+    band.get("grade-high")! < band.get("a")! && band.get("a")! < band.get("b")!,
+    `chain bands grade-high=${band.get("grade-high")} a=${band.get("a")} b=${
+      band.get("b")
     }`,
+  );
+  assertEquals(
+    difficultyCol(anchoredChain.files, 2).get("a"),
+    difficultyCol(none.files, 2).get("a"),
+    "a seed moved a raw value",
   );
   assertEquals(chain.code, 0, chain.stderr);
   assertEquals(
@@ -657,7 +674,7 @@ Deno.test("difficulty: a seed cycle is skipped and counted, and a seed never mov
   assertEquals(
     difficultyCol(chain.files, 2).get("a"),
     difficultyCol(none.files, 2).get("a"),
-    "a dropped seed pair still clamps an unanchored skill",
+    "a dropped seed pair moved a raw value",
   );
   assertEquals(stats(none).seed_anchor_conflicts, 0);
   assertEquals(stats(none).seed_cycle_pairs, 0);

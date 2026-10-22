@@ -26,6 +26,7 @@ import {
   Tagged,
   TAGGED_HEADER,
   TOPIC_REFS,
+  topoOrder,
   writeStats,
 } from "./lib.ts";
 
@@ -1492,139 +1493,6 @@ export function stageDifficulty() {
     calibrated[i] = c;
   }
 
-  // Seed anchoring: a seed prereq sits 1.0 below its dependent. AL-CPL and
-  // MOOCCubeX concepts land on the professional plateau, where about a quarter
-  // of seeds otherwise reverse.
-  let seedAnchorAdjusted = 0;
-  let seedPairs: number[][] = [];
-  let seedTotal = 0, seedCyclePairs = 0, seedAnchorConflicts = 0;
-  {
-    const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
-    const allSeeds = readSeeds().flatMap(({ pre, dep }) => {
-      const si = idToIdx.get(pre), di = idToIdx.get(dep);
-      if (pre === dep) {
-        throw new Error(
-          `[difficulty] seed self-loop on ${pre}. Expected pre != dep. Received ${pre} > ${dep} in build/1e_seed_edges.tsv. Fix: drop the pair or its alias merge in stage seed-edges.`,
-        );
-      }
-      if (si === undefined || di === undefined) {
-        throw new Error(
-          `[difficulty] seed id not in build/1_skills.tsv. Expected both ids of a seed pair in the skill table. Received ${pre} > ${dep} in build/1e_seed_edges.tsv. Fix: rerun stage seed-edges after the last dedupe.`,
-        );
-      }
-      return [[si, di]];
-    });
-    // Seeds inside a cycle cannot order anything; postproc breaks them by rank.
-    const adj = new Map<number, number[]>();
-    seedTotal = allSeeds.length;
-    for (const [si, di] of allSeeds) {
-      const succ = adj.get(si);
-      if (succ) succ.push(di);
-      else adj.set(si, [di]);
-    }
-    const cycleOf = new Map<number, number>();
-    stronglyConnected(adj).forEach((comp, c) =>
-      comp.forEach((n) => cycleOf.set(n, c))
-    );
-    const acyclic = allSeeds.filter(([si, di]) =>
-      !cycleOf.has(si) || cycleOf.get(si) !== cycleOf.get(di)
-    );
-    seedCyclePairs = seedTotal - acyclic.length;
-    // A seed moves only the side with no grade anchor, by 1.0 per link. A path
-    // from an anchored skill through unanchored skills to a lower anchored
-    // skill cannot hold. lo[v] and hi[v] bound v by its anchored neighbors.
-    const lo = new Float64Array(anchor.length);
-    const hi = new Float64Array(anchor.length);
-    const bound = (pairs: number[][]) => {
-      lo.set(anchor.map((a) => Number.isNaN(a) ? -Infinity : a));
-      hi.set(anchor.map((a) => Number.isNaN(a) ? Infinity : a));
-      for (let pass = 0, moved = true; moved; pass++) {
-        if (pass > pairs.length + 1) {
-          throw new Error(
-            `[difficulty] seed bounds never settle after ${pass} passes over ${pairs.length} seeds. Expected a DAG outside the cycles. Received a pair chain that keeps moving. Fix: report a bug in the seed cycle filter.`,
-          );
-        }
-        moved = false;
-        for (const [si, di] of pairs) {
-          if (Number.isNaN(anchor[di]) && lo[si] + 1 > lo[di]) {
-            lo[di] = lo[si] + 1;
-            moved = true;
-          }
-          if (Number.isNaN(anchor[si]) && hi[di] - 1 < hi[si]) {
-            hi[si] = hi[di] - 1;
-            moved = true;
-          }
-        }
-      }
-    };
-    bound(acyclic);
-    const holds = ([si, di]: number[]) =>
-      !Number.isNaN(anchor[si]) && !Number.isNaN(anchor[di])
-        ? anchor[si] < anchor[di]
-        : lo[si] + 1 <= hi[di];
-    const seeds = acyclic.filter(holds);
-    seedAnchorConflicts = acyclic.length - seeds.length;
-    // Kept pairs still hold under the looser bounds of the kept set alone.
-    bound(seeds);
-    // Clamp each unanchored skill into [lo, hi], then only raise dependents.
-    // A raise stays under hi, because kept pairs have hi[si] + 1 <= hi[di].
-    // The seeds are a DAG, so a pass that still moves a skill after
-    // seeds.length + 1 passes is a bug.
-    const lowered = new Set<number>();
-    const settle = (v: Float32Array) => {
-      for (let i = 0; i < v.length; i++) {
-        if (!Number.isNaN(anchor[i])) continue;
-        const c = Math.min(Math.max(v[i], lo[i]), hi[i]);
-        if (c !== v[i]) {
-          v[i] = c;
-          lowered.add(i);
-        }
-      }
-      for (let pass = 0;; pass++) {
-        let moved = false;
-        for (const [si, di] of seeds) {
-          // Anchors already order a pair whose dependent is anchored.
-          if (v[si] < v[di] || !Number.isNaN(anchor[di])) continue;
-          v[di] = v[si] + 1.0;
-          lowered.add(di);
-          moved = true;
-        }
-        if (!moved) break;
-        if (pass > seeds.length) {
-          throw new Error(
-            `[difficulty] seed order never settles after ${pass} passes over ${seeds.length} seeds. Expected a DAG outside the cycles. Received a pair chain that keeps moving. Fix: report a bug in the seed cycle filter.`,
-          );
-        }
-      }
-    };
-    settle(out);
-    if (lowered.size > 0) {
-      const { smoothed, jittered } = smoothJitter(out);
-      for (let i = 0; i < skills.length; i++) {
-        const c = calibrate(jittered[i]);
-        if (!Number.isFinite(c)) {
-          throw new Error(
-            `[difficulty] non-finite calibrated value for ${
-              skills[i].id
-            } after seed anchoring (raw=${out[i]}, smoothed=${
-              smoothed[i]
-            }, jittered=${jittered[i]})`,
-          );
-        }
-        calibrated[i] = c;
-      }
-    }
-    // Topic smoothing and PAV can lift a prereq over its dependent again.
-    settle(calibrated);
-    seedAnchorAdjusted = lowered.size;
-    if (seedAnchorAdjusted > 0) {
-      console.log(
-        `[difficulty] seed-ordered ${seedAnchorAdjusted} skills`,
-      );
-    }
-    seedPairs = seeds;
-  }
-
   const band = new Int32Array(skills.length);
   let healthCapped = 0;
   for (let i = 0; i < skills.length; i++) {
@@ -1646,36 +1514,66 @@ export function stageDifficulty() {
     }
     band[i] = b;
   }
-  // The band clamp at 1 and the health cap can tie a seed pair. Lower the
-  // prereq; a dependent at band 1 has no room below, so raise it instead.
-  let bandMoved = 0;
-  for (let pass = 0;; pass++) {
-    let moved = false;
-    for (const [si, di] of seedPairs) {
-      if (band[si] < band[di]) continue;
-      if (!Number.isNaN(anchor[si]) && !Number.isNaN(anchor[di])) continue;
-      if (!Number.isNaN(anchor[si]) || band[di] <= 1) band[di] = band[si] + 1;
-      else band[si] = band[di] - 1;
-      if (band[di] > 20) {
-        throw new Error(
-          `[difficulty] seed ${skills[si].id} > ${skills[di].id} needs band ${
-            band[di]
-          }. Expected bands 1-20. Received a seed chain raised above band 20 by its anchored prereq or by its length. Fix: shorten the chain or drop its pairs in build/1e_seed_edges.tsv.`,
-        );
-      }
-      bandMoved++;
-      moved = true;
-    }
-    if (!moved) break;
-    if (pass > seedPairs.length) {
+  // Seed order: a seed prereq sits in a lower band than its dependent. An
+  // anchored skill keeps its band; every other skill moves inside [lo, hi].
+  const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
+  const allSeeds = readSeeds().map(({ pre, dep }) => {
+    const si = idToIdx.get(pre), di = idToIdx.get(dep);
+    if (pre === dep) {
       throw new Error(
-        `[difficulty] seed bands never settle after ${pass} passes over ${seedPairs.length} seeds. Expected an acyclic kept seed set. Received a band chain that keeps moving. Fix: report a bug in the seed cycle filter.`,
+        `[difficulty] seed self-loop on ${pre}. Expected pre != dep. Received ${pre} > ${dep} in build/1e_seed_edges.tsv. Fix: drop the pair or its alias merge in stage seed-edges.`,
       );
     }
-  }
-  if (bandMoved > 0) {
-    console.log(
-      `[difficulty] ${bandMoved} seed pairs moved to keep prereq band below dependent band`,
+    if (si === undefined || di === undefined) {
+      throw new Error(
+        `[difficulty] seed id not in build/1_skills.tsv. Expected both ids of a seed pair in the skill table. Received ${pre} > ${dep} in build/1e_seed_edges.tsv. Fix: rerun stage seed-edges after the last dedupe.`,
+      );
+    }
+    return [si, di];
+  });
+  // Seeds inside a cycle cannot order anything; postproc breaks them by rank.
+  const succ = new Map<number, number[]>();
+  for (const [si, di] of allSeeds) succ.set(si, [...succ.get(si) ?? [], di]);
+  const cycleOf = new Map<number, number>();
+  stronglyConnected(succ).forEach((comp, c) =>
+    comp.forEach((n) => cycleOf.set(n, c))
+  );
+  const acyclic = allSeeds.filter(([si, di]) =>
+    !cycleOf.has(si) || cycleOf.get(si) !== cycleOf.get(di)
+  );
+  const bounds = (pairs: number[][]) => {
+    const prereqs = skills.map(() => [] as number[]);
+    const dependents = skills.map(() => [] as number[]);
+    for (const [si, di] of pairs) {
+      prereqs[di].push(si);
+      dependents[si].push(di);
+    }
+    const order = topoOrder(
+      prereqs.map((ps, i) => ({ id: `${i}`, prereqs: ps.map(String) })),
+    ).map(Number);
+    const lo = new Int32Array(skills.length).fill(1);
+    const hi = new Int32Array(skills.length).fill(20);
+    for (const i of order) {
+      if (Number.isNaN(anchor[i])) {
+        for (const p of prereqs[i]) lo[i] = Math.max(lo[i], lo[p] + 1);
+      } else lo[i] = hi[i] = band[i];
+    }
+    for (const i of order.toReversed()) {
+      if (Number.isNaN(anchor[i])) {
+        for (const d of dependents[i]) hi[i] = Math.min(hi[i], hi[d] - 1);
+      }
+    }
+    return { order, prereqs, lo, hi };
+  };
+  const fit = bounds(acyclic);
+  const seeds = acyclic.filter(([si, di]) => fit.lo[si] + 1 <= fit.hi[di]);
+  const seedAnchorConflicts = acyclic.length - seeds.length;
+  const { order, prereqs, lo, hi } = bounds(seeds);
+  for (const i of order) {
+    if (!Number.isNaN(anchor[i])) continue;
+    band[i] = Math.max(
+      Math.min(Math.max(band[i], lo[i]), hi[i]),
+      ...prereqs[i].map((p) => band[p] + 1),
     );
   }
   const bandCounts = new Array(20).fill(0);
@@ -1762,8 +1660,8 @@ export function stageDifficulty() {
     grade_anchored_skills: gradeAnchoredSkills,
     grade_band_inversions: inversions,
     grade_band_worst_gap: worstInversion,
-    seed_pairs: seedTotal,
-    seed_cycle_pairs: seedCyclePairs,
+    seed_pairs: allSeeds.length,
+    seed_cycle_pairs: allSeeds.length - acyclic.length,
     seed_anchor_conflicts: seedAnchorConflicts,
     grade_band_inversion_samples: invSamples,
     total_seconds: (performance.now() - t0) / 1000,

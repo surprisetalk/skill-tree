@@ -245,6 +245,10 @@ async function stageStatus() {
       "Under 1% of seed pairs contradict the grade anchors of both skills.",
       () => grade(stat("seed_anchor_conflicts") / stat("seed_pairs"), 0.01, 1),
     ],
+    [
+      "Under 1% of seed pairs sit inside a cycle.",
+      () => grade(stat("seed_cycle_pairs") / stat("seed_pairs"), 0.01, 1),
+    ],
     ["Under 0.1% of source titles drop for an empty key or slug.", () =>
       grade(
         (stat("empty_key_drops", "1_stats.json") +
