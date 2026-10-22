@@ -1,3 +1,4 @@
+import { DOMParser } from "@b-fuze/deno-dom";
 import { TextLineStream } from "@std/streams/text-line-stream";
 import {
   BUILD,
@@ -33,10 +34,12 @@ import {
 
 // ---------- stage list ----------
 
-const normalizeText = (s: string): string => {
+const htmlText = (s: string): string =>
+  new DOMParser().parseFromString(s, "text/html").body.textContent;
+
+const normalizeText = (s: string, decode = true): string => {
   if (!s) return "";
-  let t = decodeEntities(s);
-  t = t.replace(/<\/?[a-z][^>]*>/gi, "");
+  let t = decode ? decodeEntities(s) : s;
   t = t.replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(
     /[\u201C\u201D\u201E\u201F]/g,
     '"',
@@ -593,9 +596,9 @@ export function stageList() {
           scaffType++;
           continue;
         }
-        const fullStmt = (it.fullStatement || "").trim();
-        const abbrev = (it.abbreviatedStatement || "").trim();
-        const notes = (it.notes || "").trim();
+        const fullStmt = htmlText(it.fullStatement || "").trim();
+        const abbrev = htmlText(it.abbreviatedStatement || "").trim();
+        const notes = htmlText(it.notes || "").trim();
         if (!fullStmt && !abbrev) {
           scaffPat++;
           continue;
@@ -719,8 +722,9 @@ export function stageList() {
   let normalized = 0, denoised = 0;
   for (const s of raw) {
     const t0 = s.title, d0 = s.description;
-    s.title = normalizeText(s.title);
-    s.description = normalizeText(s.description);
+    const decode = !s.sources.includes("opensalt");
+    s.title = normalizeText(s.title, decode);
+    s.description = normalizeText(s.description, decode);
     if (/^The SCED provides a series of unused codes/i.test(s.description)) {
       s.description = "";
     }

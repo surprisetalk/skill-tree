@@ -47,6 +47,17 @@ Deno.test("list: every row has 5 fields, a slug id, a title, and sources; ids ar
   assertEquals(canapes?.[0], "prepare-canapes");
 });
 
+Deno.test("list: OpenSALT markup is parsed away and Lightcast quoted tags stay", () => {
+  const TAG_RE = /<\/?[a-z][^>]*>/i;
+  const opensalt = rows.filter((c) => c[3].includes("opensalt"));
+  const tagged = opensalt.filter((c) => TAG_RE.test(c[1] + c[2]));
+  assertEquals(tagged.length, 0, `tag left in ${tagged[0]?.[0]}`);
+  assert(
+    rows.some((c) => c[3].includes("lightcast") && c[2].includes("`<table>`")),
+    "no Lightcast description keeps its quoted `<table>`",
+  );
+});
+
 Deno.test("list stats: all four sources contribute, and dedupe merged rows", () => {
   const s = JSON.parse(Deno.readTextFileSync("build/1_stats.json"));
   for (const src of ["esco", "onet", "lightcast", "opensalt"]) {
