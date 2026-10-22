@@ -7,7 +7,8 @@ code in this repository.
 
 skill-tree aggregates open datasets to build a skill prerequisite graph. Data
 sources span occupational taxonomies, educational prerequisites, and knowledge
-graphs. See `todo.md` for data source tracking.
+graphs. See `todo.md` for data source tracking, and `research.md` for the survey
+of candidate sources, prior work, and design lessons.
 
 ## Datasets
 

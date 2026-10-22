@@ -32,3 +32,21 @@ Requires a local Ollama at `localhost:11434` with `nomic-embed-text`
 reuse `build/5_prereqs.tsv` as is.
 
 See `claude.md` for the full dataset catalog and schemas.
+
+## Pending design
+
+Evidence for each note: `research.md`.
+
+- The prereq DAG stays the source of truth. Embeddings serve only candidate
+  retrieval, dedupe, and interest ranking. Alternative: learned box or order
+  embeddings that encode the partial order. They need training labels, lose hand
+  edits, and cannot explain a path to a goal.
+- `skills.tsv` keeps one edge type, prereq, and topics keep the hierarchy.
+  Sponge derives implicit-review credit from prereq edges with one fixed weight.
+  Alternative: an LLM-scored "encompasses" weight (0–1) per edge, as Math
+  Academy sets by hand. It costs one more LLM pass and one more column before
+  learner data shows that the fixed weight fails.
+- `skills.tsv` gets a `sources` column, and `lib.ts` maps each source to its
+  licence and attribution string. The readme lists the attributions.
+  Alternative: drop every non-commercial or copyleft source (Junyi, MOOCCubeX
+  GPL-3.0). That loses the MOOCCubeX CS and math seed pairs.
