@@ -211,29 +211,28 @@ Deno.test("status: a missing build file scores 0 and names the stage to rerun", 
 });
 
 Deno.test("status: a malformed build file crashes with the condition and the fix", async () => {
-  for (
-    const [path, body, expected] of [
-      ["skills.tsv", "id\ttitle\n", "unexpected header"],
-      [
-        "build/4_difficulty.tsv",
-        "id\tdifficulty\tdifficulty_raw\na\t1\tx\n",
-        "finite difficulty_raw",
-      ],
-      ["build/5_prereqs.tsv", "addition\n", "skill<TAB>p1,p2"],
-      [
-        "data/mooccubex/cs.json.gz",
-        await gzip("null\n"),
-        "cs.json.gz:1: expected a JSON object",
-      ],
-    ] as const
-  ) {
+  const cases = [
+    ["skills.tsv", "id\ttitle\n", "unexpected header"],
+    [
+      "build/4_difficulty.tsv",
+      "id\tdifficulty\tdifficulty_raw\na\t1\tx\n",
+      "finite difficulty_raw",
+    ],
+    ["build/5_prereqs.tsv", "addition\n", "skill<TAB>p1,p2"],
+    [
+      "data/mooccubex/cs.json.gz",
+      await gzip("null\n"),
+      "cs.json.gz:1: expected a JSON object",
+    ],
+  ] as const;
+  await Promise.all(cases.map(async ([path, body, expected]) => {
     const build = goodBuild();
     build[path] = body;
     if (path === "skills.tsv") delete build["build/4_difficulty.tsv"];
     const { code, stderr } = await runIn("status", build);
     assert(code !== 0 && stderr.includes(expected), `${path}: ${stderr}`);
     assert(stderr.includes('status "'), stderr);
-  }
+  }));
 });
 
 Deno.test("list: a malformed data/_foundations.json stops the stage", async () => {
@@ -318,12 +317,12 @@ Deno.test("finalize: writes a DAG of unique skills, or stops", async () => {
       'expected unique ids, received a second "counting"',
     ],
   ];
-  for (const [path, extra, expected] of cases) {
+  await Promise.all(cases.map(async ([path, extra, expected]) => {
     const build = finalBuild();
     build[path] += extra;
     const { code, stderr } = await runIn("finalize", build);
     assert(code !== 0 && stderr.includes(expected), `${expected}: ${stderr}`);
-  }
+  }));
   const empty = finalBuild();
   empty["build/3b_tagged_deduped.tsv"] =
     "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\n";
