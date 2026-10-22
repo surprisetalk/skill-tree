@@ -915,7 +915,10 @@ export function stageList() {
     if (arr.length === 1) continue;
     slugCollisions += arr.length - 1;
     arr.forEach((s, i) => {
-      if (i > 0) s.id = `${s.id}-${i + 1}`;
+      if (i > 0) {
+        const suffix = `-${i + 1}`;
+        s.id = s.id.slice(0, 80 - suffix.length).replace(/-$/, "") + suffix;
+      }
     });
   }
 
