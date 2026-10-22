@@ -13,22 +13,16 @@ const run = (args: string[], cwd: string, boundMs: number) =>
     stderr: "piped",
   }).output();
 
+// Every fixture run starts at load, so the runs overlap. A test awaits its own.
+const early = <T>(f: () => Promise<T>) => {
+  const p = f();
+  p.catch(() => {});
+  return () => p;
+};
 const LIST_BOUND_MS = 30_000;
 const t0 = performance.now();
-const list = await run(["list"], ".", LIST_BOUND_MS);
-if (!list.success) {
-  throw new Error(
-    `pipeline.ts list exited ${list.code} after ${
-      ((performance.now() - t0) / 1000).toFixed(1)
-    } s (bound ${LIST_BOUND_MS / 1000} s):\n${
-      new TextDecoder().decode(list.stderr).slice(-2000)
-    }`,
-  );
-}
-const [header, ...rows] = Deno.readTextFileSync("build/1_skills.tsv").split(
-  "\n",
-)
-  .filter((l) => l.length).map((l) => l.split("\t"));
+const listP = run(["list"], ".", LIST_BOUND_MS);
+const seedHeader = "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback\n";
 
 Deno.test("list: every row has 5 fields, a slug id, a title, and sources; ids are unique", () => {
   assertEquals(header, ["id", "title", "description", "sources", "tags"]);
@@ -199,184 +193,219 @@ const runIn = async (
   };
 };
 
-Deno.test("status: a healthy build passes every condition and exits 0", async () => {
-  const { code, stderr } = await runIn("status", goodBuild());
-  assertEquals(code, 0, stderr);
-});
+Deno.test(
+  "status: a healthy build passes every condition and exits 0",
+  early(async () => {
+    const { code, stderr } = await runIn("status", goodBuild());
+    assertEquals(code, 0, stderr);
+  }),
+);
 
-Deno.test("status: graph defects score below 1 and exit 1", async () => {
-  const build = goodBuild();
-  build["skills.tsv"] += [
-    ["german-i", 4, "counting"],
-    ["french-i", 5, "german-i"],
-    ["loop-a", 6, "loop-b"],
-    ["loop-b", 6, "loop-a"],
-    ["self", 6, "self,ghost"],
-  ].map(([id, band, pre]) =>
-    [id, id, id, "", band, pre, "", "", "", ""].join("\t")
-  ).join("\n") + "\n";
-  const { code, score, stderr } = await runIn("status", build);
-  assertEquals(code, 1, stderr);
-  // 11 edges: loop-a, loop-b, self, and ghost are bad.
-  assertEquals(
-    score("The prereq graph is a DAG, and every prereq names another skill."),
-    1 - 4 / 11,
-  );
-  assertEquals(
-    score("No language skill has another language as a prereq."),
-    1 - 1 / 11,
-  );
-  assertEquals(score("Addition is a transitive prereq of multiplication."), 1);
-});
-
-Deno.test("status: a missing or still-Chinese translation scores below 1", async () => {
-  for (
-    const cache of ["函数\tfunction\n", "函数\tfunction\n欧拉函数\t欧拉\n"]
-  ) {
+Deno.test(
+  "status: graph defects score below 1 and exit 1",
+  early(async () => {
     const build = goodBuild();
-    build["build/1f_translate.tsv"] = cache;
+    build["skills.tsv"] += [
+      ["german-i", 4, "counting"],
+      ["french-i", 5, "german-i"],
+      ["loop-a", 6, "loop-b"],
+      ["loop-b", 6, "loop-a"],
+      ["self", 6, "self,ghost"],
+    ].map(([id, band, pre]) =>
+      [id, id, id, "", band, pre, "", "", "", ""].join("\t")
+    ).join("\n") + "\n";
+    const { code, score, stderr } = await runIn("status", build);
+    assertEquals(code, 1, stderr);
+    // 11 edges: loop-a, loop-b, self, and ghost are bad.
+    assertEquals(
+      score("The prereq graph is a DAG, and every prereq names another skill."),
+      1 - 4 / 11,
+    );
+    assertEquals(
+      score("No language skill has another language as a prereq."),
+      1 - 1 / 11,
+    );
+    assertEquals(
+      score("Addition is a transitive prereq of multiplication."),
+      1,
+    );
+  }),
+);
+
+Deno.test(
+  "status: a missing or still-Chinese translation scores below 1",
+  early(async () => {
+    for (
+      const cache of ["函数\tfunction\n", "函数\tfunction\n欧拉函数\t欧拉\n"]
+    ) {
+      const build = goodBuild();
+      build["build/1f_translate.tsv"] = cache;
+      const { code, score } = await runIn("status", build);
+      assertEquals(code, 1);
+      assertEquals(
+        score("Every Chinese MOOCCubeX label has an English translation."),
+        0.5,
+      );
+    }
+  }),
+);
+
+Deno.test(
+  "status: seed pairs that contradict the anchors or sit in a cycle score below 1",
+  early(async () => {
+    const stats = (key: string) => {
+      const build = goodBuild();
+      build["build/4_stats.json"] = (build["build/4_stats.json"] as string)
+        .replace(`"${key}":0`, `"${key}":50`);
+      return runIn("status", build);
+    };
+    const [conflicts, cycles] = await Promise.all([
+      stats("seed_anchor_conflicts"),
+      stats("seed_cycle_pairs"),
+    ]);
+    assertEquals(conflicts.code, 1);
+    assertEquals(cycles.code, 1);
+    assertEquals(
+      conflicts.score(
+        "Under 1% of seed pairs contradict the grade anchors of both skills.",
+      ),
+      (0.5 - 1) / (0.01 - 1),
+    );
+    assertEquals(
+      cycles.score("Under 1% of seed pairs sit inside a cycle."),
+      (0.5 - 1) / (0.01 - 1),
+    );
+  }),
+);
+
+Deno.test(
+  "status: titles dropped for an empty key or slug score below 1",
+  early(async () => {
+    const build = goodBuild();
+    build["build/1_stats.json"] = JSON.stringify({
+      raw_rows: 1000,
+      empty_key_drops: 5,
+      empty_slug_drops: 5,
+    });
     const { code, score } = await runIn("status", build);
     assertEquals(code, 1);
     assertEquals(
-      score("Every Chinese MOOCCubeX label has an English translation."),
-      0.5,
+      score("Under 0.1% of source titles drop for an empty key or slug."),
+      0,
     );
-  }
-});
+  }),
+);
 
-Deno.test("status: seed pairs that contradict the anchors or sit in a cycle score below 1", async () => {
-  const stats = (key: string) => {
+Deno.test(
+  "status: a missing build file scores 0 and names the stage to rerun",
+  early(async () => {
     const build = goodBuild();
-    build["build/4_stats.json"] = (build["build/4_stats.json"] as string)
-      .replace(`"${key}":0`, `"${key}":50`);
-    return runIn("status", build);
-  };
-  const [conflicts, cycles] = await Promise.all([
-    stats("seed_anchor_conflicts"),
-    stats("seed_cycle_pairs"),
-  ]);
-  assertEquals(conflicts.code, 1);
-  assertEquals(cycles.code, 1);
-  assertEquals(
-    conflicts.score(
-      "Under 1% of seed pairs contradict the grade anchors of both skills.",
-    ),
-    (0.5 - 1) / (0.01 - 1),
-  );
-  assertEquals(
-    cycles.score("Under 1% of seed pairs sit inside a cycle."),
-    (0.5 - 1) / (0.01 - 1),
-  );
-});
+    delete build["build/4_stats.json"];
+    const { code, score, stderr } = await runIn("status", build);
+    assertEquals(code, 1);
+    assertEquals(
+      score("Difficulty agrees with grade anchors: Kendall τ above 0.5."),
+      0,
+    );
+    assert(
+      stderr.includes("Run: deno run -A pipeline.ts difficulty"),
+      stderr,
+    );
+  }),
+);
 
-Deno.test("status: titles dropped for an empty key or slug score below 1", async () => {
-  const build = goodBuild();
-  build["build/1_stats.json"] = JSON.stringify({
-    raw_rows: 1000,
-    empty_key_drops: 5,
-    empty_slug_drops: 5,
-  });
-  const { code, score } = await runIn("status", build);
-  assertEquals(code, 1);
-  assertEquals(
-    score("Under 0.1% of source titles drop for an empty key or slug."),
-    0,
-  );
-});
+Deno.test(
+  "status: a malformed build file crashes with the condition and the fix",
+  early(async () => {
+    const cases = [
+      [
+        "skills.tsv",
+        "id\ttitle\n",
+        'skills.tsv:1: expected header "id\\ttitle\\tdisplay_title',
+      ],
+      [
+        "build/4_difficulty.tsv",
+        "id\tdifficulty\tdifficulty_raw\na\t1\tx\n",
+        'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received "x"',
+      ],
+      [
+        "build/4_difficulty.tsv",
+        "id\tdifficulty\tdifficulty_raw\na\t1\t 7\n",
+        'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received " 7"',
+      ],
+      [
+        "build/4_difficulty.tsv",
+        "id\tdifficulty\tdifficulty_raw\na\t1\t0x10\n",
+        'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received "0x10"',
+      ],
+      [
+        "build/5_prereqs.tsv",
+        "addition\n",
+        "build/5_prereqs.tsv:1: expected 2 tab-separated fields, received 1",
+      ],
+      [
+        "data/mooccubex/cs.json.gz",
+        await gzip("null\n"),
+        "cs.json.gz:1: expected a JSON object",
+      ],
+    ] as const;
+    await Promise.all(cases.map(async ([path, body, expected]) => {
+      const build = goodBuild();
+      build[path] = body;
+      if (path === "skills.tsv") delete build["build/4_difficulty.tsv"];
+      const { code, stderr } = await runIn("status", build);
+      assert(code !== 0 && stderr.includes(expected), `${path}: ${stderr}`);
+      assert(stderr.includes('status "'), stderr);
+    }));
+  }),
+);
 
-Deno.test("status: a missing build file scores 0 and names the stage to rerun", async () => {
-  const build = goodBuild();
-  delete build["build/4_stats.json"];
-  const { code, score, stderr } = await runIn("status", build);
-  assertEquals(code, 1);
-  assertEquals(
-    score("Difficulty agrees with grade anchors: Kendall τ above 0.5."),
-    0,
-  );
-  assert(
-    stderr.includes("Run: deno run -A pipeline.ts difficulty"),
-    stderr,
-  );
-});
-
-Deno.test("status: a malformed build file crashes with the condition and the fix", async () => {
-  const cases = [
-    [
-      "skills.tsv",
-      "id\ttitle\n",
-      'skills.tsv:1: expected header "id\\ttitle\\tdisplay_title',
-    ],
-    [
-      "build/4_difficulty.tsv",
-      "id\tdifficulty\tdifficulty_raw\na\t1\tx\n",
-      'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received "x"',
-    ],
-    [
-      "build/4_difficulty.tsv",
-      "id\tdifficulty\tdifficulty_raw\na\t1\t 7\n",
-      'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received " 7"',
-    ],
-    [
-      "build/4_difficulty.tsv",
-      "id\tdifficulty\tdifficulty_raw\na\t1\t0x10\n",
-      'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received "0x10"',
-    ],
-    [
-      "build/5_prereqs.tsv",
-      "addition\n",
-      "build/5_prereqs.tsv:1: expected 2 tab-separated fields, received 1",
-    ],
-    [
-      "data/mooccubex/cs.json.gz",
-      await gzip("null\n"),
-      "cs.json.gz:1: expected a JSON object",
-    ],
-  ] as const;
-  await Promise.all(cases.map(async ([path, body, expected]) => {
-    const build = goodBuild();
-    build[path] = body;
-    if (path === "skills.tsv") delete build["build/4_difficulty.tsv"];
-    const { code, stderr } = await runIn("status", build);
-    assert(code !== 0 && stderr.includes(expected), `${path}: ${stderr}`);
-    assert(stderr.includes('status "'), stderr);
-  }));
-});
-
-Deno.test("list: a malformed data/_foundations.json stops the stage", async () => {
-  const good = JSON.parse(Deno.readTextFileSync("data/_foundations.json"));
-  const cases: [string, (f: typeof good) => void, string][] = [
-    ["grade", (f) => f.foundations[0].grade_start = 99, "grades as integers"],
-    ["slug", (f) => f.foundations[0].id = "Counting", "the slug of the title"],
-    ["dup", (f) => f.foundations.push(f.foundations[0]), "unique ids"],
-    ["prereq", (f) => f.seed_edges[0].prereq = "nope", "a foundation prereq"],
-    [
-      "both",
-      (f) => f.seed_edges[0].dependent_pattern = "x",
-      "a foundation prereq",
-    ],
-    [
-      "empty",
-      (f) => f.seed_edges.push({ prereq: "addition", dependent_pattern: "" }),
-      "a foundation prereq",
-    ],
-    [
-      "regex",
-      (f) => f.seed_edges.push({ prereq: "addition", dependent_pattern: "(" }),
-      "a valid regex",
-    ],
-  ];
-  await Promise.all(cases.map(async ([name, mutate, expected]) => {
-    const f = structuredClone(good);
-    mutate(f);
-    const dir = Deno.makeTempDirSync();
-    Deno.mkdirSync(`${dir}/data`);
-    Deno.writeTextFileSync(`${dir}/data/_foundations.json`, JSON.stringify(f));
-    const out = await run(["list"], dir, 10_000);
-    Deno.removeSync(dir, { recursive: true });
-    const stderr = new TextDecoder().decode(out.stderr);
-    assert(out.code !== 0 && stderr.includes(expected), `${name}: ${stderr}`);
-  }));
-});
+Deno.test(
+  "list: a malformed data/_foundations.json stops the stage",
+  early(async () => {
+    const good = JSON.parse(Deno.readTextFileSync("data/_foundations.json"));
+    const cases: [string, (f: typeof good) => void, string][] = [
+      ["grade", (f) => f.foundations[0].grade_start = 99, "grades as integers"],
+      [
+        "slug",
+        (f) => f.foundations[0].id = "Counting",
+        "the slug of the title",
+      ],
+      ["dup", (f) => f.foundations.push(f.foundations[0]), "unique ids"],
+      ["prereq", (f) => f.seed_edges[0].prereq = "nope", "a foundation prereq"],
+      [
+        "both",
+        (f) => f.seed_edges[0].dependent_pattern = "x",
+        "a foundation prereq",
+      ],
+      [
+        "empty",
+        (f) => f.seed_edges.push({ prereq: "addition", dependent_pattern: "" }),
+        "a foundation prereq",
+      ],
+      [
+        "regex",
+        (f) =>
+          f.seed_edges.push({ prereq: "addition", dependent_pattern: "(" }),
+        "a valid regex",
+      ],
+    ];
+    await Promise.all(cases.map(async ([name, mutate, expected]) => {
+      const f = structuredClone(good);
+      mutate(f);
+      const dir = Deno.makeTempDirSync();
+      Deno.mkdirSync(`${dir}/data`);
+      Deno.writeTextFileSync(
+        `${dir}/data/_foundations.json`,
+        JSON.stringify(f),
+      );
+      const out = await run(["list"], dir, 10_000);
+      Deno.removeSync(dir, { recursive: true });
+      const stderr = new TextDecoder().decode(out.stderr);
+      assert(out.code !== 0 && stderr.includes(expected), `${name}: ${stderr}`);
+    }));
+  }),
+);
 
 // A small postproc output that finalize turns into skills.tsv.
 const finalBuild = (): Fixture => {
@@ -402,207 +431,216 @@ const finalBuild = (): Fixture => {
 };
 
 // Each of these wrote a skills.tsv that breaks its own invariants, exit 0.
-Deno.test("finalize: writes a DAG of unique skills, or stops", async () => {
-  const good = await runIn("finalize", finalBuild());
-  assertEquals(good.code, 0, good.stderr);
-  assertEquals(
-    good.files["skills.tsv"].split("\n")[2].split("\t")[5],
-    "counting",
-  );
-  const cases: [string, string, string][] = [
-    ["build/6_edges.tsv", "counting\tmultiplication\n", "expected a DAG"],
-    [
-      "build/6_edges.tsv",
-      "addition\tghost\n",
-      'expected a skill id, received "ghost"',
-    ],
-    [
-      "build/3b_tagged_deduped.tsv",
-      "counting\tcounting\td\tfoundation\t\t\tarithmetic\n",
-      'build/3b_tagged_deduped.tsv:5: expected unique id, received a second "counting"',
-    ],
-    [
-      "build/4_difficulty.tsv",
-      "counting\t1\t1\n",
-      'build/4_difficulty.tsv:5: expected unique id, received a second "counting"',
-    ],
-  ];
-  await Promise.all(cases.map(async ([path, extra, expected]) => {
-    const build = finalBuild();
-    build[path] += extra;
-    const { code, stderr } = await runIn("finalize", build);
-    assert(code !== 0 && stderr.includes(expected), `${expected}: ${stderr}`);
-  }));
-  const empty = finalBuild();
-  empty["build/3b_tagged_deduped.tsv"] =
-    "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\n";
-  const { code, stderr } = await runIn("finalize", empty);
-  assert(code !== 0 && stderr.includes("expected at least one row"), stderr);
-});
+Deno.test(
+  "finalize: writes a DAG of unique skills, or stops",
+  early(async () => {
+    const good = await runIn("finalize", finalBuild());
+    assertEquals(good.code, 0, good.stderr);
+    assertEquals(
+      good.files["skills.tsv"].split("\n")[2].split("\t")[5],
+      "counting",
+    );
+    const cases: [string, string, string][] = [
+      ["build/6_edges.tsv", "counting\tmultiplication\n", "expected a DAG"],
+      [
+        "build/6_edges.tsv",
+        "addition\tghost\n",
+        'expected a skill id, received "ghost"',
+      ],
+      [
+        "build/3b_tagged_deduped.tsv",
+        "counting\tcounting\td\tfoundation\t\t\tarithmetic\n",
+        'build/3b_tagged_deduped.tsv:5: expected unique id, received a second "counting"',
+      ],
+      [
+        "build/4_difficulty.tsv",
+        "counting\t1\t1\n",
+        'build/4_difficulty.tsv:5: expected unique id, received a second "counting"',
+      ],
+    ];
+    await Promise.all(cases.map(async ([path, extra, expected]) => {
+      const build = finalBuild();
+      build[path] += extra;
+      const { code, stderr } = await runIn("finalize", build);
+      assert(code !== 0 && stderr.includes(expected), `${expected}: ${stderr}`);
+    }));
+    const empty = finalBuild();
+    empty["build/3b_tagged_deduped.tsv"] =
+      "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\n";
+    const { code, stderr } = await runIn("finalize", empty);
+    assert(code !== 0 && stderr.includes("expected at least one row"), stderr);
+  }),
+);
 
 // A topic that is not a slug passes the reader, which checks tags as text.
-Deno.test("finalize: a bad cell in the output stops the write and keeps the old file", async () => {
-  const build = finalBuild();
-  build["skills.tsv"] = "old\n";
-  build["build/3b_tagged_deduped.tsv"] = [
-    "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
-    ...["counting", "addition", "multiplication", "calculus"].map((id) =>
-      `${id}\t${id}\td\tfoundation\tgrade:1\t\tBad Topic`
-    ),
-  ].join("\n") + "\n";
-  build["build/4_difficulty.tsv"] += "calculus\t4\t4\n";
-  const { code, stderr, files } = await runIn("finalize", build);
-  assert(
-    code !== 0 &&
-      stderr.includes(
-        'skills.tsv:2: expected topics as slugs joined by commas, or empty, received "Bad Topic"',
+Deno.test(
+  "finalize: a bad cell in the output stops the write and keeps the old file",
+  early(async () => {
+    const build = finalBuild();
+    build["skills.tsv"] = "old\n";
+    build["build/3b_tagged_deduped.tsv"] = [
+      "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+      ...["counting", "addition", "multiplication", "calculus"].map((id) =>
+        `${id}\t${id}\td\tfoundation\tgrade:1\t\tBad Topic`
       ),
-    stderr,
-  );
-  assertEquals(files["skills.tsv"], "old\n");
-});
+    ].join("\n") + "\n";
+    build["build/4_difficulty.tsv"] += "calculus\t4\t4\n";
+    const { code, stderr, files } = await runIn("finalize", build);
+    assert(
+      code !== 0 &&
+        stderr.includes(
+          'skills.tsv:2: expected topics as slugs joined by commas, or empty, received "Bad Topic"',
+        ),
+      stderr,
+    );
+    assertEquals(files["skills.tsv"], "old\n");
+  }),
+);
 
 const SLUG_AS =
   "a slug (lowercase letters and digits joined by single hyphens, at most 80 characters)";
 
 // One bad cell per build table: the reader names the file, line, column,
 // expectation, and received text, then the stage to rerun.
-Deno.test("build tables: a bad cell stops the reading stage with a message that names the fix", async () => {
-  const withFiles = (base: Fixture, files: Fixture): Fixture => ({
-    ...base,
-    ...files,
-  });
-  const cases: [string, string, Fixture, string][] = [
-    [
-      "status",
-      "1_skills",
-      withFiles(goodBuild(), {
-        "build/1_skills.tsv":
-          "id\ttitle\tdescription\tsources\ttags\nAddition\tAddition\t\topensalt\tgrade:1\n",
-      }),
-      `build/1_skills.tsv:2: expected id as ${SLUG_AS}, received "Addition". Run: deno run -A pipeline.ts list`,
-    ],
-    [
-      "dedupe",
-      "3_tagged",
-      {
-        "build/3_tagged.tsv":
-          "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\ncounting\t\td\tfoundation\t\t\t\n",
-      },
-      'build/3_tagged.tsv:2: expected title as non-empty text, received ""',
-    ],
-    [
-      "finalize",
-      "3b_tagged_deduped",
-      withFiles(finalBuild(), {
-        "build/3b_tagged_deduped.tsv":
-          "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\ncounting\tcounting\td\tfoundation\n",
-      }),
-      "build/3b_tagged_deduped.tsv:2: expected 7 tab-separated fields, received 4. Run: deno run -A pipeline.ts dedupe",
-    ],
-    [
-      "finalize",
-      "3b_aliases",
-      withFiles(finalBuild(), {
-        "build/3b_aliases.tsv": "dropped_id\tcanonical_id\nghost\tCounting\n",
-      }),
-      `build/3b_aliases.tsv:2: expected canonical_id as ${SLUG_AS}, received "Counting". Run: deno run -A pipeline.ts dedupe`,
-    ],
-    [
-      "finalize",
-      "4_difficulty",
-      withFiles(finalBuild(), {
-        "build/4_difficulty.tsv":
-          "id\tdifficulty\tdifficulty_raw\ncounting\t1\t1\naddition\t2\t2\nmultiplication\t21\t3\n",
-      }),
-      'build/4_difficulty.tsv:4: expected difficulty as an integer 1–20, received "21". Run: deno run -A pipeline.ts difficulty',
-    ],
-    [
-      "finalize",
-      "6_edges",
-      withFiles(finalBuild(), {
-        "build/6_edges.tsv": "skill_id\tprereq_id\naddition\tcounting",
-      }),
-      'build/6_edges.tsv:2: expected a newline after the last row, received "addition\tcounting". Run: deno run -A pipeline.ts postproc',
-    ],
-    [
-      "status",
-      "1e_seed_edges",
-      withFiles(goodBuild(), {
-        "build/1e_seed_edges.tsv": seedHeader +
-          "counting\taddition\tkhan\t1.00\t2\t0\n",
-      }),
-      'build/1e_seed_edges.tsv:2: expected holdout as 0 or 1, received "2". Run: deno run -A pipeline.ts seed-edges',
-    ],
-    [
-      "status",
-      "2_ids",
-      withFiles(goodBuild(), {
-        "build/2_ids.tsv": goodBuild()["build/2_ids.tsv"] + "counting\n",
-      }),
-      'build/2_ids.tsv:7: expected unique id, received a second "counting". Run: deno run -A pipeline.ts embed',
-    ],
-    [
-      "status",
-      "5_prereqs",
-      withFiles(goodBuild(), {
-        "build/5_prereqs.tsv": "addition\tCounting\n",
-      }),
-      `build/5_prereqs.tsv:1: expected picks as "none" or slugs joined by commas, received "Counting". Run: deno run -A pipeline.ts prereq`,
-    ],
-    [
-      "prereq",
-      "2_pathological",
-      withFiles(finalBuild(), {
-        "build/2_ids.tsv": goodBuild()["build/2_ids.tsv"],
-        "build/2_embeddings.bin": goodBuild()["build/2_embeddings.bin"],
-        "build/2_pathological.tsv": "counting\nDep\n",
-      }),
-      `build/2_pathological.tsv:2: expected id as ${SLUG_AS}, received "Dep". Run: deno run -A pipeline.ts embed`,
-    ],
-    [
-      "status",
-      "skills.tsv",
-      withFiles(goodBuild(), {
-        "skills.tsv": goodBuild()["skills.tsv"] +
-          "late\tlate\tlate\t\t0\t\t\t\t\t\n",
-      }),
-      'skills.tsv:8: expected difficulty as an integer 1–20, received "0". Run: deno run -A pipeline.ts finalize',
-    ],
-    [
-      "postproc",
-      "5_prereqs ids",
-      withFiles(finalBuild(), {
-        "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\tghost\n",
-        "build/1e_seed_edges.tsv": seedHeader,
-      }),
-      'build/5_prereqs.tsv:2: expected a skill id from build/3b_tagged_deduped.tsv, received "ghost". Delete the rows of build/5_prereqs.tsv that name ids outside build/3b_tagged_deduped.tsv, then run: deno run -A pipeline.ts prereq',
-    ],
-    [
-      "postproc",
-      "1e_seed_edges ids",
-      withFiles(finalBuild(), {
-        "build/5_prereqs.tsv": "addition\tcounting\n",
-        "build/1e_seed_edges.tsv": seedHeader +
-          "counting\taddition\tkhan\t1.00\t0\t0\nghost\taddition\tkhan\t1.00\t1\t0\n",
-      }),
-      'build/1e_seed_edges.tsv:3: expected a skill id from build/3b_tagged_deduped.tsv, received "ghost". Run: deno run -A pipeline.ts seed-edges',
-    ],
-    [
-      "finalize",
-      "4_difficulty ids",
-      withFiles(finalBuild(), {
-        "build/4_difficulty.tsv": finalBuild()["build/4_difficulty.tsv"] +
-          "ghost\t4\t4\n",
-      }),
-      'build/4_difficulty.tsv:5: expected a skill id, received "ghost". Run: deno run -A pipeline.ts difficulty',
-    ],
-  ];
-  await Promise.all(cases.map(async ([stage, name, fixture, expected]) => {
-    const { code, stderr } = await runIn(stage, fixture, []);
-    assert(code !== 0 && stderr.includes(expected), `${name}: ${stderr}`);
-  }));
-});
+Deno.test(
+  "build tables: a bad cell stops the reading stage with a message that names the fix",
+  early(async () => {
+    const withFiles = (base: Fixture, files: Fixture): Fixture => ({
+      ...base,
+      ...files,
+    });
+    const cases: [string, string, Fixture, string][] = [
+      [
+        "status",
+        "1_skills",
+        withFiles(goodBuild(), {
+          "build/1_skills.tsv":
+            "id\ttitle\tdescription\tsources\ttags\nAddition\tAddition\t\topensalt\tgrade:1\n",
+        }),
+        `build/1_skills.tsv:2: expected id as ${SLUG_AS}, received "Addition". Run: deno run -A pipeline.ts list`,
+      ],
+      [
+        "dedupe",
+        "3_tagged",
+        {
+          "build/3_tagged.tsv":
+            "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\ncounting\t\td\tfoundation\t\t\t\n",
+        },
+        'build/3_tagged.tsv:2: expected title as non-empty text, received ""',
+      ],
+      [
+        "finalize",
+        "3b_tagged_deduped",
+        withFiles(finalBuild(), {
+          "build/3b_tagged_deduped.tsv":
+            "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\ncounting\tcounting\td\tfoundation\n",
+        }),
+        "build/3b_tagged_deduped.tsv:2: expected 7 tab-separated fields, received 4. Run: deno run -A pipeline.ts dedupe",
+      ],
+      [
+        "finalize",
+        "3b_aliases",
+        withFiles(finalBuild(), {
+          "build/3b_aliases.tsv": "dropped_id\tcanonical_id\nghost\tCounting\n",
+        }),
+        `build/3b_aliases.tsv:2: expected canonical_id as ${SLUG_AS}, received "Counting". Run: deno run -A pipeline.ts dedupe`,
+      ],
+      [
+        "finalize",
+        "4_difficulty",
+        withFiles(finalBuild(), {
+          "build/4_difficulty.tsv":
+            "id\tdifficulty\tdifficulty_raw\ncounting\t1\t1\naddition\t2\t2\nmultiplication\t21\t3\n",
+        }),
+        'build/4_difficulty.tsv:4: expected difficulty as an integer 1–20, received "21". Run: deno run -A pipeline.ts difficulty',
+      ],
+      [
+        "finalize",
+        "6_edges",
+        withFiles(finalBuild(), {
+          "build/6_edges.tsv": "skill_id\tprereq_id\naddition\tcounting",
+        }),
+        'build/6_edges.tsv:2: expected a newline after the last row, received "addition\tcounting". Run: deno run -A pipeline.ts postproc',
+      ],
+      [
+        "status",
+        "1e_seed_edges",
+        withFiles(goodBuild(), {
+          "build/1e_seed_edges.tsv": seedHeader +
+            "counting\taddition\tkhan\t1.00\t2\t0\n",
+        }),
+        'build/1e_seed_edges.tsv:2: expected holdout as 0 or 1, received "2". Run: deno run -A pipeline.ts seed-edges',
+      ],
+      [
+        "status",
+        "2_ids",
+        withFiles(goodBuild(), {
+          "build/2_ids.tsv": goodBuild()["build/2_ids.tsv"] + "counting\n",
+        }),
+        'build/2_ids.tsv:7: expected unique id, received a second "counting". Run: deno run -A pipeline.ts embed',
+      ],
+      [
+        "status",
+        "5_prereqs",
+        withFiles(goodBuild(), {
+          "build/5_prereqs.tsv": "addition\tCounting\n",
+        }),
+        `build/5_prereqs.tsv:1: expected picks as "none" or slugs joined by commas, received "Counting". Run: deno run -A pipeline.ts prereq`,
+      ],
+      [
+        "prereq",
+        "2_pathological",
+        withFiles(finalBuild(), {
+          "build/2_ids.tsv": goodBuild()["build/2_ids.tsv"],
+          "build/2_embeddings.bin": goodBuild()["build/2_embeddings.bin"],
+          "build/2_pathological.tsv": "counting\nDep\n",
+        }),
+        `build/2_pathological.tsv:2: expected id as ${SLUG_AS}, received "Dep". Run: deno run -A pipeline.ts embed`,
+      ],
+      [
+        "status",
+        "skills.tsv",
+        withFiles(goodBuild(), {
+          "skills.tsv": goodBuild()["skills.tsv"] +
+            "late\tlate\tlate\t\t0\t\t\t\t\t\n",
+        }),
+        'skills.tsv:8: expected difficulty as an integer 1–20, received "0". Run: deno run -A pipeline.ts finalize',
+      ],
+      [
+        "postproc",
+        "5_prereqs ids",
+        withFiles(finalBuild(), {
+          "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\tghost\n",
+          "build/1e_seed_edges.tsv": seedHeader,
+        }),
+        'build/5_prereqs.tsv:2: expected a skill id from build/3b_tagged_deduped.tsv, received "ghost". Delete the rows of build/5_prereqs.tsv that name ids outside build/3b_tagged_deduped.tsv, then run: deno run -A pipeline.ts prereq',
+      ],
+      [
+        "postproc",
+        "1e_seed_edges ids",
+        withFiles(finalBuild(), {
+          "build/5_prereqs.tsv": "addition\tcounting\n",
+          "build/1e_seed_edges.tsv": seedHeader +
+            "counting\taddition\tkhan\t1.00\t0\t0\nghost\taddition\tkhan\t1.00\t1\t0\n",
+        }),
+        'build/1e_seed_edges.tsv:3: expected a skill id from build/3b_tagged_deduped.tsv, received "ghost". Run: deno run -A pipeline.ts seed-edges',
+      ],
+      [
+        "finalize",
+        "4_difficulty ids",
+        withFiles(finalBuild(), {
+          "build/4_difficulty.tsv": finalBuild()["build/4_difficulty.tsv"] +
+            "ghost\t4\t4\n",
+        }),
+        'build/4_difficulty.tsv:5: expected a skill id, received "ghost". Run: deno run -A pipeline.ts difficulty',
+      ],
+    ];
+    await Promise.all(cases.map(async ([stage, name, fixture, expected]) => {
+      const { code, stderr } = await runIn(stage, fixture, []);
+      assert(code !== 0 && stderr.includes(expected), `${name}: ${stderr}`);
+    }));
+  }),
+);
 
 // The repo's data/ as symlinks, with the given data/ and build/ files written
 // in place of the originals.
@@ -632,66 +670,71 @@ const farm = (files: Record<string, string>): string => {
 };
 
 // Each of these exited 0, or crashed without naming the file.
-Deno.test("a bad input file or stage name stops the run and names the cause", async () => {
-  const esco = Deno.readTextFileSync("data/esco/skills_en.csv");
-  const [skillsHead, skillsRow] = Deno.readTextFileSync("data/onet/Skills.txt")
-    .split("\n").map((l) => l.split("\t"));
-  const onetSkillId = skillsRow[skillsHead.indexOf("Element ID")];
-  const cases: [string, Record<string, string>, string][] = [
-    ["constructor", {}, "unknown stage: constructor"],
-    [
-      "list",
-      {
-        "data/esco/skills_en.csv": esco.replace(
-          "preferredLabel",
-          "preferredLabe1",
-        ),
-      },
-      'data/esco/skills_en.csv: expected a column "preferredLabel"',
-    ],
-    [
-      "list",
-      { "data/onet/Task Statements.txt": "" },
-      "data/onet/Task Statements.txt: expected a header row",
-    ],
-    [
-      "list",
-      { "data/lightcast/skills.json": '{"attributions":[]}' },
-      "data/lightcast/skills.json: expected",
-    ],
-    [
-      "list",
-      {
-        "data/onet/Content Model Reference.txt":
-          "Element ID\tElement Name\tDescription\nElement ID\tElement Name\tDescription\n",
-      },
-      "data/onet/Content Model Reference.txt:2: expected a data row, received a copy of the header",
-    ],
-    [
-      "list",
-      {
-        "data/onet/Content Model Reference.txt":
-          "Element ID\tElement Name\tDescription\nx\ty\tz\n",
-      },
-      `data/onet/Skills.txt:2: expected element "${onetSkillId}" in data/onet/Content Model Reference.txt, received none`,
-    ],
-    [
-      "list",
-      { "build/1b_infill.tsv": "a\tdone\nb\thal" },
-      "build/1b_infill.tsv: expected a newline after the last row",
-    ],
-  ];
-  await Promise.all(cases.map(async ([stage, files, expected]) => {
-    const dir = farm(files);
-    const out = await run([stage], dir, 10_000);
-    Deno.removeSync(dir, { recursive: true });
-    const stderr = new TextDecoder().decode(out.stderr);
-    assert(
-      out.code !== 0 && stderr.includes(expected),
-      `${expected}: ${stderr}`,
-    );
-  }));
-});
+Deno.test(
+  "a bad input file or stage name stops the run and names the cause",
+  early(async () => {
+    const esco = Deno.readTextFileSync("data/esco/skills_en.csv");
+    const [skillsHead, skillsRow] = Deno.readTextFileSync(
+      "data/onet/Skills.txt",
+    )
+      .split("\n").map((l) => l.split("\t"));
+    const onetSkillId = skillsRow[skillsHead.indexOf("Element ID")];
+    const cases: [string, Record<string, string>, string][] = [
+      ["constructor", {}, "unknown stage: constructor"],
+      [
+        "list",
+        {
+          "data/esco/skills_en.csv": esco.replace(
+            "preferredLabel",
+            "preferredLabe1",
+          ),
+        },
+        'data/esco/skills_en.csv: expected a column "preferredLabel"',
+      ],
+      [
+        "list",
+        { "data/onet/Task Statements.txt": "" },
+        "data/onet/Task Statements.txt: expected a header row",
+      ],
+      [
+        "list",
+        { "data/lightcast/skills.json": '{"attributions":[]}' },
+        "data/lightcast/skills.json: expected",
+      ],
+      [
+        "list",
+        {
+          "data/onet/Content Model Reference.txt":
+            "Element ID\tElement Name\tDescription\nElement ID\tElement Name\tDescription\n",
+        },
+        "data/onet/Content Model Reference.txt:2: expected a data row, received a copy of the header",
+      ],
+      [
+        "list",
+        {
+          "data/onet/Content Model Reference.txt":
+            "Element ID\tElement Name\tDescription\nx\ty\tz\n",
+        },
+        `data/onet/Skills.txt:2: expected element "${onetSkillId}" in data/onet/Content Model Reference.txt, received none`,
+      ],
+      [
+        "list",
+        { "build/1b_infill.tsv": "a\tdone\nb\thal" },
+        "build/1b_infill.tsv: expected a newline after the last row",
+      ],
+    ];
+    await Promise.all(cases.map(async ([stage, files, expected]) => {
+      const dir = farm(files);
+      const out = await run([stage], dir, 10_000);
+      Deno.removeSync(dir, { recursive: true });
+      const stderr = new TextDecoder().decode(out.stderr);
+      assert(
+        out.code !== 0 && stderr.includes(expected),
+        `${expected}: ${stderr}`,
+      );
+    }));
+  }),
+);
 
 // REG-MF1: OpenSALT splits these concepts into hundreds of grade variants and
 // emits no hub, so data/_foundations.json supplies them. A foundation may merge
@@ -767,128 +810,158 @@ const difficultyCol = (files: Record<string, string>, i: number) =>
       .map((l) => l.split("\t")).map((c) => [c[0], Number(c[i])]),
   );
 
-Deno.test("difficulty: a DWA title anchors its skill, and a seed prereq sits in a lower band", async () => {
-  const { code, stderr, files } = await runIn("difficulty", difficultyBuild(), [
-    "build/4_difficulty.tsv",
-    "build/4_stats.json",
-  ]);
-  assertEquals(code, 0, stderr);
-  // The task statement and the DWA title each anchor one skill.
-  assertEquals(
-    JSON.parse(files["build/4_stats.json"]).anchors.zone,
-    2,
-    "the DWA title skill has no job-zone anchor",
-  );
-  const band = difficultyCol(files, 1);
-  assert(
-    band.get("pre")! < band.get("dep")!,
-    `seed prereq band ${band.get("pre")} is not below dependent band ${
-      band.get("dep")
-    }`,
-  );
-});
+Deno.test(
+  "difficulty: a DWA title anchors its skill, and a seed prereq sits in a lower band",
+  early(async () => {
+    const { code, stderr, files } = await runIn(
+      "difficulty",
+      difficultyBuild(),
+      [
+        "build/4_difficulty.tsv",
+        "build/4_stats.json",
+      ],
+    );
+    assertEquals(code, 0, stderr);
+    // The task statement and the DWA title each anchor one skill.
+    assertEquals(
+      JSON.parse(files["build/4_stats.json"]).anchors.zone,
+      2,
+      "the DWA title skill has no job-zone anchor",
+    );
+    const band = difficultyCol(files, 1);
+    assert(
+      band.get("pre")! < band.get("dep")!,
+      `seed prereq band ${band.get("pre")} is not below dependent band ${
+        band.get("dep")
+      }`,
+    );
+  }),
+);
 
-const seedHeader = "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback\n";
 const withSeeds = (pairs: string[][]): Fixture => ({
   ...difficultyBuild(),
   "build/1e_seed_edges.tsv": seedHeader +
     pairs.map(([a, b]) => `${a}\t${b}\tkhan\t1.00\t0\t0\n`).join(""),
 });
 
-Deno.test("difficulty: a seed chain is ordered in any seed order", async () => {
-  await Promise.all(
-    [[["a", "b"], ["b", "c"]], [["b", "c"], ["a", "b"]]].map(async (pairs) => {
-      const { code, stderr, files } = await runIn(
+Deno.test(
+  "difficulty: a seed chain is ordered in any seed order",
+  early(async () => {
+    await Promise.all(
+      [[["a", "b"], ["b", "c"]], [["b", "c"], ["a", "b"]]].map(
+        async (pairs) => {
+          const { code, stderr, files } = await runIn(
+            "difficulty",
+            withSeeds(pairs),
+            ["build/4_difficulty.tsv"],
+          );
+          assertEquals(code, 0, stderr);
+          const band = difficultyCol(files, 1);
+          assert(
+            band.get("a")! < band.get("b")! && band.get("b")! < band.get("c")!,
+            `chain bands a=${band.get("a")} b=${band.get("b")} c=${
+              band.get("c")
+            }`,
+          );
+        },
+      ),
+    );
+  }),
+);
+
+Deno.test(
+  "difficulty: a seed dependent anchored at the lowest band drops the pair",
+  early(async () => {
+    const build = withSeeds([["pre", "dep"]]);
+    build["build/3b_tagged_deduped.tsv"] =
+      (build["build/3b_tagged_deduped.tsv"] as string)
+        .replace("dep\tDep\t\ttest\t\t", "dep\tDep\t\ttest\tgrade:PK\t");
+    const { code, stderr, files } = await runIn("difficulty", build, [
+      "build/4_difficulty.tsv",
+      "build/4_stats.json",
+    ]);
+    assertEquals(code, 0, stderr);
+    assertEquals(difficultyCol(files, 1).get("dep"), 1);
+    assertEquals(
+      JSON.parse(files["build/4_stats.json"]).seed_anchor_conflicts,
+      1,
+    );
+  }),
+);
+
+Deno.test(
+  "difficulty: a seed self-loop or unknown id stops the stage",
+  early(async () => {
+    await Promise.all(
+      [[["a", "a"]], [["a", "ghost"]]].map(async (pairs) => {
+        const { code, stderr } = await runIn(
+          "difficulty",
+          withSeeds(pairs),
+          [],
+        );
+        assert(code !== 0, `seeds ${JSON.stringify(pairs)} exit 0`);
+        assert(/self-loop|not in build\/1_skills/.test(stderr), stderr);
+      }),
+    );
+  }),
+);
+
+Deno.test(
+  "difficulty: a seed cycle is skipped and counted, and a seed never moves an anchored skill",
+  early(async () => {
+    const outs = ["build/4_difficulty.tsv", "build/4_stats.json"];
+    const [cycle, conflict, none, chain, anchoredChain] = await Promise.all([
+      runIn("difficulty", withSeeds([["a", "b"], ["b", "a"]]), outs),
+      runIn("difficulty", withSeeds([["grade-high", "grade-low"]]), outs),
+      runIn("difficulty", withSeeds([]), outs),
+      runIn(
         "difficulty",
-        withSeeds(pairs),
-        ["build/4_difficulty.tsv"],
-      );
-      assertEquals(code, 0, stderr);
-      const band = difficultyCol(files, 1);
-      assert(
-        band.get("a")! < band.get("b")! && band.get("b")! < band.get("c")!,
-        `chain bands a=${band.get("a")} b=${band.get("b")} c=${band.get("c")}`,
-      );
-    }),
-  );
-});
-
-Deno.test("difficulty: a seed dependent anchored at the lowest band drops the pair", async () => {
-  const build = withSeeds([["pre", "dep"]]);
-  build["build/3b_tagged_deduped.tsv"] =
-    (build["build/3b_tagged_deduped.tsv"] as string)
-      .replace("dep\tDep\t\ttest\t\t", "dep\tDep\t\ttest\tgrade:PK\t");
-  const { code, stderr, files } = await runIn("difficulty", build, [
-    "build/4_difficulty.tsv",
-    "build/4_stats.json",
-  ]);
-  assertEquals(code, 0, stderr);
-  assertEquals(difficultyCol(files, 1).get("dep"), 1);
-  assertEquals(
-    JSON.parse(files["build/4_stats.json"]).seed_anchor_conflicts,
-    1,
-  );
-});
-
-Deno.test("difficulty: a seed self-loop or unknown id stops the stage", async () => {
-  await Promise.all(
-    [[["a", "a"]], [["a", "ghost"]]].map(async (pairs) => {
-      const { code, stderr } = await runIn("difficulty", withSeeds(pairs), []);
-      assert(code !== 0, `seeds ${JSON.stringify(pairs)} exit 0`);
-      assert(/self-loop|not in build\/1_skills/.test(stderr), stderr);
-    }),
-  );
-});
-
-Deno.test("difficulty: a seed cycle is skipped and counted, and a seed never moves an anchored skill", async () => {
-  const outs = ["build/4_difficulty.tsv", "build/4_stats.json"];
-  const [cycle, conflict, none, chain, anchoredChain] = await Promise.all([
-    runIn("difficulty", withSeeds([["a", "b"], ["b", "a"]]), outs),
-    runIn("difficulty", withSeeds([["grade-high", "grade-low"]]), outs),
-    runIn("difficulty", withSeeds([]), outs),
-    runIn(
-      "difficulty",
-      withSeeds([["grade-high", "a"], ["a", "grade-low"]]),
-      outs,
-    ),
-    runIn("difficulty", withSeeds([["grade-high", "a"], ["a", "b"]]), outs),
-  ]);
-  assertEquals(anchoredChain.code, 0, anchoredChain.stderr);
-  const band = difficultyCol(anchoredChain.files, 1);
-  assert(
-    band.get("grade-high")! < band.get("a")! && band.get("a")! < band.get("b")!,
-    `chain bands grade-high=${band.get("grade-high")} a=${band.get("a")} b=${
-      band.get("b")
-    }`,
-  );
-  assertEquals(
-    difficultyCol(anchoredChain.files, 2).get("a"),
-    difficultyCol(none.files, 2).get("a"),
-    "a seed moved a raw value",
-  );
-  assertEquals(chain.code, 0, chain.stderr);
-  assertEquals(
-    JSON.parse(chain.files["build/4_stats.json"]).seed_anchor_conflicts,
-    2,
-  );
-  assertEquals(cycle.code, 0, cycle.stderr);
-  const stats = (r: typeof cycle) => JSON.parse(r.files["build/4_stats.json"]);
-  assertEquals(stats(cycle).seed_cycle_pairs, 2);
-  assertEquals(conflict.code, 0, conflict.stderr);
-  assertEquals(stats(conflict).seed_anchor_conflicts, 1);
-  assertEquals(stats(conflict).seed_pairs, 1);
-  assertEquals(stats(chain).seed_pairs, 2);
-  assertEquals(
-    difficultyCol(chain.files, 2).get("a"),
-    difficultyCol(none.files, 2).get("a"),
-    "a dropped seed pair moved a raw value",
-  );
-  assertEquals(stats(none).seed_anchor_conflicts, 0);
-  assertEquals(stats(none).seed_cycle_pairs, 0);
-  const [moved, kept] = [conflict, none].map((r) => difficultyCol(r.files, 1));
-  assertEquals(moved.get("grade-high"), kept.get("grade-high"));
-  assertEquals(moved.get("grade-low"), kept.get("grade-low"));
-});
+        withSeeds([["grade-high", "a"], ["a", "grade-low"]]),
+        outs,
+      ),
+      runIn("difficulty", withSeeds([["grade-high", "a"], ["a", "b"]]), outs),
+    ]);
+    assertEquals(anchoredChain.code, 0, anchoredChain.stderr);
+    const band = difficultyCol(anchoredChain.files, 1);
+    assert(
+      band.get("grade-high")! < band.get("a")! &&
+        band.get("a")! < band.get("b")!,
+      `chain bands grade-high=${band.get("grade-high")} a=${band.get("a")} b=${
+        band.get("b")
+      }`,
+    );
+    assertEquals(
+      difficultyCol(anchoredChain.files, 2).get("a"),
+      difficultyCol(none.files, 2).get("a"),
+      "a seed moved a raw value",
+    );
+    assertEquals(chain.code, 0, chain.stderr);
+    assertEquals(
+      JSON.parse(chain.files["build/4_stats.json"]).seed_anchor_conflicts,
+      2,
+    );
+    assertEquals(cycle.code, 0, cycle.stderr);
+    const stats = (r: typeof cycle) =>
+      JSON.parse(r.files["build/4_stats.json"]);
+    assertEquals(stats(cycle).seed_cycle_pairs, 2);
+    assertEquals(conflict.code, 0, conflict.stderr);
+    assertEquals(stats(conflict).seed_anchor_conflicts, 1);
+    assertEquals(stats(conflict).seed_pairs, 1);
+    assertEquals(stats(chain).seed_pairs, 2);
+    assertEquals(
+      difficultyCol(chain.files, 2).get("a"),
+      difficultyCol(none.files, 2).get("a"),
+      "a dropped seed pair moved a raw value",
+    );
+    assertEquals(stats(none).seed_anchor_conflicts, 0);
+    assertEquals(stats(none).seed_cycle_pairs, 0);
+    const [moved, kept] = [conflict, none].map((r) =>
+      difficultyCol(r.files, 1)
+    );
+    assertEquals(moved.get("grade-high"), kept.get("grade-high"));
+    assertEquals(moved.get("grade-low"), kept.get("grade-low"));
+  }),
+);
 
 // Stage list over a temp data dir whose OpenSALT folder holds only `items`.
 const listOpensalt = async (items: Record<string, string>[]) => {
@@ -917,130 +990,172 @@ const listOpensalt = async (items: Record<string, string>[]) => {
   return { code: out.code, stdout, stderr, titles, ids };
 };
 
-Deno.test("list: OpenSALT blocks split words, non-Latin titles fold or drop, a script stops the stage", async () => {
-  const [ok, bad] = await Promise.all([
-    listOpensalt([
-      {
-        fullStatement:
-          "<p>Add fractions</p><p>with unlike denominators correctly</p>",
-      },
-      { fullStatement: "Spell Straße correctly in writing" },
-      { fullStatement: "Spell Søren correctly in writing" },
-      { fullStatement: "Spell Łódź correctly in writing" },
-      { fullStatement: "Spell Iğdır ılık correctly in writing" },
-      { fullStatement: "日本語の 標準を学ぶ ことができる" },
-      { fullStatement: "日本語の 別の標準を学ぶ ことができる" },
-    ]),
-    listOpensalt([{
-      identifier: "x1",
-      fullStatement: "Solve <script>alert(1)</script>equations well",
-    }]),
-  ]);
-  assertEquals(ok.code, 0, ok.stderr);
-  assert(
-    ok.titles.includes("Add fractions with unlike denominators correctly"),
-    `blocks glued: ${JSON.stringify(ok.titles)}`,
-  );
-  for (const w of ["strasse", "soren", "lodz", "igdir-ilik"]) {
+// Straße and Strasse differ as titles but fold to one 80-char slug.
+const LONG =
+  "Explain careful classroom experiments compare observed predicted results";
+
+Deno.test(
+  "list: OpenSALT blocks split words, non-Latin titles fold or drop, a script stops the stage",
+  early(async () => {
+    const [ok, bad] = await Promise.all([
+      listOpensalt([
+        {
+          fullStatement:
+            "<p>Add fractions</p><p>with unlike denominators correctly</p>",
+        },
+        { fullStatement: "Spell Straße correctly in writing" },
+        { fullStatement: "Spell Søren correctly in writing" },
+        { fullStatement: "Spell Łódź correctly in writing" },
+        { fullStatement: "Spell Iğdır ılık correctly in writing" },
+        { fullStatement: "日本語の 標準を学ぶ ことができる" },
+        { fullStatement: "日本語の 別の標準を学ぶ ことができる" },
+        { fullStatement: `${LONG} Straße` },
+        { fullStatement: `${LONG} Strasse` },
+      ]),
+      listOpensalt([{
+        identifier: "x1",
+        fullStatement: "Solve <script>alert(1)</script>equations well",
+      }]),
+    ]);
+    assertEquals(ok.code, 0, ok.stderr);
     assert(
-      ok.ids.includes(`spell-${w}-correctly-in-writing`),
-      `no id for ${w}`,
+      ok.titles.includes("Add fractions with unlike denominators correctly"),
+      `blocks glued: ${JSON.stringify(ok.titles)}`,
     );
-  }
-  assert(
-    /dropped 2 titles with an empty key/.test(ok.stdout),
-    `no drop count in stdout: ${ok.stdout.slice(-400)}`,
-  );
-  assertEquals(bad.code, 1);
-  assert(
-    /a\.json item x1: expected statement markup, received a <script> element/
-      .test(bad.stderr),
-    bad.stderr.slice(-400),
-  );
-});
+    for (const w of ["strasse", "soren", "lodz", "igdir-ilik"]) {
+      assert(
+        ok.ids.includes(`spell-${w}-correctly-in-writing`),
+        `no id for ${w}`,
+      );
+    }
+    assert(
+      /dropped 2 titles with an empty key/.test(ok.stdout),
+      `no drop count in stdout: ${ok.stdout.slice(-400)}`,
+    );
+    const long = ok.ids.filter((_, i) => ok.titles[i].startsWith(LONG));
+    assertEquals(long.length, 2, `long ids: ${JSON.stringify(long)}`);
+    assertEquals(new Set(long).size, 2, `long ids collide: ${long}`);
+    for (const id of long) {
+      assert(
+        id.length <= 80 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(id),
+        `bad long id (expected at most 80 chars, a slug): ${id}`,
+      );
+    }
+    assertEquals(bad.code, 1);
+    assert(
+      /a\.json item x1: expected statement markup, received a <script> element/
+        .test(bad.stderr),
+      bad.stderr.slice(-400),
+    );
+  }),
+);
 
-Deno.test("difficulty: a seed prereq in a high topic still lands below its dependent", async () => {
-  const S: [string, number, string, string][] = [
-    ["khan-low", 0, "", ""],
-    ["khan-high", 1, "", ""],
-    ["h1", 2, "grade:12", "hi"],
-    ["h2", 3, "grade:12", "hi"],
-    ["h3", 4, "grade:12", "hi"],
-    ["l1", 5, "grade:K", "lo"],
-    ["l2", 6, "grade:K", "lo"],
-    ["l3", 7, "grade:K", "lo"],
-    ["p", 2, "", "hi"],
-    ["d", 2, "", "lo"],
-    ["do-the-budget", 2, "", ""],
-  ];
-  const emb = new Float32Array(S.length * 768);
-  S.forEach((s, i) => emb[i * 768 + s[1]] = 1);
-  const { code, stderr, files } = await runIn("difficulty", {
-    ...difficultyBuild(),
-    "build/3b_tagged_deduped.tsv": [
-      "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
-      ...S.map(([id, , tags, top]) =>
-        [
-          id,
-          id === "do-the-budget" ? "Do the budget." : id.replace(/-/g, " "),
-          "",
-          "opensalt",
-          tags,
-          "",
-          top,
-        ].join("\t")
+Deno.test(
+  "difficulty: a seed prereq in a high topic still lands below its dependent",
+  early(async () => {
+    const S: [string, number, string, string][] = [
+      ["khan-low", 0, "", ""],
+      ["khan-high", 1, "", ""],
+      ["h1", 2, "grade:12", "hi"],
+      ["h2", 3, "grade:12", "hi"],
+      ["h3", 4, "grade:12", "hi"],
+      ["l1", 5, "grade:K", "lo"],
+      ["l2", 6, "grade:K", "lo"],
+      ["l3", 7, "grade:K", "lo"],
+      ["p", 2, "", "hi"],
+      ["d", 2, "", "lo"],
+      ["do-the-budget", 2, "", ""],
+    ];
+    const emb = new Float32Array(S.length * 768);
+    S.forEach((s, i) => emb[i * 768 + s[1]] = 1);
+    const { code, stderr, files } = await runIn("difficulty", {
+      ...difficultyBuild(),
+      "build/3b_tagged_deduped.tsv": [
+        "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+        ...S.map(([id, , tags, top]) =>
+          [
+            id,
+            id === "do-the-budget" ? "Do the budget." : id.replace(/-/g, " "),
+            "",
+            "opensalt",
+            tags,
+            "",
+            top,
+          ].join("\t")
+        ),
+      ].join("\n") + "\n",
+      "build/2_ids.tsv": S.map((s) => s[0]).join("\n") + "\n",
+      "build/2_embeddings.bin": new Uint8Array(emb.buffer),
+      "build/1e_seed_edges.tsv": seedHeader + "p\td\tkhan\t1.00\t0\t0\n",
+    }, ["build/4_difficulty.tsv"]);
+    assertEquals(code, 0, stderr);
+    const band = difficultyCol(files, 1);
+    assert(
+      band.get("p")! < band.get("d")!,
+      `p band ${band.get("p")} is not below d band ${band.get("d")}`,
+    );
+  }),
+);
+
+Deno.test(
+  "difficulty: a seed never raises a grade-anchored dependent",
+  early(async () => {
+    // Shared embeddings make kNN smoothing pull grade-low and grade-high together.
+    const same = (pairs: string[][]) => {
+      const build = withSeeds(pairs);
+      const emb = new Float32Array(768 * 11);
+      for (let i = 0; i < 11; i++) emb[i * 768 + (i === 1 ? 0 : i)] = 1;
+      build["build/2_embeddings.bin"] = new Uint8Array(emb.buffer);
+      return build;
+    };
+    const outs = ["build/4_difficulty.tsv"];
+    const [seeded, none] = await Promise.all([
+      runIn("difficulty", same([["grade-low", "grade-high"]]), outs),
+      runIn("difficulty", same([]), outs),
+    ]);
+    assertEquals(seeded.code, 0, seeded.stderr);
+    for (const col of [1, 2]) {
+      assertEquals(
+        difficultyCol(seeded.files, col).get("grade-high"),
+        difficultyCol(none.files, col).get("grade-high"),
+      );
+    }
+  }),
+);
+
+Deno.test(
+  "trees: a dump with no slugs stops the stage",
+  early(async () => {
+    const dir = Deno.makeTempDirSync();
+    Deno.mkdirSync(`${dir}/data/lcsh`, { recursive: true });
+    Deno.mkdirSync(`${dir}/build`);
+    Deno.writeFileSync(
+      `${dir}/data/lcsh/subjects.skosrdf.nt.gz`,
+      await gzip(
+        '<http://id.loc.gov/authorities/subjects/sh1> <http://www.w3.org/2004/02/skos/core#prefLabel> "Algebra"@en .\n' +
+          "<http://id.loc.gov/authorities/subjects/sh1> <http://www.w3.org/2004/02/skos/core#broader> <http://id.loc.gov/authorities/subjects/sh2> .\n",
       ),
-    ].join("\n") + "\n",
-    "build/2_ids.tsv": S.map((s) => s[0]).join("\n") + "\n",
-    "build/2_embeddings.bin": new Uint8Array(emb.buffer),
-    "build/1e_seed_edges.tsv": seedHeader + "p\td\tkhan\t1.00\t0\t0\n",
-  }, ["build/4_difficulty.tsv"]);
-  assertEquals(code, 0, stderr);
-  const band = difficultyCol(files, 1);
-  assert(
-    band.get("p")! < band.get("d")!,
-    `p band ${band.get("p")} is not below d band ${band.get("d")}`,
-  );
-});
-
-Deno.test("difficulty: a seed never raises a grade-anchored dependent", async () => {
-  // Shared embeddings make kNN smoothing pull grade-low and grade-high together.
-  const same = (pairs: string[][]) => {
-    const build = withSeeds(pairs);
-    const emb = new Float32Array(768 * 11);
-    for (let i = 0; i < 11; i++) emb[i * 768 + (i === 1 ? 0 : i)] = 1;
-    build["build/2_embeddings.bin"] = new Uint8Array(emb.buffer);
-    return build;
-  };
-  const outs = ["build/4_difficulty.tsv"];
-  const [seeded, none] = await Promise.all([
-    runIn("difficulty", same([["grade-low", "grade-high"]]), outs),
-    runIn("difficulty", same([]), outs),
-  ]);
-  assertEquals(seeded.code, 0, seeded.stderr);
-  for (const col of [1, 2]) {
-    assertEquals(
-      difficultyCol(seeded.files, col).get("grade-high"),
-      difficultyCol(none.files, col).get("grade-high"),
     );
-  }
-});
+    const out = await run(["trees"], dir, 10_000);
+    Deno.removeSync(dir, { recursive: true });
+    const stderr = new TextDecoder().decode(out.stderr);
+    const expected =
+      "gunzip -c data/lcsh/subjects.skosrdf.nt.gz: expected at least 1 slug with an ancestor, received 0";
+    assert(out.code !== 0 && stderr.includes(expected), stderr);
+  }),
+);
 
-Deno.test("trees: a dump with no slugs stops the stage", async () => {
-  const dir = Deno.makeTempDirSync();
-  Deno.mkdirSync(`${dir}/data/lcsh`, { recursive: true });
-  Deno.mkdirSync(`${dir}/build`);
-  Deno.writeFileSync(
-    `${dir}/data/lcsh/subjects.skosrdf.nt.gz`,
-    await gzip(
-      '<http://id.loc.gov/authorities/subjects/sh1> <http://www.w3.org/2004/02/skos/core#prefLabel> "Algebra"@en .\n' +
-        "<http://id.loc.gov/authorities/subjects/sh1> <http://www.w3.org/2004/02/skos/core#broader> <http://id.loc.gov/authorities/subjects/sh2> .\n",
-    ),
+const list = await listP;
+if (!list.success) {
+  throw new Error(
+    `pipeline.ts list exited ${list.code} after ${
+      ((performance.now() - t0) / 1000).toFixed(1)
+    } s (bound ${LIST_BOUND_MS / 1000} s):\n${
+      new TextDecoder().decode(list.stderr).slice(-2000)
+    }`,
   );
-  const out = await run(["trees"], dir, 10_000);
-  Deno.removeSync(dir, { recursive: true });
-  const stderr = new TextDecoder().decode(out.stderr);
-  const expected =
-    "gunzip -c data/lcsh/subjects.skosrdf.nt.gz: expected at least 1 slug with an ancestor, received 0";
-  assert(out.code !== 0 && stderr.includes(expected), stderr);
-});
+}
+const [header, ...rows] = Deno.readTextFileSync("build/1_skills.tsv").split(
+  "\n",
+)
+  .filter((l) => l.length).map((l) => l.split("\t"));
