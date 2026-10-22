@@ -28,7 +28,8 @@ export function h32(s: string): number {
 }
 
 export const slugify = (s: string) => {
-  const base = decodeEntities(s).toLowerCase()
+  const base = decodeEntities(s).normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
     .trim()
     .replace(/\s+/g, "-")

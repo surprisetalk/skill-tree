@@ -43,6 +43,8 @@ Deno.test("list: every row has 5 fields, a slug id, a title, and sources; ids ar
     rows.length,
     "duplicate ids",
   );
+  const canapes = rows.find((c) => c[1] === "Prepare canapés");
+  assertEquals(canapes?.[0], "prepare-canapes");
 });
 
 Deno.test("list stats: all four sources contribute, and dedupe merged rows", () => {
