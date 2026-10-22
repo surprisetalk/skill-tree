@@ -73,21 +73,36 @@ Deno.test("list stats: all four sources contribute, and dedupe merged rows", () 
   assertGreater(s.dedupe_collisions, 0, "no dedupe collisions");
 });
 
-// REG-EC1, REG-EC2, REG-R5: metadata, question, and scaffolding prefixes.
-Deno.test("list: no title starts with a metadata, question, or scaffolding prefix", () => {
+// REG-EC1, REG-EC2, REG-R5: metadata, question, and scaffolding title prefixes.
+// REG-TG2: deriveDisplay falls back to code:* tags, so a short one becomes a display title.
+// Mojibake is UTF-8 read as Windows-1252: a lead byte (Â, Ã, â) followed by a char
+// from the 0x80–0xBF continuation range as cp1252 shows it. A lone Â is a mangled
+// no-break space after the pipeline collapses whitespace.
+Deno.test("list: no bad title prefix, short code:* tag, or double-encoded UTF-8", () => {
   // First letter only is case-insensitive, so acronyms like "CAN Bus" pass.
   const prefix =
     /^((Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]+|([Cc]an|[Cc]ould|[Ss]hould|[Hh]ow to|[Ww]hat is|[Ww]hy does)\s|[Ww]ith\s+(prompting|guidance|support))/;
-  const bad = rows.map((c) => c[1]).filter((t) => prefix.test(t));
-  assertEquals(bad.slice(0, 5), [], `${bad.length} titles with a prefix`);
-});
-
-// REG-TG2: deriveDisplay falls back to code:* tags, so a short one becomes a display title.
-Deno.test("list: every code:* tag has at least 4 chars", () => {
-  const bad = rows.flatMap((c) => c[4].split(",")).filter((t) =>
+  const badTitles = rows.map((c) => c[1]).filter((t) => prefix.test(t));
+  assertEquals(
+    badTitles.slice(0, 5),
+    [],
+    `${badTitles.length} titles with a prefix`,
+  );
+  const shortTags = rows.flatMap((c) => c[4].split(",")).filter((t) =>
     t.startsWith("code:") && t.length < "code:".length + 4
   );
-  assertEquals(bad.slice(0, 5), [], `${bad.length} short code:* tags`);
+  assertEquals(
+    shortTags.slice(0, 5),
+    [],
+    `${shortTags.length} short code:* tags`,
+  );
+  const mojibake = /[ÂÃâ][\u0080-¿ŒœŠšŸŽžƒˆ˜–-›€™]|Â(\s|$)/;
+  const badRows = rows.filter((c) => c.some((f) => mojibake.test(f)));
+  assertEquals(
+    badRows.slice(0, 3).map((c) => c[0]),
+    [],
+    `${badRows.length} rows`,
+  );
 });
 
 // A small build that passes every status condition. Each test mutates a copy.
@@ -713,15 +728,6 @@ Deno.test("list: every foundation lands in a skill", () => {
   for (const id of ["addition", "multiplication", "fractions", "loops"]) {
     assert(rows.some((c) => c[0] === id), `no skill has id ${id}`);
   }
-});
-
-// UTF-8 read as Windows-1252: a lead byte (Â, Ã, â) followed by a char from the
-// 0x80–0xBF continuation range as cp1252 shows it. A lone Â is a mangled
-// no-break space after the pipeline collapses whitespace.
-Deno.test("list: no field holds double-encoded UTF-8", () => {
-  const mojibake = /[ÂÃâ][\u0080-¿ŒœŠšŸŽžƒˆ˜–-›€™]|Â(\s|$)/;
-  const bad = rows.filter((c) => c.some((f) => mojibake.test(f)));
-  assertEquals(bad.slice(0, 3).map((c) => c[0]), [], `${bad.length} rows`);
 });
 
 // A tiny difficulty input. Embeddings are orthogonal, so each anchor keeps its
