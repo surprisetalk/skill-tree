@@ -672,3 +672,14 @@ Deno.test("list: OpenSALT leaves no literal tag from entity-encoded markup", asy
   assert(t !== undefined, JSON.stringify(titles.slice(-3)));
   assert(!/<\/?[a-z][^>]*>/i.test(t), t);
 });
+
+Deno.test("list: OpenSALT drops an unclosed script or style body", async () => {
+  const { code, stderr, titles } = await listOpensalt([
+    { fullStatement: "Alpha <script>evil call here" },
+    { fullStatement: "Beta <style>.x{color:red} here more" },
+    { fullStatement: "Count objects in a small group" },
+  ]);
+  assertEquals(code, 0, stderr);
+  const bad = titles.filter((t) => /evil call|color:red/.test(t));
+  assertEquals(bad, []);
+});

@@ -48,10 +48,11 @@ const BLOCK_TAG = new RegExp(
 const htmlText = (s: string): string =>
   // The parser decodes `&lt;b&gt;` to `<b>`, so a second strip removes it.
   new DOMParser().parseFromString(
-    "<body>" + s.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
-      .replace(BLOCK_TAG, " ")
-      .replace(/<!--(?![\s\S]*?-->)/g, "&lt;!--")
-      .replace(new RegExp(`<(?!${TAG}|!--)`, "gi"), "&lt;"),
+    "<body>" +
+      s.replace(/<(script|style)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, " ")
+        .replace(BLOCK_TAG, " ")
+        .replace(/<!--(?![\s\S]*?-->)/g, "&lt;!--")
+        .replace(new RegExp(`<(?!${TAG}|!--)`, "gi"), "&lt;"),
     "text/html",
   ).body.textContent.replace(new RegExp(`<${TAG}`, "gi"), " ");
 
