@@ -616,7 +616,7 @@ Deno.test("difficulty: a seed self-loop or unknown id stops the stage", async ()
 
 Deno.test("difficulty: a seed cycle is skipped and counted, and a seed never moves an anchored skill", async () => {
   const outs = ["build/4_difficulty.tsv", "build/4_stats.json"];
-  const [cycle, conflict, none, chain] = await Promise.all([
+  const [cycle, conflict, none, chain, anchoredChain] = await Promise.all([
     runIn("difficulty", withSeeds([["a", "b"], ["b", "a"]]), outs),
     runIn("difficulty", withSeeds([["grade-high", "grade-low"]]), outs),
     runIn("difficulty", withSeeds([]), outs),
@@ -625,7 +625,16 @@ Deno.test("difficulty: a seed cycle is skipped and counted, and a seed never mov
       withSeeds([["grade-high", "a"], ["a", "grade-low"]]),
       outs,
     ),
+    runIn("difficulty", withSeeds([["grade-high", "a"], ["a", "b"]]), outs),
   ]);
+  assertEquals(anchoredChain.code, 0, anchoredChain.stderr);
+  const raw = difficultyCol(anchoredChain.files, 2);
+  assert(
+    raw.get("grade-high")! < raw.get("a")! && raw.get("a")! < raw.get("b")!,
+    `chain raws grade-high=${raw.get("grade-high")} a=${raw.get("a")} b=${
+      raw.get("b")
+    }`,
+  );
   assertEquals(chain.code, 0, chain.stderr);
   assertEquals(
     JSON.parse(chain.files["build/4_stats.json"]).seed_anchor_conflicts,

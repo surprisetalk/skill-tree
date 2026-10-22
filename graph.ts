@@ -1560,21 +1560,26 @@ export function stageDifficulty() {
         : lo[si] + 1 <= hi[di];
     const seeds = acyclic.filter(holds);
     seedAnchorConflicts = acyclic.length - seeds.length;
-    // One pass per chain link at most. The seeds are a DAG, so a pass that
-    // still moves a skill after seeds.length + 1 passes is a bug.
+    // Clamp each unanchored skill into [lo, hi], then only raise dependents.
+    // A raise stays under hi, because kept pairs have hi[si] + 1 <= hi[di].
+    // The seeds are a DAG, so a pass that still moves a skill after
+    // seeds.length + 1 passes is a bug.
     const lowered = new Set<number>();
     const settle = (v: Float32Array) => {
+      for (let i = 0; i < v.length; i++) {
+        if (!Number.isNaN(anchor[i])) continue;
+        const c = Math.min(Math.max(v[i], lo[i]), hi[i]);
+        if (c !== v[i]) {
+          v[i] = c;
+          lowered.add(i);
+        }
+      }
       for (let pass = 0;; pass++) {
         let moved = false;
         for (const [si, di] of seeds) {
           if (v[si] < v[di]) continue;
-          if (Number.isNaN(anchor[si])) {
-            v[si] = v[di] - 1.0;
-            lowered.add(si);
-          } else if (Number.isNaN(anchor[di])) {
-            v[di] = v[si] + 1.0;
-            lowered.add(di);
-          } else continue;
+          v[di] = v[si] + 1.0;
+          lowered.add(di);
           moved = true;
         }
         if (!moved) break;
