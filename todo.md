@@ -9,14 +9,20 @@
       (E2) and applies the ENR1–4 prompts.
   1. `ollama pull gpt-oss:20b`. The Mac has only `nomic-embed-text` today, so
      stages `enrich` and `prereq` stop on their first request.
-  2. `git rm build/1b_infill.tsv build/1c_summarize.tsv build/1d_onet_desc.tsv build/5_prereqs.tsv`.
-  3. Run `deno run -A pipeline.ts enrich`. It now also translates the MOOCCubeX
+  2. Smoke-test one prompt per `num_predict` (60, 120, 200, 600) with
+     `curl localhost:11434/api/generate`. gpt-oss thinks before it answers, and
+     the thinking counts against `num_predict`, so a short limit can return an
+     empty `response`. If it does, raise that limit or send `think: "low"` in
+     `generateOne` (lib.ts). `resumableOllama` stops a stage after 200 answers
+     when over half come back rejected.
+  3. `git rm build/1b_infill.tsv build/1c_summarize.tsv build/1d_onet_desc.tsv build/5_prereqs.tsv`.
+  4. Run `deno run -A pipeline.ts enrich`. It now also translates the MOOCCubeX
      labels into `build/1f_translate.tsv`; commit that cache. Stage `list` drops
      25k long titles today, because the summarize cache has only 3.4k rows and
      the OpenSALT description cache is empty.
-  4. Run `deno run -A pipeline.ts`. Stage `seed-edges` now runs after `dedupe`
+  5. Run `deno run -A pipeline.ts`. Stage `seed-edges` now runs after `dedupe`
      for the first time; watch its foundation-wiring count and quarantine.
-  5. Run `deno task status`. Write a todo entry for each condition below 1.0.
+  6. Run `deno task status`. Write a todo entry for each condition below 1.0.
 
 - [ ] Skills from every US state standard set appear in `skills.tsv`, merged
       with OpenSALT where they repeat. Decision: approved design. Common
