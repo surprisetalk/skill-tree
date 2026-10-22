@@ -27,10 +27,13 @@
      the OpenSALT description cache is empty.
   6. Run `deno run -A pipeline.ts`. Stage `seed-edges` runs after `dedupe` for
      the first time; watch its foundation-wiring count and quarantine.
-  7. Stage `seed-edges` quarantines a whole source without a word. Set a floor
+  7. Stage `seed-edges` logs `cap dropped N pairs` when the 50000 OpenSALT
+     grade-pair cap cuts. If it cuts, decide: raise the cap or throw.
+  8. Stage `seed-edges` quarantines a whole source without a word. Set a floor
      per source from this run's resolved/total counts. Make the stage throw when
      a source resolves under its floor.
-  8. Run `deno task status`. Write a todo entry for each condition below 1.0.
+  9. Run `deno task status`. Write a todo entry for each condition below 1.0.
+
 - [ ] Skills from every US state standard set appear in `skills.tsv`, merged
       with OpenSALT where they repeat. Decision: approved design. Common
       Standards Project (CSP) and ASN, everything they give, with no row bound.
@@ -55,6 +58,7 @@
      `code:<statementNotation>`.
   6. Stage `dedupe` merges a CSP row and an OpenSALT row that carry the same
      `code:*` tag before the cosine pass.
+
 - [ ] Delete the CSP API key from git history, or confirm that it is CSP's
       public demo key. Blocker: you. Commit `4724493^` holds a hardcoded
       `api-key` in `data/download.ts`, and `origin/main` already has that
@@ -91,40 +95,22 @@
   7. Test: one table-driven case per schema, a bad cell in, the message out.
      Then run the break-it agent again.
 
-- [ ] Difficulty bands use the O\*NET DWA job-zone anchors and the seed anchors,
-      and no id or dedupe winner depends on filesystem order. Decision: no
-      golden-diff gate. Land each fix with a failing test first, one commit
-      each. The next full build judges them together.
-  1. DWA job-zone anchors (stage `difficulty`, `graph.ts` `dwaTitle`): the map
-     reads columns 0 and 1 of `DWA Reference.txt` (Element ID, IWA ID) but is
-     looked up by DWA ID, so it never hits. Key it by `col(rows, "DWA ID")` to
-     `col(rows, "DWA Title")`.
-  2. Seed anchoring (stage `difficulty`):
-     `calibrate(out[i] + (jittered[i] -
-     out[i]))` is
-     `calibrate(jittered[i])`, so the adjusted raw never moves a band. Recompute
-     the smoothed and jittered values from the adjusted `out`, then calibrate.
-     The second pass also skips a non-finite value without a word; throw as the
-     first pass does.
-  3. `Deno.readDirSync` order is the filesystem's (`sources.ts`: OpenSALT in
-     list, precedes, and grade ordering; Metacademy concepts). It decides the
-     dedupe winner, the `-N` id suffixes, and which frameworks fit under the
-     50000 grade-pair cap. Sort entries by name. Log when the cap cuts.
-
-- [ ] OpenSALT titles and descriptions lose their HTML markup, and Lightcast
-      descriptions keep the tags they quote.
-  1. Today `normalizeText` deletes every `<…>` with a regex, for every source.
-     OpenSALT fields hold real markup (`<b>`, `<sup>`, `<li>`). Lightcast
-     descriptions quote tags in backticks ("like `<table>`"), and the regex
-     deletes those.
-  2. Parse OpenSALT `fullStatement`, `abbreviatedStatement`, and `notes` as HTML
-     (`jsr:@b-fuze/deno-dom`) and keep the text content. Leave the other sources
-     as they are.
-  3. Byte-diff `build/1_skills.tsv`. Only OpenSALT rows with markup and the
-     Lightcast rows with quoted tags may change.
-- [ ] Ids keep accented letters as their ASCII base: "Prepare canapés" →
-      `prepare-canapes`, not `prepare-canap-s`.
-  1. `slugify` maps every char outside `[a-z0-9]` to a space. Fold first with
-     NFKD and drop combining marks, as `fuzzyKey` in stage `list` does.
-  2. Do it before the cache regen above: `1b`/`1c`/`1d` key on slugs, so the
-     regen absorbs the id change.
+- [ ] Stage `difficulty` orders the seed pairs outside cycles, and a seed never
+      moves a grade-anchored skill. Decision: postproc breaks seed cycles, as
+      before; the anchor wins over a seed; status counts the conflicts. The
+      throws on a seed self-loop or an unknown seed id stay, because stage
+      `seed-edges` already quarantines self-loops and resolves ids against
+      `3b_tagged_deduped.tsv`.
+  1. Today the seed settle in `graph.ts` throws on a seed cycle. Postproc breaks
+     seed cycles by rank (`cyclesSeedDropped` in `prereq.ts`), and OpenSALT
+     grade order across frameworks likely makes real cycles. Find the seed SCCs,
+     settle only the pairs outside them, and write `seed_cycle_pairs` to
+     `4_stats.json`.
+  2. A seed moves only the side with no grade anchor (`anchor[i]` is NaN). When
+     both sides have anchors and the seed contradicts them, nothing moves, and
+     `4_stats.json` counts it as `seed_anchor_conflicts`.
+  3. Stage `status` grades `seed_anchor_conflicts`: 1.0 at 1% of seed pairs.
+     Revisit the bound after the first full build.
+  4. Tests, as fixture runs of stage `difficulty`: a 2-cycle exits 0 and reports
+     `seed_cycle_pairs: 2`; a grade-8 prereq of a grade-3 dependent keeps its
+     grade-8 band.
