@@ -303,36 +303,6 @@ async function ollama(
   );
 }
 
-async function embedOne(content: string): Promise<Float32Array> {
-  const { embedding } = await ollama("/api/embeddings", {
-    model: EMBED_MODEL,
-    prompt: content,
-  });
-  if (!Array.isArray(embedding) || embedding.length !== EMBED_DIM) {
-    throw new Error(
-      `ollama ${EMBED_MODEL}: expected a ${EMBED_DIM}-float embedding, received length ${
-        Array.isArray(embedding) ? embedding.length : typeof embedding
-      } for "${content.slice(0, 60)}"`,
-    );
-  }
-  return new Float32Array(embedding);
-}
-
-async function generateOne(prompt: string, numPredict = 120): Promise<string> {
-  const { response } = await ollama("/api/generate", {
-    model: GEN_MODEL,
-    prompt,
-    stream: false,
-    options: { temperature: 0.1, num_predict: numPredict },
-  });
-  if (typeof response !== "string") {
-    throw new Error(
-      `ollama ${GEN_MODEL}: expected a string response, received ${typeof response}`,
-    );
-  }
-  return response.replace(/[\t\n\r]/g, " ").trim();
-}
-
 const REFUSAL_RE =
   /(cannot|unable to|not familiar with|not (?:able|aware|sure)|do(?:n't| not) have|no (?:recognized |clear |standard )?(?:definition|meaning)|without (?:more |further |additional )?(?:context|information)|could you (?:provide|clarify|specify)|recognized definition|clear workplace skill)/i;
 
@@ -383,7 +353,18 @@ export async function resumableOllama<T extends { id: string }>(
     while (queue.length && !failure) {
       const item = queue.shift()!;
       try {
-        const raw = await generateOne(promptFn(item), opts.numPredict);
+        const { response } = await ollama("/api/generate", {
+          model: GEN_MODEL,
+          prompt: promptFn(item),
+          stream: false,
+          options: { temperature: 0.1, num_predict: opts.numPredict ?? 120 },
+        });
+        if (typeof response !== "string") {
+          throw new Error(
+            `ollama ${GEN_MODEL}: expected a string response, received ${typeof response}`,
+          );
+        }
+        const raw = response.replace(/[\t\n\r]/g, " ").trim();
         const cleaned = cleanFn(raw, item);
         if (cleaned) fh.writeSync(enc.encode(`${item.id}\t${cleaned}\n`));
         else {
@@ -522,7 +503,18 @@ export async function embedBatch(
   async function worker() {
     while (queue.length) {
       const i = queue.shift()!;
-      const vec = await embedOne(contents[i]);
+      const { embedding } = await ollama("/api/embeddings", {
+        model: EMBED_MODEL,
+        prompt: contents[i],
+      });
+      if (!Array.isArray(embedding) || embedding.length !== EMBED_DIM) {
+        throw new Error(
+          `ollama ${EMBED_MODEL}: expected a ${EMBED_DIM}-float embedding, received length ${
+            Array.isArray(embedding) ? embedding.length : typeof embedding
+          } for "${contents[i].slice(0, 60)}"`,
+        );
+      }
+      const vec = new Float32Array(embedding);
       cache.set(hashHex[i], vec);
       const rec = new Uint8Array(CACHE_RECORD_BYTES);
       rec.set(hashes[i], 0);
@@ -1012,14 +1004,6 @@ function parseTable<C extends Columns>(s: Schema<C>, body: string): Row<C>[] {
   });
 }
 
-// Write bytes to path.tmp, then rename over path.
-function writeAtomic(path: string, data: string | Uint8Array) {
-  const tmp = `${path}.tmp`;
-  if (typeof data === "string") Deno.writeTextFileSync(tmp, data);
-  else Deno.writeFileSync(tmp, data);
-  Deno.renameSync(tmp, path);
-}
-
 // deno-lint-ignore no-explicit-any -- Schema<C> is invariant in C
 type Write = [Schema<any>, string[][]] | [string, Uint8Array];
 
@@ -1035,7 +1019,12 @@ export function writeTables(writes: Write[]) {
     parseTable(target, body);
     return [target.path, body];
   });
-  for (const [path, data] of out) writeAtomic(path, data);
+  for (const [path, data] of out) {
+    const tmp = `${path}.tmp`;
+    if (typeof data === "string") Deno.writeTextFileSync(tmp, data);
+    else Deno.writeFileSync(tmp, data);
+    Deno.renameSync(tmp, path);
+  }
 }
 
 export const writeTable = <C extends Columns>(s: Schema<C>, rows: string[][]) =>

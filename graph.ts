@@ -38,23 +38,6 @@ import {
 
 // ---------- stage embed ----------
 
-function buildEmbedContent(title: string, desc: string, tags: string): string {
-  // nomic-embed-text returns a constant-ish vector for short inputs (confirmed via Ollama API).
-  // Pad short content with the tag breadcrumb so the pooling has enough tokens to differentiate.
-  const base = desc ? `${title}\n${desc}` : title;
-  if (base.length >= 40) return base;
-  const tagHint = tags ? tags.replace(/,/g, " ").slice(0, 300) : "";
-  return tagHint
-    ? `${base}. ${tagHint}`
-    : `${base}. Skill: ${title}. ${title}.`;
-}
-
-function paddedEmbedContent(title: string, desc: string, tags: string): string {
-  const tagHint = tags ? tags.replace(/,/g, " ").slice(0, 400) : "";
-  const d = desc ? ` ${desc}` : "";
-  return `Skill: ${title}.${d} Context: ${tagHint || title}. Topic: ${title}.`;
-}
-
 function embedSignature(v: Float32Array): string {
   let s = "";
   for (let k = 0; k < 16; k++) s += v[k].toFixed(3) + ",";
@@ -64,13 +47,19 @@ function embedSignature(v: Float32Array): string {
 export async function stageEmbed() {
   const skills = readTable(SKILL_LIST).map((
     { id, title, description, tags },
-  ) => ({
-    id,
-    title,
-    description,
-    tags,
-    content: buildEmbedContent(title, description, tags),
-  }));
+  ) => {
+    // nomic-embed-text returns a constant-ish vector for short inputs (confirmed via Ollama API).
+    // Pad short content with the tag breadcrumb so the pooling has enough tokens to differentiate.
+    const base = description ? `${title}\n${description}` : title;
+    let content = base;
+    if (base.length < 40) {
+      const tagHint = tags.replace(/,/g, " ").slice(0, 300);
+      content = tagHint
+        ? `${base}. ${tagHint}`
+        : `${base}. Skill: ${title}. ${title}.`;
+    }
+    return { id, title, description, tags, content };
+  });
   console.log(`[embed] ${skills.length} skills`);
 
   const t0 = performance.now();
@@ -99,12 +88,11 @@ export async function stageEmbed() {
     for (const idxs of dupGroupsInitial) {
       for (const i of idxs) {
         retryIdxs.push(i);
+        const { title, description, tags } = skills[i];
+        const tagHint = tags.replace(/,/g, " ").slice(0, 400);
+        const d = description ? ` ${description}` : "";
         retryContents.push(
-          paddedEmbedContent(
-            skills[i].title,
-            skills[i].description,
-            skills[i].tags,
-          ),
+          `Skill: ${title}.${d} Context: ${tagHint || title}. Topic: ${title}.`,
         );
       }
     }
