@@ -459,6 +459,9 @@ const difficultyBuild = (): Fixture => {
     ["review-art-or-design-materials", "Review art or design materials.", ""],
     ["pre", "Pre", ""],
     ["dep", "Dep", ""],
+    ["a", "A", ""],
+    ["b", "B", ""],
+    ["c", "C", ""],
   ];
   const emb = new Float32Array(skills.length * 768);
   skills.forEach((_, i) => emb[i * 768 + i] = 1);
@@ -517,4 +520,38 @@ Deno.test("difficulty: a DWA title anchors its skill, and a seed prereq sits in 
       band.get("dep")
     }`,
   );
+});
+
+const seedHeader = "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback\n";
+const withSeeds = (pairs: string[][]): Fixture => ({
+  ...difficultyBuild(),
+  "build/1e_seed_edges.tsv": seedHeader +
+    pairs.map(([a, b]) => `${a}\t${b}\tkhan\t1.00\t0\t0\n`).join(""),
+});
+
+Deno.test("difficulty: a seed chain is ordered in any seed order", async () => {
+  for (const pairs of [[["a", "b"], ["b", "c"]], [["b", "c"], ["a", "b"]]]) {
+    const { code, stderr, files } = await runIn(
+      "difficulty",
+      withSeeds(pairs),
+      ["build/4_difficulty.tsv"],
+    );
+    assertEquals(code, 0, stderr);
+    const raw = new Map(
+      files["build/4_difficulty.tsv"].split("\n").slice(1).filter((l) => l)
+        .map((l) => l.split("\t")).map((c) => [c[0], Number(c[2])]),
+    );
+    assert(
+      raw.get("a")! < raw.get("b")! && raw.get("b")! < raw.get("c")!,
+      `chain raws a=${raw.get("a")} b=${raw.get("b")} c=${raw.get("c")}`,
+    );
+  }
+});
+
+Deno.test("difficulty: a seed self-loop or cycle stops the stage", async () => {
+  for (const pairs of [[["a", "a"]], [["a", "b"], ["b", "a"]]]) {
+    const { code, stderr } = await runIn("difficulty", withSeeds(pairs), []);
+    assert(code !== 0, `seeds ${JSON.stringify(pairs)} exit 0`);
+    assert(/cycle|self-loop/.test(stderr), stderr);
+  }
 });

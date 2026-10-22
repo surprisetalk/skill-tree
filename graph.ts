@@ -1499,14 +1499,35 @@ export function stageDifficulty() {
   let seedAnchorAdjusted = 0;
   {
     const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
-    for (const { pre, dep } of readSeeds()) {
+    const seeds = readSeeds().flatMap(({ pre, dep }) => {
       const si = idToIdx.get(pre), di = idToIdx.get(dep);
-      if (si === undefined || di === undefined) continue;
-      if (out[si] >= out[di]) {
-        out[si] = out[di] - 1.0;
-        seedAnchorAdjusted++;
+      if (pre === dep) {
+        throw new Error(
+          `[difficulty] seed self-loop on ${pre}. Expected pre != dep. Received ${pre} > ${dep} in build/1e_seed_edges.tsv. Fix: drop the pair or its alias merge in stage seed-edges.`,
+        );
+      }
+      return si === undefined || di === undefined ? [] : [[si, di]];
+    });
+    // One pass per chain link at most. A pass that still moves a skill after
+    // seeds.length + 1 passes means the seeds hold a cycle.
+    const lowered = new Set<number>();
+    for (let pass = 0;; pass++) {
+      let moved = false;
+      for (const [si, di] of seeds) {
+        if (out[si] >= out[di]) {
+          out[si] = out[di] - 1.0;
+          lowered.add(si);
+          moved = true;
+        }
+      }
+      if (!moved) break;
+      if (pass > seeds.length) {
+        throw new Error(
+          `[difficulty] seed cycle after ${pass} passes over ${seeds.length} seeds. Expected a DAG in build/1e_seed_edges.tsv. Received a pair chain that never settles. Fix: find and drop one reversed pair.`,
+        );
       }
     }
+    seedAnchorAdjusted = lowered.size;
     if (seedAnchorAdjusted > 0) {
       console.log(
         `[difficulty] seed-anchored ${seedAnchorAdjusted} prereqs below their dependents`,
