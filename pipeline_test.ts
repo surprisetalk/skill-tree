@@ -624,3 +624,16 @@ Deno.test("list: a letter with no accent decomposition stays in its word", async
     const w of ["strasse", "soren", "lodz", "igdir-ilik"]
   ) assert(ids.includes(`spell-${w}-correctly-in-writing`), `no id for ${w}`);
 });
+
+Deno.test("list: stdout counts titles dropped for an empty key or slug", async () => {
+  const { code, stdout, stderr } = await listOpensalt([
+    { fullStatement: "Count objects in a small group" },
+    { fullStatement: "日本語の 標準を学ぶ ことができる" },
+    { fullStatement: "日本語の 別の標準を学ぶ ことができる" },
+  ]);
+  assertEquals(code, 0, stderr);
+  assert(
+    /dropped 2 titles with an empty key/.test(stdout),
+    `no drop count in stdout: ${stdout.slice(-400)}`,
+  );
+});

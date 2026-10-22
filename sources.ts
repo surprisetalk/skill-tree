@@ -889,6 +889,9 @@ export function stageList() {
       byKey.set(k, { ...s, id: slug });
     }
   }
+  console.log(
+    `[list] dropped ${emptyKey} titles with an empty key and ${emptySlug} with an empty slug; merged ${collisions} duplicates by key`,
+  );
   if (emptyKey + emptySlug > raw.length * 0.01) {
     throw new Error(
       `list: too many drops (empty_key=${emptyKey}, empty_slug=${emptySlug})`,
