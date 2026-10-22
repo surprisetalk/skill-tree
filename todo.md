@@ -25,21 +25,28 @@
      labels into `build/1f_translate.tsv`; commit that cache. Stage `list` drops
      25k long titles today, because the summarize cache has only 3.4k rows and
      the OpenSALT description cache is empty.
-  6. Run `deno run -A pipeline.ts`. Stage `seed-edges` runs after `dedupe` for
-     the first time; watch its foundation-wiring count and quarantine.
+  6. Run `list`, `trees`, `embed`, `tag`, `dedupe`, `seed-edges`, and
+     `difficulty`, one `deno run -A pipeline.ts <stage>` each. They need only
+     `nomic-embed-text`. Stage `seed-edges` runs after `dedupe` for the first
+     time; watch its foundation-wiring count and quarantine.
   7. Stage `seed-edges` logs `cap dropped N pairs` when the 50000 OpenSALT
      grade-pair cap cuts. If it cuts, decide: raise the cap or throw.
   8. Stage `seed-edges` quarantines a whole source without a word. Set a floor
      per source from this run's resolved/total counts. Make the stage throw when
      a source resolves under its floor.
-  9. Run `deno task status`. Write a todo entry for each condition below 1.0.
-  10. Seed conditions: if `seed_anchor_conflicts` is high, look for unanchored
+  9. Before stage `prereq`: `difficulty_raw` no longer holds the seed order, and
+     stage `prereq` picks candidates by raw (`raw[j] < raw[i] - MIN_DIFF`,
+     prereq.ts). Count the seed pairs whose prereq raw sits at or above its
+     dependent's raw. Count the skills whose candidate pool would gain such a
+     prereq if its raw sat 1.0 below its dependent, as the old seed pass set it.
+     Show both counts. Then decide: restore a seed-ordered raw, have stage
+     `prereq` read `band`, or keep raw as is.
+  10. Run `prereq`, `postproc`, and `finalize`.
+  11. Run `deno task status`. Write a todo entry for each condition below 1.0.
+  12. Seed conditions: if `seed_anchor_conflicts` is high, look for unanchored
       seed chains longer than 20. Stage `difficulty` drops every pair of such a
       chain, where dropping the fewest would do. If `seed_cycle_pairs` is high,
       check the OpenSALT grade-order pairs across frameworks.
-  11. `difficulty_raw` no longer holds the seed order; only `band` does. Check
-      whether the status condition on reversed LLM picks and the candidate
-      filter in stage `prereq` should read `band` instead of `raw`.
 
 - [ ] Skills from every US state standard set appear in `skills.tsv`, merged
       with OpenSALT where they repeat. Decision: approved design. Common
