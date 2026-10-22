@@ -34,8 +34,23 @@ import {
 
 // ---------- stage list ----------
 
+// A tag has a name, then only name=value attributes, then `>`. Anything else
+// after `<` is math such as "a<b and c>d" or "less than <y". An HTML parser
+// would eat it as a tag, so it becomes `&lt;` first.
+const TAG = String
+  .raw`\/?[a-z][a-z0-9]*(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>`;
+const BLOCK_TAG = new RegExp(
+  String
+    .raw`<\/?(?:p|div|br|li|ul|ol|tr|td|th|table|blockquote|h[1-6])\b(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>`,
+  "gi",
+);
 const htmlText = (s: string): string =>
-  new DOMParser().parseFromString(s, "text/html").body.textContent;
+  new DOMParser().parseFromString(
+    s.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
+      .replace(BLOCK_TAG, " ")
+      .replace(new RegExp(`<(?!${TAG}|!--)`, "gi"), "&lt;"),
+    "text/html",
+  ).body.textContent;
 
 const normalizeText = (s: string, decode = true): string => {
   if (!s) return "";

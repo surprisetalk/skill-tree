@@ -555,3 +555,57 @@ Deno.test("difficulty: a seed self-loop or cycle stops the stage", async () => {
     assert(/cycle|self-loop/.test(stderr), stderr);
   }
 });
+
+// Stage list over a temp data dir whose OpenSALT folder holds only `items`.
+const listOpensalt = async (items: Record<string, string>[]) => {
+  const dir = Deno.makeTempDirSync();
+  Deno.mkdirSync(`${dir}/data/opensalt`, { recursive: true });
+  for (const d of Deno.readDirSync("data")) {
+    if (d.name !== "opensalt") {
+      Deno.symlinkSync(`${Deno.cwd()}/data/${d.name}`, `${dir}/data/${d.name}`);
+    }
+  }
+  Deno.writeTextFileSync(
+    `${dir}/data/opensalt/a.json`,
+    JSON.stringify({ CFDocument: { title: "T" }, CFItems: items }),
+  );
+  const out = await run(["list"], dir, LIST_BOUND_MS);
+  const stdout = new TextDecoder().decode(out.stdout);
+  const stderr = new TextDecoder().decode(out.stderr);
+  const titles = out.success
+    ? Deno.readTextFileSync(`${dir}/build/1_skills.tsv`).split("\n").map((l) =>
+      l.split("\t")[1]
+    )
+    : [];
+  Deno.removeSync(dir, { recursive: true });
+  return { code: out.code, stdout, stderr, titles };
+};
+
+Deno.test("list: OpenSALT keeps a bare '<', splits blocks, and drops script text", async () => {
+  const { code, stderr, titles } = await listOpensalt([
+    { fullStatement: "Compare values where x is less than <y" },
+    { fullStatement: "Plot points when a<b and c>d hold in graphs" },
+    {
+      fullStatement:
+        "<p>Add fractions</p><p>with unlike denominators correctly</p>",
+    },
+    {
+      fullStatement:
+        "Solve <script>alert(1)</script>equations using variables well",
+    },
+  ]);
+  assertEquals(code, 0, stderr);
+  for (
+    const t of [
+      "Compare values where x is less than <y",
+      "Plot points when a<b and c>d hold in graphs",
+      "Add fractions with unlike denominators correctly",
+      "Solve equations using variables well",
+    ]
+  ) {
+    assert(
+      titles.includes(t),
+      `lost "${t}" from ${JSON.stringify(titles.slice(-6))}`,
+    );
+  }
+});
