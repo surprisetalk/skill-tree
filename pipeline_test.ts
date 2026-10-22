@@ -572,13 +572,15 @@ const listOpensalt = async (items: Record<string, string>[]) => {
   const out = await run(["list"], dir, LIST_BOUND_MS);
   const stdout = new TextDecoder().decode(out.stdout);
   const stderr = new TextDecoder().decode(out.stderr);
-  const titles = out.success
+  const rows = out.success
     ? Deno.readTextFileSync(`${dir}/build/1_skills.tsv`).split("\n").map((l) =>
-      l.split("\t")[1]
+      l.split("\t")
     )
     : [];
+  const titles = rows.map((c) => c[1]);
+  const ids = rows.map((c) => c[0]);
   Deno.removeSync(dir, { recursive: true });
-  return { code: out.code, stdout, stderr, titles };
+  return { code: out.code, stdout, stderr, titles, ids };
 };
 
 Deno.test("list: OpenSALT keeps a bare '<', splits blocks, and drops script text", async () => {
@@ -608,4 +610,17 @@ Deno.test("list: OpenSALT keeps a bare '<', splits blocks, and drops script text
       `lost "${t}" from ${JSON.stringify(titles.slice(-6))}`,
     );
   }
+});
+
+Deno.test("list: a letter with no accent decomposition stays in its word", async () => {
+  const { code, stderr, ids } = await listOpensalt([
+    { fullStatement: "Spell Straße correctly in writing" },
+    { fullStatement: "Spell Søren correctly in writing" },
+    { fullStatement: "Spell Łódź correctly in writing" },
+    { fullStatement: "Spell Iğdır ılık correctly in writing" },
+  ]);
+  assertEquals(code, 0, stderr);
+  for (
+    const w of ["strasse", "soren", "lodz", "igdir-ilik"]
+  ) assert(ids.includes(`spell-${w}-correctly-in-writing`), `no id for ${w}`);
 });
