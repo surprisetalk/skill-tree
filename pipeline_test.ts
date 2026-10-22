@@ -327,6 +327,20 @@ Deno.test("status: a malformed build file crashes with the condition and the fix
   }));
 });
 
+Deno.test("status: a stale over-long id in 5_prereqs.tsv scores below 1 and still reports", async () => {
+  const build = goodBuild();
+  build["build/5_prereqs.tsv"] = "addition\tcounting-" + "x".repeat(80) + "\n";
+  const { code, stderr, score } = await runIn("status", build);
+  assertEquals(code, 1);
+  assert(!stderr.includes("Uncaught"), stderr);
+  assertEquals(
+    score(
+      "Every 5_prereqs.tsv row names only skills from the current difficulty stage.",
+    ),
+    0,
+  );
+});
+
 Deno.test("list: a malformed data/_foundations.json stops the stage", async () => {
   const good = JSON.parse(Deno.readTextFileSync("data/_foundations.json"));
   const cases: [string, (f: typeof good) => void, string][] = [
