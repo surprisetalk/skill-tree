@@ -573,9 +573,9 @@ const listOpensalt = async (items: Record<string, string>[]) => {
   const stdout = new TextDecoder().decode(out.stdout);
   const stderr = new TextDecoder().decode(out.stderr);
   const rows = out.success
-    ? Deno.readTextFileSync(`${dir}/build/1_skills.tsv`).split("\n").map((l) =>
-      l.split("\t")
-    )
+    ? Deno.readTextFileSync(`${dir}/build/1_skills.tsv`).split("\n").filter((
+      l,
+    ) => l).map((l) => l.split("\t"))
     : [];
   const titles = rows.map((c) => c[1]);
   const ids = rows.map((c) => c[0]);
@@ -635,5 +635,19 @@ Deno.test("list: stdout counts titles dropped for an empty key or slug", async (
   assert(
     /dropped 2 titles with an empty key/.test(stdout),
     `no drop count in stdout: ${stdout.slice(-400)}`,
+  );
+});
+
+Deno.test("list: OpenSALT keeps the text of a head-only element", async () => {
+  const { code, stderr, titles } = await listOpensalt([
+    {
+      fullStatement:
+        "<title>Hidden title words</title>Visible words after here",
+    },
+  ]);
+  assertEquals(code, 0, stderr);
+  assert(
+    titles.some((t) => t.includes("Hidden title words")),
+    JSON.stringify(titles.slice(-3)),
   );
 });

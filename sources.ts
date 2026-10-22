@@ -44,9 +44,10 @@ const BLOCK_TAG = new RegExp(
     .raw`<\/?(?:p|div|br|li|ul|ol|tr|td|th|table|blockquote|h[1-6])\b(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>`,
   "gi",
 );
+// The leading <body> keeps <title>, <meta>, <link>, and <base> text out of <head>.
 const htmlText = (s: string): string =>
   new DOMParser().parseFromString(
-    s.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
+    "<body>" + s.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
       .replace(BLOCK_TAG, " ")
       .replace(new RegExp(`<(?!${TAG}|!--)`, "gi"), "&lt;"),
     "text/html",
