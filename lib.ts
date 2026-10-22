@@ -828,7 +828,6 @@ export type Row<C extends Columns> = {
   [K in keyof C]: C[K] extends Cell<infer T> ? T : never;
 };
 const table = <C extends Columns>(s: Schema<C>) => s;
-const headerOf = (c: Columns) => Object.keys(c).join("\t");
 
 const LIST_COLUMNS = {
   id: SLUG,
@@ -850,9 +849,6 @@ const SKILLS_COLUMNS = {
   grade_start: grade,
   grade_end: grade,
 };
-export const TAGGED_HEADER = headerOf(TAGGED_COLUMNS);
-export const LIST_HEADER = headerOf(LIST_COLUMNS);
-export const SKILLS_HEADER = headerOf(SKILLS_COLUMNS);
 export const PREREQ_CACHE = `${BUILD}/5_prereqs.tsv`;
 
 export const SKILL_LIST = table({
@@ -927,12 +923,15 @@ export type Tagged = Row<typeof TAGGED_COLUMNS>;
 
 // Typed rows of a build table. Throws on the first row its writer would reject.
 export function readTable<C extends Columns>(s: Schema<C>): Row<C>[] {
+  return parseTable(s, Deno.readTextFileSync(need(s.path)));
+}
+
+function parseTable<C extends Columns>(s: Schema<C>, body: string): Row<C>[] {
   const fix = rerun(s.path);
   const fail = (line: number | null, msg: string): never => {
     throw new Error(`${s.path}${line ? `:${line}` : ""}: ${msg}. ${fix}`);
   };
   const names = Object.keys(s.columns);
-  const body = Deno.readTextFileSync(need(s.path));
   if (body && !body.endsWith("\n")) {
     fail(
       body.split("\n").length,
@@ -993,6 +992,35 @@ export function readTable<C extends Columns>(s: Schema<C>): Row<C>[] {
     return row as Row<C>;
   });
 }
+
+// Write bytes to path.tmp, then rename over path.
+function writeAtomic(path: string, data: string | Uint8Array) {
+  const tmp = `${path}.tmp`;
+  if (typeof data === "string") Deno.writeTextFileSync(tmp, data);
+  else Deno.writeFileSync(tmp, data);
+  Deno.renameSync(tmp, path);
+}
+
+// deno-lint-ignore no-explicit-any -- Schema<C> is invariant in C
+type Write = [Schema<any>, string[][]] | [string, Uint8Array];
+
+// Checks every table with readTable's checks, then renames them in order,
+// so put the table that others depend on last.
+export function writeTables(writes: Write[]) {
+  const out = writes.map(([target, data]): [string, string | Uint8Array] => {
+    if (typeof target === "string") return [target, data as Uint8Array];
+    const names = Object.keys(target.columns);
+    const lines = (data as string[][]).map((r) => r.join("\t"));
+    const body = [...(target.headerless ? [] : [names.join("\t")]), ...lines]
+      .map((l) => l + "\n").join("");
+    parseTable(target, body);
+    return [target.path, body];
+  });
+  for (const [path, data] of out) writeAtomic(path, data);
+}
+
+export const writeTable = <C extends Columns>(s: Schema<C>, rows: string[][]) =>
+  writeTables([[s, rows]]);
 
 export const readTagged = (schema = TAGGED_DEDUPED) => readTable(schema);
 

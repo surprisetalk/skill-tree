@@ -10,7 +10,6 @@ import {
   h32,
   HAN_RE,
   isTranslation,
-  LIST_HEADER,
   loadRawEmbeddings,
   loadTsvCache,
   normalize,
@@ -23,6 +22,7 @@ import {
   readTsv,
   resolveConcept,
   resumableOllama,
+  SEEDS,
   Skill,
   SKILL_LIST,
   skillIndex,
@@ -31,6 +31,7 @@ import {
   TOPIC_REFS,
   TRANSLATE_CACHE,
   writeStats,
+  writeTable,
 } from "./lib.ts";
 
 // ---------- stage list ----------
@@ -955,19 +956,16 @@ export function stageList() {
       // deno-lint-ignore no-control-regex -- strips C0 controls (tab, newline included) from source text
       .replace(/[\u0000-\u001f\u200b-\u200f\ufeff]/g, "")
       .replace(/\s+/g, " ").trim();
-  const tsv = [LIST_HEADER];
-  for (const s of out) {
-    tsv.push(
-      [
-        s.id,
-        clean(s.title),
-        clean(s.description),
-        s.sources.join(","),
-        s.tags.join(","),
-      ].join("\t"),
-    );
-  }
-  Deno.writeTextFileSync(`${BUILD}/1_skills.tsv`, tsv.join("\n") + "\n");
+  writeTable(
+    SKILL_LIST,
+    out.map((s) => [
+      s.id,
+      clean(s.title),
+      clean(s.description),
+      s.sources.join(","),
+      s.tags.join(","),
+    ]),
+  );
 
   const titleLens = out.map((s) => s.title.length);
   writeStats(1, {
@@ -1760,15 +1758,17 @@ export async function stageSeedEdges() {
     if (!prev || (prev.fallback && !e.fallback)) seen.set(k, e);
   }
   const uniq = [...seen.values()];
-  const out = ["src_id\tdst_id\tsource\tconfidence\tholdout\tfallback"];
-  for (const e of uniq) {
-    out.push(
-      `${e.src}\t${e.dst}\t${e.source}\t${e.confidence.toFixed(2)}\t${
-        e.holdout ? "1" : "0"
-      }\t${e.fallback ? "1" : "0"}`,
-    );
-  }
-  Deno.writeTextFileSync(`${BUILD}/1e_seed_edges.tsv`, out.join("\n") + "\n");
+  writeTable(
+    SEEDS,
+    uniq.map((e) => [
+      e.src,
+      e.dst,
+      e.source,
+      e.confidence.toFixed(2),
+      e.holdout ? "1" : "0",
+      e.fallback ? "1" : "0",
+    ]),
+  );
   console.log(
     `[seed-edges] ${uniq.length} edges (${
       uniq.filter((e) => e.fallback).length

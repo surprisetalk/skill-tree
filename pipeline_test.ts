@@ -415,6 +415,28 @@ Deno.test("finalize: writes a DAG of unique skills, or stops", async () => {
   assert(code !== 0 && stderr.includes("expected at least one row"), stderr);
 });
 
+// A topic that is not a slug passes the reader, which checks tags as text.
+Deno.test("finalize: a bad cell in the output stops the write and keeps the old file", async () => {
+  const build = finalBuild();
+  build["skills.tsv"] = "old\n";
+  build["build/3b_tagged_deduped.tsv"] = [
+    "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+    ...["counting", "addition", "multiplication", "calculus"].map((id) =>
+      `${id}\t${id}\td\tfoundation\tgrade:1\t\tBad Topic`
+    ),
+  ].join("\n") + "\n";
+  build["build/4_difficulty.tsv"] += "calculus\t4\t4\n";
+  const { code, stderr, files } = await runIn("finalize", build);
+  assert(
+    code !== 0 &&
+      stderr.includes(
+        'skills.tsv:2: expected topics as slugs joined by commas, or empty, received "Bad Topic"',
+      ),
+    stderr,
+  );
+  assertEquals(files["skills.tsv"], "old\n");
+});
+
 const SLUG_AS =
   "a slug (lowercase letters and digits joined by single hyphens, at most 80 characters)";
 

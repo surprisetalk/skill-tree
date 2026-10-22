@@ -18,12 +18,13 @@ import {
   rerun,
   resumableOllama,
   SIG_STOP,
-  SKILLS_HEADER,
+  SKILLS_OUT,
   slugify,
   STOPWORDS,
   stronglyConnected,
   topoOrder,
   WIKI_CAT_RE,
+  writeTable,
   YEAR_RE,
 } from "./lib.ts";
 
@@ -974,15 +975,7 @@ export function stagePostproc() {
       ? (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)
       : (a[0] < b[0] ? -1 : 1)
   );
-  const fh = Deno.openSync(`${BUILD}/6_edges.tsv`, {
-    create: true,
-    write: true,
-    truncate: true,
-  });
-  const enc = new TextEncoder();
-  fh.writeSync(enc.encode("skill_id\tprereq_id\n"));
-  for (const [s, p] of final) fh.writeSync(enc.encode(`${s}\t${p}\n`));
-  fh.close();
+  writeTable(EDGES, final);
 }
 
 // ---------- stage finalize ----------
@@ -1260,25 +1253,23 @@ export function stageFinalize() {
     });
   }
 
-  const rows = [SKILLS_HEADER];
+  const rows: string[][] = [];
   for (const r of pending) {
-    rows.push(
-      [
-        r.id,
-        r.title,
-        r.display,
-        r.desc,
-        r.d.toString(),
-        r.ps,
-        r.occ,
-        r.topics.join(","),
-        r.gStart,
-        r.gEnd,
-      ].join("\t"),
-    );
+    rows.push([
+      r.id,
+      r.title,
+      r.display,
+      r.desc,
+      r.d.toString(),
+      r.ps,
+      r.occ,
+      r.topics.join(","),
+      r.gStart,
+      r.gEnd,
+    ]);
   }
   const emittedSet = new Set<string>();
-  for (let i = 1; i < rows.length; i++) emittedSet.add(rows[i].split("\t")[0]);
+  for (const r of rows) emittedSet.add(r[0]);
   let violations = 0;
   for (const r of pending) {
     if (!r.ps) continue;
@@ -1309,7 +1300,7 @@ export function stageFinalize() {
     );
   }
 
-  Deno.writeTextFileSync("skills.tsv", rows.join("\n") + "\n");
+  writeTable(SKILLS_OUT, rows);
   const gz = new Deno.Command("gzip", { args: ["-kf", "skills.tsv"] })
     .outputSync();
   if (!gz.success) {
@@ -1320,7 +1311,7 @@ export function stageFinalize() {
     );
   }
   console.log(
-    `[finalize] emitted ${rows.length - 1} skills, ${
+    `[finalize] emitted ${rows.length} skills, ${
       [...prereqs.values()].reduce((s, a) => s + a.length, 0)
     } edges`,
   );

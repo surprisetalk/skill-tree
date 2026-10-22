@@ -1,14 +1,18 @@
 import {
+  ALIASES,
   BUILD,
   CACHE_PATH,
   col,
+  DIFFICULTY,
   EMBED_DIM,
   embedBatch,
   gradeToDifficulty,
+  IDS,
   isJunkTopic,
   need,
   normalize,
   normalizedEmbeddingsForSkills,
+  PATHOLOGICAL,
   readCsv,
   readSeeds,
   readTable,
@@ -24,11 +28,13 @@ import {
   stronglyConnected,
   TAGGED,
   Tagged,
-  TAGGED_HEADER,
+  TAGGED_DEDUPED,
   TAGGED_RAW,
   TOPIC_REFS,
   topoOrder,
   writeStats,
+  writeTable,
+  writeTables,
 } from "./lib.ts";
 
 // ---------- stage embed ----------
@@ -123,10 +129,6 @@ export async function stageEmbed() {
   for (const idxs of dupGroupsFinal) {
     for (const i of idxs) pathological.push(skills[i].id);
   }
-  Deno.writeTextFileSync(
-    `${BUILD}/2_pathological.tsv`,
-    pathological.length ? pathological.join("\n") + "\n" : "",
-  );
   console.log(
     `[embed] ${dupGroupsFinal.length} duplicate-vector groups after retry; ${pathological.length} pathological skills`,
   );
@@ -143,11 +145,11 @@ export async function stageEmbed() {
       `embed: expected finite vectors, received ${nans} NaN/Inf values. Delete ${CACHE_PATH} and rerun: deno run -A pipeline.ts embed`,
     );
   }
-  Deno.writeFileSync(`${BUILD}/2_embeddings.bin`, new Uint8Array(bin.buffer));
-  Deno.writeTextFileSync(
-    `${BUILD}/2_ids.tsv`,
-    skills.map((s) => s.id).join("\n") + "\n",
-  );
+  writeTables([
+    [PATHOLOGICAL, pathological.map((id) => [id])],
+    [`${BUILD}/2_embeddings.bin`, new Uint8Array(bin.buffer)],
+    [IDS, skills.map((s) => [s.id])],
+  ]);
   console.log(
     `[embed] ${skills.length} vectors, ${retried} re-embedded, in ${
       ((performance.now() - t0) / 1000).toFixed(0)
@@ -701,9 +703,7 @@ export async function stageTag() {
     );
   }
 
-  const rows: string[] = [
-    "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
-  ];
+  const rows: string[][] = [];
   for (let i = 0; i < skills.length; i++) {
     const s = skills[i];
     const dropSet = freqDrops.get(i);
@@ -711,19 +711,17 @@ export async function stageTag() {
       p,
     ) => p.slug);
     const topicSlugs = pickedTopics[i].map((p) => p.slug);
-    rows.push(
-      [
-        s.id,
-        s.title,
-        s.description,
-        s.sources,
-        s.tags,
-        occSlugs.join(","),
-        topicSlugs.join(","),
-      ].join("\t"),
-    );
+    rows.push([
+      s.id,
+      s.title,
+      s.description,
+      s.sources,
+      s.tags,
+      occSlugs.join(","),
+      topicSlugs.join(","),
+    ]);
   }
-  Deno.writeTextFileSync(`${BUILD}/3_tagged.tsv`, rows.join("\n") + "\n");
+  writeTable(TAGGED_RAW, rows);
   // A stale deduped file would let later stages skip the new tags.
   try {
     Deno.removeSync(TAGGED);
@@ -1135,32 +1133,24 @@ export function stageDedupe() {
     `[dedupe] backfill: topics+=${bfTopics}, occs+=${bfOccs}, lcsh-topics+=${bfLcsh}`,
   );
 
-  const outLines = [TAGGED_HEADER];
-  for (const c of canons) {
-    const r = rows[c.idx];
-    outLines.push(
-      [
-        r.id,
-        r.title,
-        r.description,
-        r.sources,
-        c.allTags.join(","),
-        c.occs.join(","),
-        c.topics.join(","),
-      ].join("\t"),
-    );
-  }
-  Deno.writeTextFileSync(
-    TAGGED,
-    outLines.join("\n") + "\n",
-  );
-
-  const aliasLines = ["dropped_id\tcanonical_id"];
-  for (const [drop, keep] of alias) aliasLines.push(`${drop}\t${keep}`);
-  Deno.writeTextFileSync(
-    `${BUILD}/3b_aliases.tsv`,
-    aliasLines.join("\n") + "\n",
-  );
+  writeTables([
+    [
+      TAGGED_DEDUPED,
+      canons.map((c) => {
+        const r = rows[c.idx];
+        return [
+          r.id,
+          r.title,
+          r.description,
+          r.sources,
+          c.allTags.join(","),
+          c.occs.join(","),
+          c.topics.join(","),
+        ];
+      }),
+    ],
+    [ALIASES, [...alias].map(([drop, keep]) => [drop, keep])],
+  ]);
 }
 
 // ---------- stage difficulty ----------
@@ -1583,11 +1573,10 @@ export function stageDifficulty() {
     );
   }
 
-  const rows = ["id\tdifficulty\tdifficulty_raw"];
-  for (let i = 0; i < skills.length; i++) {
-    rows.push(`${skills[i].id}\t${band[i]}\t${out[i].toFixed(4)}`);
-  }
-  Deno.writeTextFileSync(`${BUILD}/4_difficulty.tsv`, rows.join("\n") + "\n");
+  writeTable(
+    DIFFICULTY,
+    skills.map((s, i) => [s.id, String(band[i]), out[i].toFixed(4)]),
+  );
 
   // Kendall-τ vs anchors
   let concordant = 0, discordant = 0;

@@ -16,6 +16,7 @@ build/*
 !build/5_prereqs.tsv
 skills.tsv
 skills.tsv.gz
+skills.tsv.tmp
 
 .cache/
 .venv/
