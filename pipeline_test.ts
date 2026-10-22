@@ -548,11 +548,32 @@ Deno.test("difficulty: a seed chain is ordered in any seed order", async () => {
   }
 });
 
+Deno.test("difficulty: a seed dependent at the lowest band still ranks above its prereq", async () => {
+  const build = withSeeds([["pre", "dep"]]);
+  build["build/3b_tagged_deduped.tsv"] =
+    (build["build/3b_tagged_deduped.tsv"] as string)
+      .replace("dep\tDep\t\ttest\t\t", "dep\tDep\t\ttest\tgrade:PK\t");
+  const { code, stderr, files } = await runIn("difficulty", build, [
+    "build/4_difficulty.tsv",
+  ]);
+  assertEquals(code, 0, stderr);
+  const band = new Map(
+    files["build/4_difficulty.tsv"].split("\n").slice(1).filter((l) => l)
+      .map((l) => l.split("\t")).map((c) => [c[0], Number(c[1])]),
+  );
+  assert(
+    band.get("pre")! < band.get("dep")!,
+    `pre band ${band.get("pre")} is not below dep band ${band.get("dep")}`,
+  );
+});
+
 Deno.test("difficulty: a seed self-loop or cycle stops the stage", async () => {
-  for (const pairs of [[["a", "a"]], [["a", "b"], ["b", "a"]]]) {
+  for (
+    const pairs of [[["a", "a"]], [["a", "b"], ["b", "a"]], [["a", "ghost"]]]
+  ) {
     const { code, stderr } = await runIn("difficulty", withSeeds(pairs), []);
     assert(code !== 0, `seeds ${JSON.stringify(pairs)} exit 0`);
-    assert(/cycle|self-loop/.test(stderr), stderr);
+    assert(/cycle|self-loop|not in build\/1_skills/.test(stderr), stderr);
   }
 });
 

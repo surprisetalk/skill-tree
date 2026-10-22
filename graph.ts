@@ -1495,6 +1495,7 @@ export function stageDifficulty() {
   // MOOCCubeX concepts land on the professional plateau, where about a quarter
   // of seeds otherwise reverse.
   let seedAnchorAdjusted = 0;
+  let seedPairs: number[][] = [];
   {
     const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
     const seeds = readSeeds().flatMap(({ pre, dep }) => {
@@ -1504,7 +1505,12 @@ export function stageDifficulty() {
           `[difficulty] seed self-loop on ${pre}. Expected pre != dep. Received ${pre} > ${dep} in build/1e_seed_edges.tsv. Fix: drop the pair or its alias merge in stage seed-edges.`,
         );
       }
-      return si === undefined || di === undefined ? [] : [[si, di]];
+      if (si === undefined || di === undefined) {
+        throw new Error(
+          `[difficulty] seed id not in build/1_skills.tsv. Expected both ids of a seed pair in the skill table. Received ${pre} > ${dep} in build/1e_seed_edges.tsv. Fix: rerun stage seed-edges after the last dedupe.`,
+        );
+      }
+      return [[si, di]];
     });
     // One pass per chain link at most. A pass that still moves a skill after
     // seeds.length + 1 passes means the seeds hold a cycle.
@@ -1528,11 +1534,7 @@ export function stageDifficulty() {
       }
     };
     settle(out);
-    seedAnchorAdjusted = lowered.size;
-    if (seedAnchorAdjusted > 0) {
-      console.log(
-        `[difficulty] seed-anchored ${seedAnchorAdjusted} prereqs below their dependents`,
-      );
+    if (lowered.size > 0) {
       const { smoothed, jittered } = smoothJitter(out);
       for (let i = 0; i < skills.length; i++) {
         const c = calibrate(jittered[i]);
@@ -1547,13 +1549,19 @@ export function stageDifficulty() {
         }
         calibrated[i] = c;
       }
-      // Topic smoothing and PAV can lift a prereq over its dependent again.
-      settle(calibrated);
     }
+    // Topic smoothing and PAV can lift a prereq over its dependent again.
+    settle(calibrated);
+    seedAnchorAdjusted = lowered.size;
+    if (seedAnchorAdjusted > 0) {
+      console.log(
+        `[difficulty] seed-anchored ${seedAnchorAdjusted} prereqs below their dependents`,
+      );
+    }
+    seedPairs = seeds;
   }
 
   const band = new Int32Array(skills.length);
-  const bandCounts = new Array(20).fill(0);
   let healthCapped = 0;
   for (let i = 0; i < skills.length; i++) {
     let b = Math.max(1, Math.min(20, Math.round(calibrated[i]) + 1));
@@ -1573,8 +1581,40 @@ export function stageDifficulty() {
       );
     }
     band[i] = b;
-    bandCounts[b - 1]++;
   }
+  // The band clamp at 1 and the health cap can tie a seed pair. Lower the
+  // prereq; a dependent at band 1 has no room below, so raise it instead.
+  let bandMoved = 0;
+  for (let pass = 0;; pass++) {
+    let moved = false;
+    for (const [si, di] of seedPairs) {
+      if (band[si] < band[di]) continue;
+      if (band[di] > 1) band[si] = band[di] - 1;
+      else band[di] = band[si] + 1;
+      if (band[di] > 20) {
+        throw new Error(
+          `[difficulty] seed ${skills[si].id} > ${skills[di].id} needs band ${
+            band[di]
+          }. Expected bands 1-20. Received a seed chain deeper than 20 links. Fix: drop a reversed pair in build/1e_seed_edges.tsv.`,
+        );
+      }
+      bandMoved++;
+      moved = true;
+    }
+    if (!moved) break;
+    if (pass > seedPairs.length) {
+      throw new Error(
+        `[difficulty] seed bands never settle after ${pass} passes over ${seedPairs.length} seeds. Expected a DAG in build/1e_seed_edges.tsv. Fix: find and drop one reversed pair.`,
+      );
+    }
+  }
+  if (bandMoved > 0) {
+    console.log(
+      `[difficulty] ${bandMoved} seed pairs moved to keep prereq band below dependent band`,
+    );
+  }
+  const bandCounts = new Array(20).fill(0);
+  for (const b of band) bandCounts[b - 1]++;
   if (healthCapped > 0) {
     console.log(
       `[difficulty] K-12 anchor band cap applied to ${healthCapped} skills`,
