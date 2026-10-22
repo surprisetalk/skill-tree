@@ -694,3 +694,50 @@ Deno.test("list: OpenSALT keeps semicolon-less entities literal", async () => {
     JSON.stringify(titles.slice(-3)),
   );
 });
+
+Deno.test("difficulty: a seed prereq in a high topic still lands below its dependent", async () => {
+  const S: [string, number, string, string][] = [
+    ["khan-low", 0, "", ""],
+    ["khan-high", 1, "", ""],
+    ["h1", 2, "grade:12", "hi"],
+    ["h2", 3, "grade:12", "hi"],
+    ["h3", 4, "grade:12", "hi"],
+    ["l1", 5, "grade:K", "lo"],
+    ["l2", 6, "grade:K", "lo"],
+    ["l3", 7, "grade:K", "lo"],
+    ["p", 2, "", "hi"],
+    ["d", 2, "", "lo"],
+    ["do-the-budget", 2, "", ""],
+  ];
+  const emb = new Float32Array(S.length * 768);
+  S.forEach((s, i) => emb[i * 768 + s[1]] = 1);
+  const { code, stderr, files } = await runIn("difficulty", {
+    ...difficultyBuild(),
+    "build/3b_tagged_deduped.tsv": [
+      "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+      ...S.map(([id, , tags, top]) =>
+        [
+          id,
+          id === "do-the-budget" ? "Do the budget." : id.replace(/-/g, " "),
+          "",
+          "opensalt",
+          tags,
+          "",
+          top,
+        ].join("\t")
+      ),
+    ].join("\n") + "\n",
+    "build/2_ids.tsv": S.map((s) => s[0]).join("\n") + "\n",
+    "build/2_embeddings.bin": new Uint8Array(emb.buffer),
+    "build/1e_seed_edges.tsv": seedHeader + "p\td\tkhan\t1.00\t0\t0\n",
+  }, ["build/4_difficulty.tsv"]);
+  assertEquals(code, 0, stderr);
+  const band = new Map(
+    files["build/4_difficulty.tsv"].split("\n").slice(1).filter((l) => l)
+      .map((l) => l.split("\t")).map((c) => [c[0], Number(c[1])]),
+  );
+  assert(
+    band.get("p")! < band.get("d")!,
+    `p band ${band.get("p")} is not below d band ${band.get("d")}`,
+  );
+});

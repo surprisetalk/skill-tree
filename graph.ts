@@ -1511,22 +1511,25 @@ export function stageDifficulty() {
     // One pass per chain link at most. A pass that still moves a skill after
     // seeds.length + 1 passes means the seeds hold a cycle.
     const lowered = new Set<number>();
-    for (let pass = 0;; pass++) {
-      let moved = false;
-      for (const [si, di] of seeds) {
-        if (out[si] >= out[di]) {
-          out[si] = out[di] - 1.0;
-          lowered.add(si);
-          moved = true;
+    const settle = (v: Float32Array) => {
+      for (let pass = 0;; pass++) {
+        let moved = false;
+        for (const [si, di] of seeds) {
+          if (v[si] >= v[di]) {
+            v[si] = v[di] - 1.0;
+            lowered.add(si);
+            moved = true;
+          }
+        }
+        if (!moved) break;
+        if (pass > seeds.length) {
+          throw new Error(
+            `[difficulty] seed cycle after ${pass} passes over ${seeds.length} seeds. Expected a DAG in build/1e_seed_edges.tsv. Received a pair chain that never settles. Fix: find and drop one reversed pair.`,
+          );
         }
       }
-      if (!moved) break;
-      if (pass > seeds.length) {
-        throw new Error(
-          `[difficulty] seed cycle after ${pass} passes over ${seeds.length} seeds. Expected a DAG in build/1e_seed_edges.tsv. Received a pair chain that never settles. Fix: find and drop one reversed pair.`,
-        );
-      }
-    }
+    };
+    settle(out);
     seedAnchorAdjusted = lowered.size;
     if (seedAnchorAdjusted > 0) {
       console.log(
@@ -1546,6 +1549,8 @@ export function stageDifficulty() {
         }
         calibrated[i] = c;
       }
+      // Topic smoothing and PAV can lift a prereq over its dependent again.
+      settle(calibrated);
     }
   }
 
