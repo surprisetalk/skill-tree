@@ -1,4 +1,4 @@
-import { DOMParser } from "@b-fuze/deno-dom";
+import { DOMParser, type Element } from "@b-fuze/deno-dom";
 import { TextLineStream } from "@std/streams/text-line-stream";
 import {
   BUILD,
@@ -34,30 +34,27 @@ import {
 
 // ---------- stage list ----------
 
-// A tag has a name, then only name=value attributes, then `>`. Anything else
-// after `<` is math such as "a<b and c>d" or "less than <y". An HTML parser
-// would eat it as a tag, so it becomes `&lt;` first.
-const TAG = String
-  .raw`\/?[a-z][a-z0-9]*(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>`;
-const BLOCK_TAG = new RegExp(
-  String
-    .raw`<\/?(?:p|div|br|li|ul|ol|tr|td|th|table|blockquote|h[1-6])\b(?:\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))*\s*\/?>`,
-  "gi",
-);
-// The leading <body> keeps <title>, <meta>, <link>, and <base> text out of <head>.
+// textContent glues blocks: "<p>variable.</p><p>Use" reads "variable.Use".
+const BLOCKS =
+  "br, p, div, li, ul, ol, tr, td, th, table, blockquote, h1, h2, h3, h4, h5, h6";
 const DOM = new DOMParser();
-const htmlText = (s: string): string =>
-  // The parser decodes `&lt;b&gt;` to `<b>`, so a second strip removes it.
-  DOM.parseFromString(
-    "<body>" +
-      s.replace(/<(script|style)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, " ")
-        .replace(BLOCK_TAG, " ")
-        .replace(/<!--(?![\s\S]*?-->)/g, "&lt;!--")
-        // HTML decodes "&copy" without a semicolon; "&copy=1" must stay text.
-        .replace(/&(?![a-z][a-z0-9]*;|#\d+;|#x[0-9a-f]+;)/gi, "&amp;")
-        .replace(new RegExp(`<(?!${TAG}|!--)`, "gi"), "&lt;"),
-    "text/html",
-  ).body.textContent.replace(new RegExp(`<${TAG}`, "gi"), " ");
+const htmlText = (s: string, where: string): string => {
+  // Without `<` or `&` the parse changes nothing, and parsing all ~200k fields
+  // multiplies the stage's time by 5.
+  if (!/[<&]/.test(s)) return s;
+  const doc = DOM.parseFromString(s, "text/html");
+  // Head elements drop their text from body; script and style leak code into it.
+  const bad = doc.querySelector("script, style, title, meta, link, base");
+  if (bad) {
+    throw new Error(
+      `${where}: expected statement markup, received a <${bad.tagName.toLowerCase()}> element in ${
+        JSON.stringify(s.slice(0, 120))
+      }. Drop the item from the framework file, or teach htmlText to read the element.`,
+    );
+  }
+  for (const b of doc.querySelectorAll(BLOCKS)) (b as Element).before(" ");
+  return doc.body.textContent;
+};
 
 const normalizeText = (s: string, decode = true): string => {
   if (!s) return "";
@@ -624,9 +621,10 @@ export function stageList() {
           scaffType++;
           continue;
         }
-        const fullStmt = htmlText(it.fullStatement || "").trim();
-        const abbrev = htmlText(it.abbreviatedStatement || "").trim();
-        const notes = htmlText(it.notes || "").trim();
+        const where = `${path} item ${it.identifier}`;
+        const fullStmt = htmlText(it.fullStatement || "", where).trim();
+        const abbrev = htmlText(it.abbreviatedStatement || "", where).trim();
+        const notes = htmlText(it.notes || "", where).trim();
         if (!fullStmt && !abbrev) {
           scaffPat++;
           continue;

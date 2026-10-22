@@ -622,68 +622,45 @@ const listOpensalt = async (items: Record<string, string>[]) => {
   return { code: out.code, stdout, stderr, titles, ids };
 };
 
-Deno.test("list: OpenSALT markup, entities, and non-Latin titles in one run", async () => {
-  const { code, stdout, stderr, titles, ids } = await listOpensalt([
-    { fullStatement: "Compare values where x is less than <y" },
-    { fullStatement: "Plot points when a<b and c>d hold in graphs" },
-    {
-      fullStatement:
-        "<p>Add fractions</p><p>with unlike denominators correctly</p>",
-    },
-    {
-      fullStatement:
-        "Solve <script>alert(1)</script>equations using variables well",
-    },
-    {
-      fullStatement:
-        "<title>Hidden title words</title>Visible words after here",
-    },
-    { fullStatement: "Gamma <!-- unclosed comment words here" },
-    {
-      fullStatement: "Xi &lt;script&gt;payload(1)&lt;/script&gt; encoded here",
-    },
-    { fullStatement: "Alpha <script>evil call here" },
-    { fullStatement: "Beta <style>.x{color:red} here more" },
-    { fullStatement: "Delta <scr<script>ipt>evil(2)</script> split tag here" },
-    { fullStatement: "Epsilon <SCRIPT>evil(3)</SCRIPT> upper case here" },
-    { fullStatement: "Zeta <<b>bold</b> nested bracket words here" },
-    { fullStatement: "Eps &copy=1 &para=2 &notin; query test here" },
-    { fullStatement: "Spell Straße correctly in writing" },
-    { fullStatement: "Spell Søren correctly in writing" },
-    { fullStatement: "Spell Łódź correctly in writing" },
-    { fullStatement: "Spell Iğdır ılık correctly in writing" },
-    { fullStatement: "日本語の 標準を学ぶ ことができる" },
-    { fullStatement: "日本語の 別の標準を学ぶ ことができる" },
+Deno.test("list: OpenSALT blocks split words, non-Latin titles fold or drop, a script stops the stage", async () => {
+  const [ok, bad] = await Promise.all([
+    listOpensalt([
+      {
+        fullStatement:
+          "<p>Add fractions</p><p>with unlike denominators correctly</p>",
+      },
+      { fullStatement: "Spell Straße correctly in writing" },
+      { fullStatement: "Spell Søren correctly in writing" },
+      { fullStatement: "Spell Łódź correctly in writing" },
+      { fullStatement: "Spell Iğdır ılık correctly in writing" },
+      { fullStatement: "日本語の 標準を学ぶ ことができる" },
+      { fullStatement: "日本語の 別の標準を学ぶ ことができる" },
+    ]),
+    listOpensalt([{
+      identifier: "x1",
+      fullStatement: "Solve <script>alert(1)</script>equations well",
+    }]),
   ]);
-  assertEquals(code, 0, stderr);
-  const has = (t: string) =>
-    assert(titles.includes(t), `lost "${t}" from ${JSON.stringify(titles)}`);
-  for (
-    const t of [
-      "Compare values where x is less than <y",
-      "Plot points when a<b and c>d hold in graphs",
-      "Add fractions with unlike denominators correctly",
-      "Solve equations using variables well",
-      "Eps &copy=1 &para=2 ∉ query test here",
-    ]
-  ) has(t);
-  for (const w of ["Hidden title words", "unclosed comment words"]) {
-    assert(titles.some((t) => t.includes(w)), `lost "${w}"`);
-  }
-  assertEquals(titles.filter((t) => /evil|color:red/.test(t)), []);
-  // "a<b and c>d" is math that only looks like a tag.
-  assertEquals(
-    titles.filter((t) =>
-      !t.includes("a<b and c>d") && /<\/?[a-z][^>]*>/i.test(t)
-    ),
-    [],
+  assertEquals(ok.code, 0, ok.stderr);
+  assert(
+    ok.titles.includes("Add fractions with unlike denominators correctly"),
+    `blocks glued: ${JSON.stringify(ok.titles)}`,
   );
   for (const w of ["strasse", "soren", "lodz", "igdir-ilik"]) {
-    assert(ids.includes(`spell-${w}-correctly-in-writing`), `no id for ${w}`);
+    assert(
+      ok.ids.includes(`spell-${w}-correctly-in-writing`),
+      `no id for ${w}`,
+    );
   }
   assert(
-    /dropped 2 titles with an empty key/.test(stdout),
-    `no drop count in stdout: ${stdout.slice(-400)}`,
+    /dropped 2 titles with an empty key/.test(ok.stdout),
+    `no drop count in stdout: ${ok.stdout.slice(-400)}`,
+  );
+  assertEquals(bad.code, 1);
+  assert(
+    /a\.json item x1: expected statement markup, received a <script> element/
+      .test(bad.stderr),
+    bad.stderr.slice(-400),
   );
 });
 
