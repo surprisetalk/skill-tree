@@ -645,6 +645,13 @@ Deno.test("difficulty: a seed cycle is skipped and counted, and a seed never mov
   assertEquals(stats(cycle).seed_cycle_pairs, 2);
   assertEquals(conflict.code, 0, conflict.stderr);
   assertEquals(stats(conflict).seed_anchor_conflicts, 1);
+  assertEquals(stats(conflict).seed_pairs, 1);
+  assertEquals(stats(chain).seed_pairs, 2);
+  assertEquals(
+    difficultyCol(chain.files, 2).get("a"),
+    difficultyCol(none.files, 2).get("a"),
+    "a dropped seed pair still clamps an unanchored skill",
+  );
   assertEquals(stats(none).seed_anchor_conflicts, 0);
   assertEquals(stats(none).seed_cycle_pairs, 0);
   const [moved, kept] = [conflict, none].map((r) => difficultyCol(r.files, 1));
@@ -763,4 +770,27 @@ Deno.test("difficulty: a seed prereq in a high topic still lands below its depen
     band.get("p")! < band.get("d")!,
     `p band ${band.get("p")} is not below d band ${band.get("d")}`,
   );
+});
+
+Deno.test("difficulty: a seed never raises a grade-anchored dependent", async () => {
+  // Shared embeddings make kNN smoothing pull grade-low and grade-high together.
+  const same = (pairs: string[][]) => {
+    const build = withSeeds(pairs);
+    const emb = new Float32Array(768 * 11);
+    for (let i = 0; i < 11; i++) emb[i * 768 + (i === 1 ? 0 : i)] = 1;
+    build["build/2_embeddings.bin"] = new Uint8Array(emb.buffer);
+    return build;
+  };
+  const outs = ["build/4_difficulty.tsv"];
+  const [seeded, none] = await Promise.all([
+    runIn("difficulty", same([["grade-low", "grade-high"]]), outs),
+    runIn("difficulty", same([]), outs),
+  ]);
+  assertEquals(seeded.code, 0, seeded.stderr);
+  for (const col of [1, 2]) {
+    assertEquals(
+      difficultyCol(seeded.files, col).get("grade-high"),
+      difficultyCol(none.files, col).get("grade-high"),
+    );
+  }
 });

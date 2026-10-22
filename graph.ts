@@ -1497,7 +1497,7 @@ export function stageDifficulty() {
   // of seeds otherwise reverse.
   let seedAnchorAdjusted = 0;
   let seedPairs: number[][] = [];
-  let seedCyclePairs = 0, seedAnchorConflicts = 0;
+  let seedTotal = 0, seedCyclePairs = 0, seedAnchorConflicts = 0;
   {
     const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
     const allSeeds = readSeeds().flatMap(({ pre, dep }) => {
@@ -1516,7 +1516,12 @@ export function stageDifficulty() {
     });
     // Seeds inside a cycle cannot order anything; postproc breaks them by rank.
     const adj = new Map<number, number[]>();
-    for (const [si, di] of allSeeds) adj.set(si, [...adj.get(si) ?? [], di]);
+    seedTotal = allSeeds.length;
+    for (const [si, di] of allSeeds) {
+      const succ = adj.get(si);
+      if (succ) succ.push(di);
+      else adj.set(si, [di]);
+    }
     const cycleOf = new Map<number, number>();
     stronglyConnected(adj).forEach((comp, c) =>
       comp.forEach((n) => cycleOf.set(n, c))
@@ -1531,35 +1536,39 @@ export function stageDifficulty() {
     // A seed moves only the side with no grade anchor, by 1.0 per link. A path
     // from an anchored skill through unanchored skills to a lower anchored
     // skill cannot hold. lo[v] and hi[v] bound v by its anchored neighbors.
-    const lo = Float64Array.from(
-      anchor,
-      (a) => Number.isNaN(a) ? -Infinity : a,
-    );
-    const hi = Float64Array.from(anchor, (a) => Number.isNaN(a) ? Infinity : a);
-    for (let pass = 0, moved = true; moved; pass++) {
-      if (pass > acyclic.length + 1) {
-        throw new Error(
-          `[difficulty] seed bounds never settle after ${pass} passes over ${acyclic.length} seeds. Expected a DAG outside the cycles. Received a pair chain that keeps moving. Fix: report a bug in the seed cycle filter.`,
-        );
-      }
-      moved = false;
-      for (const [si, di] of acyclic) {
-        if (Number.isNaN(anchor[di]) && lo[si] + 1 > lo[di]) {
-          lo[di] = lo[si] + 1;
-          moved = true;
+    const lo = new Float64Array(anchor.length);
+    const hi = new Float64Array(anchor.length);
+    const bound = (pairs: number[][]) => {
+      lo.set(anchor.map((a) => Number.isNaN(a) ? -Infinity : a));
+      hi.set(anchor.map((a) => Number.isNaN(a) ? Infinity : a));
+      for (let pass = 0, moved = true; moved; pass++) {
+        if (pass > pairs.length + 1) {
+          throw new Error(
+            `[difficulty] seed bounds never settle after ${pass} passes over ${pairs.length} seeds. Expected a DAG outside the cycles. Received a pair chain that keeps moving. Fix: report a bug in the seed cycle filter.`,
+          );
         }
-        if (Number.isNaN(anchor[si]) && hi[di] - 1 < hi[si]) {
-          hi[si] = hi[di] - 1;
-          moved = true;
+        moved = false;
+        for (const [si, di] of pairs) {
+          if (Number.isNaN(anchor[di]) && lo[si] + 1 > lo[di]) {
+            lo[di] = lo[si] + 1;
+            moved = true;
+          }
+          if (Number.isNaN(anchor[si]) && hi[di] - 1 < hi[si]) {
+            hi[si] = hi[di] - 1;
+            moved = true;
+          }
         }
       }
-    }
+    };
+    bound(acyclic);
     const holds = ([si, di]: number[]) =>
       !Number.isNaN(anchor[si]) && !Number.isNaN(anchor[di])
         ? anchor[si] < anchor[di]
         : lo[si] + 1 <= hi[di];
     const seeds = acyclic.filter(holds);
     seedAnchorConflicts = acyclic.length - seeds.length;
+    // Kept pairs still hold under the looser bounds of the kept set alone.
+    bound(seeds);
     // Clamp each unanchored skill into [lo, hi], then only raise dependents.
     // A raise stays under hi, because kept pairs have hi[si] + 1 <= hi[di].
     // The seeds are a DAG, so a pass that still moves a skill after
@@ -1577,7 +1586,8 @@ export function stageDifficulty() {
       for (let pass = 0;; pass++) {
         let moved = false;
         for (const [si, di] of seeds) {
-          if (v[si] < v[di]) continue;
+          // Anchors already order a pair whose dependent is anchored.
+          if (v[si] < v[di] || !Number.isNaN(anchor[di])) continue;
           v[di] = v[si] + 1.0;
           lowered.add(di);
           moved = true;
@@ -1612,7 +1622,7 @@ export function stageDifficulty() {
     seedAnchorAdjusted = lowered.size;
     if (seedAnchorAdjusted > 0) {
       console.log(
-        `[difficulty] seed-anchored ${seedAnchorAdjusted} prereqs below their dependents`,
+        `[difficulty] seed-ordered ${seedAnchorAdjusted} skills`,
       );
     }
     seedPairs = seeds;
@@ -1653,7 +1663,7 @@ export function stageDifficulty() {
         throw new Error(
           `[difficulty] seed ${skills[si].id} > ${skills[di].id} needs band ${
             band[di]
-          }. Expected bands 1-20. Received a seed chain deeper than 20 links. Fix: drop a reversed pair in build/1e_seed_edges.tsv.`,
+          }. Expected bands 1-20. Received a seed chain raised above band 20 by its anchored prereq or by its length. Fix: shorten the chain or drop its pairs in build/1e_seed_edges.tsv.`,
         );
       }
       bandMoved++;
@@ -1662,7 +1672,7 @@ export function stageDifficulty() {
     if (!moved) break;
     if (pass > seedPairs.length) {
       throw new Error(
-        `[difficulty] seed bands never settle after ${pass} passes over ${seedPairs.length} seeds. Expected a DAG in build/1e_seed_edges.tsv. Fix: find and drop one reversed pair.`,
+        `[difficulty] seed bands never settle after ${pass} passes over ${seedPairs.length} seeds. Expected an acyclic kept seed set. Received a band chain that keeps moving. Fix: report a bug in the seed cycle filter.`,
       );
     }
   }
@@ -1755,7 +1765,7 @@ export function stageDifficulty() {
     grade_anchored_skills: gradeAnchoredSkills,
     grade_band_inversions: inversions,
     grade_band_worst_gap: worstInversion,
-    seed_pairs: seedPairs.length + seedCyclePairs,
+    seed_pairs: seedTotal,
     seed_cycle_pairs: seedCyclePairs,
     seed_anchor_conflicts: seedAnchorConflicts,
     grade_band_inversion_samples: invSamples,
