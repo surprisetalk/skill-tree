@@ -197,10 +197,6 @@ export function loadTsvCache(path: string): Map<string, string> {
   return m;
 }
 
-export function forEachLine(path: string, fn: (line: string) => void) {
-  for (const l of Deno.readTextFileSync(need(path)).split("\n")) if (l) fn(l);
-}
-
 export const STOPWORDS = new Set([
   "the",
   "a",
@@ -425,9 +421,9 @@ export async function resumableOllama<T extends { id: string }>(
 
 // Stage dedupe can merge a canonical id again, so aliases form chains.
 export function loadAliasesCollapsed(): Map<string, string> {
-  const path = `${BUILD}/3b_aliases.tsv`;
+  const path = ALIASES.path;
   const raw = new Map<string, string>();
-  for (const [d, c] of uniqueIds(path, readRows(path, ALIAS_HEADER))) {
+  for (const { dropped_id: d, canonical_id: c } of readTable(ALIASES)) {
     if (d === c) {
       throw new Error(
         `${path}: expected an alias to name another id, received "${d}" → itself. ${
@@ -554,8 +550,7 @@ export function loadRawEmbeddings(): {
   emb: Float32Array;
   idToEmbIdx: Map<string, number>;
 } {
-  const ids = Deno.readTextFileSync(need(`${BUILD}/2_ids.tsv`)).split("\n")
-    .filter((l) => l.length);
+  const ids = readTable(IDS).map((r) => r.id);
   const binPath = `${BUILD}/2_embeddings.bin`;
   const bin = Deno.readFileSync(need(binPath));
   if (bin.byteLength !== ids.length * EMBED_DIM * 4) {
@@ -568,17 +563,7 @@ export function loadRawEmbeddings(): {
     );
   }
   const emb = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
-  const idToEmbIdx = new Map<string, number>();
-  for (let i = 0; i < ids.length; i++) {
-    if (idToEmbIdx.has(ids[i])) {
-      throw new Error(
-        `${BUILD}/2_ids.tsv:${i + 1}: expected unique ids, received a second "${
-          ids[i]
-        }". ${rerun(binPath)}`,
-      );
-    }
-    idToEmbIdx.set(ids[i], i);
-  }
+  const idToEmbIdx = new Map(ids.map((id, i) => [id, i]));
   return { ids, emb, idToEmbIdx };
 }
 
@@ -788,170 +773,243 @@ export function stronglyConnected<T>(adj: Map<T, T[]>): T[][] {
 
 // ---------- build tables ----------
 
-export const LIST_HEADER = "id\ttitle\tdescription\tsources\ttags";
-export const TAGGED_HEADER = `${LIST_HEADER}\toccupations\ttopics`;
-export const DIFFICULTY_HEADER = "id\tdifficulty\tdifficulty_raw";
-export const SEED_HEADER =
-  "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback";
-export const EDGES_HEADER = "skill_id\tprereq_id";
+// A cell checker: parse returns undefined to reject. `as` finishes "expected <column> as ...".
+type Cell<T> = { as: string; parse: (s: string) => T | undefined };
+
+const SLUG: Cell<string> = {
+  as:
+    "a slug (lowercase letters and digits joined by single hyphens, at most 80 characters)",
+  parse: (s) =>
+    s.length <= 80 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s) ? s : undefined,
+};
+const text: Cell<string> = { as: "text", parse: (s) => s };
+const filled: Cell<string> = { as: "text", parse: (s) => s || undefined };
+const int = (lo: number, hi: number): Cell<number> => ({
+  as: `an integer ${lo}–${hi}`,
+  parse: (s) => {
+    const n = Number(s);
+    return /^-?\d+$/.test(s) && n >= lo && n <= hi ? n : undefined;
+  },
+});
+const finite: Cell<number> = {
+  as: "a finite number",
+  parse: (s) => s.trim() && Number.isFinite(Number(s)) ? Number(s) : undefined,
+};
+const bit: Cell<boolean> = {
+  as: "0 or 1",
+  parse: (s) => s === "0" ? false : s === "1" ? true : undefined,
+};
+const grade: Cell<number | null> = {
+  as: "an integer or empty",
+  parse: (s) => s === "" ? null : /^-?\d+$/.test(s) ? Number(s) : undefined,
+};
+const slugs = (s: string): string[] | undefined => {
+  const ids = s.split(",");
+  return ids.every((i) => SLUG.parse(i) !== undefined) ? ids : undefined;
+};
+const slugList: Cell<string[]> = {
+  as: "slugs joined by commas, or empty",
+  parse: (s) => s === "" ? [] : slugs(s),
+};
+const picks: Cell<string[]> = {
+  as: '"none" or slugs joined by commas',
+  parse: (s) => s === "none" ? [] : slugs(s),
+};
+
+type Columns = Record<string, Cell<unknown>>;
+type Schema<C extends Columns> = {
+  path: string;
+  columns: C;
+  key?: keyof C & string;
+  headerless?: true;
+  empty?: true;
+};
+export type Row<C extends Columns> = {
+  [K in keyof C]: C[K] extends Cell<infer T> ? T : never;
+};
+const table = <C extends Columns>(s: Schema<C>) => s;
+const headerOf = (c: Columns) => Object.keys(c).join("\t");
+
+const LIST_COLUMNS = {
+  id: SLUG,
+  title: filled,
+  description: text,
+  sources: filled,
+  tags: text,
+};
+const TAGGED_COLUMNS = { ...LIST_COLUMNS, occupations: text, topics: text };
+const SKILLS_COLUMNS = {
+  id: SLUG,
+  title: filled,
+  display_title: filled,
+  description: text,
+  difficulty: int(1, 20),
+  prereqs: slugList,
+  occupations: slugList,
+  topics: slugList,
+  grade_start: grade,
+  grade_end: grade,
+};
+export const TAGGED_HEADER = headerOf(TAGGED_COLUMNS);
+export const LIST_HEADER = headerOf(LIST_COLUMNS);
+export const SKILLS_HEADER = headerOf(SKILLS_COLUMNS);
 export const PREREQ_CACHE = `${BUILD}/5_prereqs.tsv`;
 
-// Rows of a build table after its header, which must match exactly.
-export function readRows(path: string, header: string): string[][] {
-  const lines = Deno.readTextFileSync(need(path)).split("\n").filter((l) =>
-    l.length
-  );
-  if (lines[0] !== header) {
-    throw new Error(
-      `${path}: unexpected header.\n  expected: ${
-        JSON.stringify(header)
-      }\n  received: ${
-        lines[0] === undefined ? "an empty file" : JSON.stringify(lines[0])
-      }\n  ${rerun(path)}`,
+export const SKILL_LIST = table({
+  path: `${BUILD}/1_skills.tsv`,
+  key: "id",
+  columns: LIST_COLUMNS,
+});
+export const TAGGED_RAW = table({
+  path: `${BUILD}/3_tagged.tsv`,
+  key: "id",
+  columns: TAGGED_COLUMNS,
+});
+export const TAGGED_DEDUPED = table({
+  path: TAGGED,
+  key: "id",
+  columns: TAGGED_COLUMNS,
+});
+export const ALIASES = table({
+  path: `${BUILD}/3b_aliases.tsv`,
+  key: "dropped_id",
+  empty: true,
+  columns: { dropped_id: SLUG, canonical_id: SLUG },
+});
+export const DIFFICULTY = table({
+  path: `${BUILD}/4_difficulty.tsv`,
+  key: "id",
+  columns: { id: SLUG, difficulty: int(1, 20), difficulty_raw: finite },
+});
+export const EDGES = table({
+  path: `${BUILD}/6_edges.tsv`,
+  empty: true,
+  columns: { skill_id: SLUG, prereq_id: SLUG },
+});
+export const SEEDS = table({
+  path: `${BUILD}/1e_seed_edges.tsv`,
+  empty: true,
+  columns: {
+    src_id: SLUG,
+    dst_id: SLUG,
+    source: filled,
+    confidence: finite,
+    holdout: bit,
+    fallback: bit,
+  },
+});
+export const IDS = table({
+  path: `${BUILD}/2_ids.tsv`,
+  key: "id",
+  headerless: true,
+  columns: { id: SLUG },
+});
+export const PATHOLOGICAL = table({
+  path: `${BUILD}/2_pathological.tsv`,
+  key: "id",
+  headerless: true,
+  empty: true,
+  columns: { id: SLUG },
+});
+export const PREREQS = table({
+  path: PREREQ_CACHE,
+  key: "skill",
+  headerless: true,
+  columns: { skill: SLUG, picks },
+});
+export const SKILLS_OUT = table({
+  path: "skills.tsv",
+  key: "id",
+  columns: SKILLS_COLUMNS,
+});
+
+export type Tagged = Row<typeof TAGGED_COLUMNS>;
+
+// Typed rows of a build table. Throws on the first row its writer would reject.
+export function readTable<C extends Columns>(s: Schema<C>): Row<C>[] {
+  const fix = rerun(s.path);
+  const fail = (line: number | null, msg: string): never => {
+    throw new Error(`${s.path}${line ? `:${line}` : ""}: ${msg}. ${fix}`);
+  };
+  const names = Object.keys(s.columns);
+  const body = Deno.readTextFileSync(need(s.path));
+  if (body && !body.endsWith("\n")) {
+    fail(
+      body.split("\n").length,
+      `expected a newline after the last row, received "${
+        body.slice(body.lastIndexOf("\n") + 1).slice(0, 80)
+      }"`,
     );
   }
-  const n = header.split("\t").length;
-  return lines.slice(1).map((l, i) => {
-    const c = l.split("\t");
-    if (c.length !== n) {
-      throw new Error(
-        `${path}:${i + 2}: expected ${n} columns, received ${c.length}. ${
-          rerun(path)
-        }`,
-      );
-    }
-    return c;
-  });
-}
-
-export const ALIAS_HEADER = "dropped_id\tcanonical_id";
-
-// A skill table with no rows means its stage failed upstream.
-function nonEmpty(path: string, rows: string[][]): string[][] {
-  if (!rows.length) {
-    throw new Error(
-      `${path}: expected at least one row after the header, received none. ${
-        rerun(path)
+  const lines = body ? body.slice(0, -1).split("\n") : [];
+  const first = s.headerless ? 1 : 2;
+  if (!s.headerless && lines[0] !== names.join("\t")) {
+    fail(
+      1,
+      `expected header ${JSON.stringify(names.join("\t"))}, received ${
+        lines.length ? JSON.stringify(lines[0].slice(0, 200)) : "an empty file"
       }`,
     );
   }
-  return rows;
-}
-
-// The rows, after a check that the first column is unique and present.
-export function uniqueIds(path: string, rows: string[][]): string[][] {
-  const seen = new Set<string>();
-  rows.forEach((c, i) => {
-    if (!c[0] || seen.has(c[0])) {
-      throw new Error(
-        `${path}:${i + 2}: expected unique ids, received a second "${c[0]}". ${
-          rerun(path)
-        }`,
-      );
-    }
-    seen.add(c[0]);
-  });
-  return rows;
-}
-
-export type Tagged = {
-  id: string;
-  title: string;
-  description: string;
-  sources: string;
-  tags: string;
-  occupations: string;
-  topics: string;
-};
-
-export function readTagged(path = TAGGED): Tagged[] {
-  return nonEmpty(path, uniqueIds(path, readRows(path, TAGGED_HEADER))).map((
-    [id, title, description, sources, tags, occupations, topics],
-  ) => ({ id, title, description, sources, tags, occupations, topics }));
-}
-
-export function readDifficulty(): Map<string, { band: number; raw: number }> {
-  const path = `${BUILD}/4_difficulty.tsv`;
-  return new Map(
-    nonEmpty(path, uniqueIds(path, readRows(path, DIFFICULTY_HEADER))).map(
-      (c, i) => {
-        const band = Number(c[1]), raw = Number(c[2]);
-        if (!/^\d+$/.test(c[1]) || band < 1 || band > 20) {
-          throw new Error(
-            `${path}:${
-              i + 2
-            }: expected difficulty as an integer 1–20, received "${c[1]}". ${
-              rerun(path)
-            }`,
-          );
-        }
-        if (c[2] === "" || !Number.isFinite(raw)) {
-          throw new Error(
-            `${path}:${i + 2}: expected a finite difficulty_raw, received "${
-              c[2]
-            }". ${rerun(path)}`,
-          );
-        }
-        return [c[0], { band, raw }];
-      },
-    ),
-  );
-}
-
-// 5_prereqs.tsv has no header: `skill\tp1,p2` or `skill\tnone`.
-export function readPrereqPicks(): { skill: string; picks: string[] }[] {
-  const text = Deno.readTextFileSync(need(PREREQ_CACHE));
-  if (!text.endsWith("\n")) {
-    throw new Error(
-      `${PREREQ_CACHE}: expected rows that end in a newline, received ${
-        text
-          ? `a torn last row "${text.slice(text.lastIndexOf("\n") + 1)}"`
-          : "an empty file"
-      }. Delete the torn row. ${rerun(PREREQ_CACHE)}`,
+  const data = lines.slice(first - 1);
+  if (!data.length && !s.empty) {
+    fail(
+      null,
+      `expected at least one row${
+        s.headerless ? "" : " after the header"
+      }, received none`,
     );
   }
   const seen = new Set<string>();
-  return text.split("\n").filter((l) => l.length).map((l, i) => {
-    const c = l.split("\t");
-    if (c.length !== 2 || !c[0] || !c[1] || l.includes("\r")) {
-      throw new Error(
-        `${PREREQ_CACHE}:${
-          i + 1
-        }: expected "skill<TAB>p1,p2" or "skill<TAB>none", received ${
-          JSON.stringify(l)
-        }. ${rerun(PREREQ_CACHE)}`,
+  return data.map((l, i) => {
+    const line = first + i;
+    const cells = l.split("\t");
+    if (cells.length !== names.length) {
+      fail(
+        line,
+        `expected ${names.length} tab-separated fields, received ${cells.length}`,
       );
     }
-    if (seen.has(c[0])) {
-      throw new Error(
-        `${PREREQ_CACHE}:${
-          i + 1
-        }: expected one row per skill, received a second "${
-          c[0]
-        }". Delete one of the two rows.`,
-      );
+    const row: Record<string, unknown> = {};
+    names.forEach((n, j) => {
+      const v = s.columns[n].parse(cells[j]);
+      if (v === undefined) {
+        fail(
+          line,
+          `expected ${n} as ${s.columns[n].as}, received ${
+            JSON.stringify(cells[j].slice(0, 80))
+          }`,
+        );
+      }
+      row[n] = v;
+    });
+    if (s.key) {
+      const k = cells[names.indexOf(s.key)];
+      if (seen.has(k)) {
+        fail(line, `expected unique ${s.key}, received a second "${k}"`);
+      }
+      seen.add(k);
     }
-    seen.add(c[0]);
-    return { skill: c[0], picks: c[1] === "none" ? [] : c[1].split(",") };
+    return row as Row<C>;
   });
+}
+
+export const readTagged = (schema = TAGGED_DEDUPED) => readTable(schema);
+
+export function readDifficulty(): Map<string, { band: number; raw: number }> {
+  return new Map(
+    readTable(DIFFICULTY).map((
+      r,
+    ) => [r.id, { band: r.difficulty, raw: r.difficulty_raw }]),
+  );
 }
 
 // Expert seed edges outside the holdout, with dedupe aliases applied.
 export function readSeeds(): { pre: string; dep: string }[] {
   const alias = loadAliasesCollapsed();
-  const path = `${BUILD}/1e_seed_edges.tsv`;
-  return readRows(path, SEED_HEADER).filter((c, i) => {
-    if (c[4] !== "0" && c[4] !== "1") {
-      throw new Error(
-        `${path}:${i + 2}: expected holdout 0 or 1, received "${c[4]}". ${
-          rerun(path)
-        }`,
-      );
-    }
-    return c[4] === "0";
-  }).map((c) => ({
-    pre: alias.get(c[0]) ?? c[0],
-    dep: alias.get(c[1]) ?? c[1],
+  return readTable(SEEDS).filter((r) => !r.holdout).map((r) => ({
+    pre: alias.get(r.src_id) ?? r.src_id,
+    dep: alias.get(r.dst_id) ?? r.dst_id,
   }));
 }
 
@@ -1035,6 +1093,3 @@ export function gradeToDifficulty(token: string): number | null {
   if (/AP|COLLEGE|UG|UNDERGRAD/.test(t)) return 15;
   return null;
 }
-
-export const SKILLS_HEADER =
-  "id\ttitle\tdisplay_title\tdescription\tdifficulty\tprereqs\toccupations\ttopics\tgrade_start\tgrade_end";

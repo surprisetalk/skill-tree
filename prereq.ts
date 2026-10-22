@@ -1,17 +1,18 @@
 import {
+  ALIASES,
   BUILD,
-  EDGES_HEADER,
+  EDGES,
   EMBED_DIM,
   FRAMEWORK_RE,
   gradeToDifficulty,
   loadAliasesCollapsed,
-  need,
   normalizedEmbeddingsForSkills,
+  PATHOLOGICAL,
   PREREQ_CACHE,
+  PREREQS,
   readDifficulty,
-  readPrereqPicks,
-  readRows,
   readSeeds,
+  readTable,
   readTagged,
   readTree,
   rerun,
@@ -146,10 +147,7 @@ function computePrereqCandidates(): Map<string, number[]> {
       arr.push(i);
     }
   }
-  const pathological = new Set(
-    Deno.readTextFileSync(need(`${BUILD}/2_pathological.tsv`)).split("\n")
-      .filter((l) => l.length),
-  );
+  const pathological = new Set(readTable(PATHOLOGICAL).map((r) => r.id));
   const K = 15;
   // At 0.3, 23% of picks had reversed difficulty.
   const MIN_DIFF = 1.5;
@@ -493,7 +491,7 @@ export function stagePostproc() {
   const rawDiff = new Map([...diffs].map(([id, d]) => [id, d.raw]));
   const band = new Map([...diffs].map(([id, d]) => [id, d.band]));
 
-  let raw: [string, string][] = readPrereqPicks().flatMap(({ skill, picks }) =>
+  let raw: [string, string][] = readTable(PREREQS).flatMap(({ skill, picks }) =>
     picks.filter(Boolean).map((p): [string, string] => [skill, p])
   );
 
@@ -998,8 +996,8 @@ export function stageFinalize() {
 
   const skillIdSet = new Set<string>(skills.map((s) => s.id));
   const prereqs = new Map<string, string[]>();
-  const edgesPath = `${BUILD}/6_edges.tsv`;
-  readRows(edgesPath, EDGES_HEADER).forEach(([s0, p0], i) => {
+  const edgesPath = EDGES.path;
+  readTable(EDGES).forEach(({ skill_id: s0, prereq_id: p0 }, i) => {
     const s = remap(s0), p = remap(p0);
     // postproc wrote these edges from the same skills and aliases.
     for (const id of [s, p]) {
@@ -1032,9 +1030,7 @@ export function stageFinalize() {
 
   // Cruft drop
   const aliasCanonicals = new Set(
-    readRows(`${BUILD}/3b_aliases.tsv`, "dropped_id\tcanonical_id").map((c) =>
-      c[1]
-    ),
+    readTable(ALIASES).map((r) => r.canonical_id),
   );
   const childCount = new Map<string, number>();
   for (const [, p] of prereqs) {

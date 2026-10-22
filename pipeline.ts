@@ -9,18 +9,18 @@ import {
   HAN_RE,
   isJunkTopic,
   isTranslation,
-  LIST_HEADER,
   loadRawEmbeddings,
   loadTsvCache,
   need,
+  PREREQS,
   readDifficulty,
   readJson,
   readMoocPairs,
-  readPrereqPicks,
-  readRows,
   readSeeds,
+  readTable,
   rerun,
-  SKILLS_HEADER,
+  SKILL_LIST,
+  SKILLS_OUT,
   topoOrder,
   TRANSLATE_CACHE,
 } from "./lib.ts";
@@ -59,35 +59,13 @@ type StatusSkill = {
 };
 
 function readSkillsTsv(): StatusSkill[] {
-  const list = (c: string) => c ? c.split(",") : [];
-  const seen = new Set<string>();
-  return readRows("skills.tsv", SKILLS_HEADER).map((c, i) => {
-    const band = Number(c[4]);
-    if (!/^\d+$/.test(c[4]) || band < 1 || band > 20) {
-      throw new Error(
-        `skills.tsv:${
-          i + 2
-        }: expected difficulty as an integer 1–20, received "${c[4]}". ${
-          rerun("skills.tsv")
-        }`,
-      );
-    }
-    if (seen.has(c[0])) {
-      throw new Error(
-        `skills.tsv:${i + 2}: expected unique ids, received a second "${
-          c[0]
-        }". ${rerun("skills.tsv")}`,
-      );
-    }
-    seen.add(c[0]);
-    return {
-      id: c[0],
-      band,
-      prereqs: list(c[5]),
-      occupations: list(c[6]),
-      topics: list(c[7]),
-    };
-  });
+  return readTable(SKILLS_OUT).map((r) => ({
+    id: r.id,
+    band: r.difficulty,
+    prereqs: r.prereqs,
+    occupations: r.occupations,
+    topics: r.topics,
+  }));
 }
 
 const readDifficultyRaw = () =>
@@ -142,7 +120,7 @@ async function stageStatus() {
     ["Under 8% of LLM prereq picks sit above their skill's difficulty.", () => {
       const raw = readDifficultyRaw();
       let picks = 0, reversed = 0;
-      for (const { skill, picks: ps } of readPrereqPicks()) {
+      for (const { skill, picks: ps } of readTable(PREREQS)) {
         for (const p of ps) {
           const rs = raw.get(skill), rp = raw.get(p);
           // Stale ids score in the next condition.
@@ -157,7 +135,7 @@ async function stageStatus() {
       "Every 5_prereqs.tsv row names only skills from the current difficulty stage.",
       () => {
         const raw = readDifficultyRaw();
-        const rows = readPrereqPicks();
+        const rows = readTable(PREREQS);
         const stale = rows.filter((r) =>
           !raw.has(r.skill) || r.picks.some((p) => !raw.has(p))
         );
@@ -258,11 +236,9 @@ async function stageStatus() {
         0.01,
       )],
     ["At least 95% of OpenSALT skills carry a grade tag.", () => {
-      const rows = readRows(
-        `${BUILD}/1_skills.tsv`,
-        LIST_HEADER,
-      ).filter((c) => c[3].split(",").includes("opensalt"));
-      const tagged = rows.filter((c) => /(^|,)grade:/.test(c[4]));
+      const rows = readTable(SKILL_LIST)
+        .filter((r) => r.sources.split(",").includes("opensalt"));
+      const tagged = rows.filter((r) => /(^|,)grade:/.test(r.tags));
       return grade(tagged.length / rows.length, 0.95, 0);
     }],
     [

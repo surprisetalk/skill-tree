@@ -6,18 +6,18 @@ import {
   embedBatch,
   gradeToDifficulty,
   isJunkTopic,
-  LIST_HEADER,
   need,
   normalize,
   normalizedEmbeddingsForSkills,
   readCsv,
-  readRows,
   readSeeds,
+  readTable,
   readTagged,
   readTree,
   readTsv,
   resolveConcept,
   SIG_STOP,
+  SKILL_LIST,
   skillIndex,
   slugify,
   STOPWORDS,
@@ -25,6 +25,7 @@ import {
   TAGGED,
   Tagged,
   TAGGED_HEADER,
+  TAGGED_RAW,
   TOPIC_REFS,
   topoOrder,
   writeStats,
@@ -56,8 +57,8 @@ function embedSignature(v: Float32Array): string {
 }
 
 export async function stageEmbed() {
-  const skills = readRows(`${BUILD}/1_skills.tsv`, LIST_HEADER).map((
-    [id, title, description, , tags],
+  const skills = readTable(SKILL_LIST).map((
+    { id, title, description, tags },
   ) => ({
     id,
     title,
@@ -333,9 +334,7 @@ function parseEscoSkillOccupations(): Map<string, string[]> {
 }
 
 export async function stageTag() {
-  const skills = readRows(`${BUILD}/1_skills.tsv`, LIST_HEADER).map((
-    [id, title, description, sources, tags],
-  ) => ({ id, title, description, sources, tags }));
+  const skills = readTable(SKILL_LIST);
   const skillVecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
 
   const occRefs = parseOccupationRefs();
@@ -736,7 +735,7 @@ export async function stageTag() {
 // ---------- stage dedupe ----------
 
 export function stageDedupe() {
-  const rows = readTagged(`${BUILD}/3_tagged.tsv`);
+  const rows = readTagged(TAGGED_RAW);
   const vecs = normalizedEmbeddingsForSkills(rows.map((r) => r.id));
   const DEDUPE_COSINE = 0.96;
 

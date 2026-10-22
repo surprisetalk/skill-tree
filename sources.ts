@@ -18,12 +18,13 @@ import {
   readCsv,
   readJson,
   readMoocPairs,
-  readRows,
+  readTable,
   readTagged,
   readTsv,
   resolveConcept,
   resumableOllama,
   Skill,
+  SKILL_LIST,
   skillIndex,
   slugify,
   STOPWORDS,
@@ -996,9 +997,8 @@ export async function stageEnrich() {
   const opensaltTargets: { id: string; title: string }[] = [];
   let opaqueSkipped = 0;
   for (
-    const [id, title, desc, sources, tags] of readRows(
-      `${BUILD}/1_skills.tsv`,
-      LIST_HEADER,
+    const { id, title, description: desc, sources, tags } of readTable(
+      SKILL_LIST,
     )
   ) {
     if (title.length > SUM_MAX) sumTargets.push({ id, title });

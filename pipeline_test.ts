@@ -286,13 +286,21 @@ Deno.test("status: a missing build file scores 0 and names the stage to rerun", 
 
 Deno.test("status: a malformed build file crashes with the condition and the fix", async () => {
   const cases = [
-    ["skills.tsv", "id\ttitle\n", "unexpected header"],
+    [
+      "skills.tsv",
+      "id\ttitle\n",
+      'skills.tsv:1: expected header "id\\ttitle\\tdisplay_title',
+    ],
     [
       "build/4_difficulty.tsv",
       "id\tdifficulty\tdifficulty_raw\na\t1\tx\n",
-      "finite difficulty_raw",
+      'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received "x"',
     ],
-    ["build/5_prereqs.tsv", "addition\n", "skill<TAB>p1,p2"],
+    [
+      "build/5_prereqs.tsv",
+      "addition\n",
+      "build/5_prereqs.tsv:1: expected 2 tab-separated fields, received 1",
+    ],
     [
       "data/mooccubex/cs.json.gz",
       await gzip("null\n"),
@@ -386,12 +394,12 @@ Deno.test("finalize: writes a DAG of unique skills, or stops", async () => {
     [
       "build/3b_tagged_deduped.tsv",
       "counting\tcounting\td\tfoundation\t\t\tarithmetic\n",
-      'expected unique ids, received a second "counting"',
+      'build/3b_tagged_deduped.tsv:5: expected unique id, received a second "counting"',
     ],
     [
       "build/4_difficulty.tsv",
       "counting\t1\t1\n",
-      'expected unique ids, received a second "counting"',
+      'build/4_difficulty.tsv:5: expected unique id, received a second "counting"',
     ],
   ];
   await Promise.all(cases.map(async ([path, extra, expected]) => {
@@ -405,6 +413,120 @@ Deno.test("finalize: writes a DAG of unique skills, or stops", async () => {
     "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\n";
   const { code, stderr } = await runIn("finalize", empty);
   assert(code !== 0 && stderr.includes("expected at least one row"), stderr);
+});
+
+const SLUG_AS =
+  "a slug (lowercase letters and digits joined by single hyphens, at most 80 characters)";
+
+// One bad cell per build table: the reader names the file, line, column,
+// expectation, and received text, then the stage to rerun.
+Deno.test("build tables: a bad cell stops the reading stage with a message that names the fix", async () => {
+  const withFiles = (base: Fixture, files: Fixture): Fixture => ({
+    ...base,
+    ...files,
+  });
+  const cases: [string, string, Fixture, string][] = [
+    [
+      "status",
+      "1_skills",
+      withFiles(goodBuild(), {
+        "build/1_skills.tsv":
+          "id\ttitle\tdescription\tsources\ttags\nAddition\tAddition\t\topensalt\tgrade:1\n",
+      }),
+      `build/1_skills.tsv:2: expected id as ${SLUG_AS}, received "Addition". Run: deno run -A pipeline.ts list`,
+    ],
+    [
+      "dedupe",
+      "3_tagged",
+      {
+        "build/3_tagged.tsv":
+          "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\ncounting\t\td\tfoundation\t\t\t\n",
+      },
+      'build/3_tagged.tsv:2: expected title as text, received ""',
+    ],
+    [
+      "finalize",
+      "3b_tagged_deduped",
+      withFiles(finalBuild(), {
+        "build/3b_tagged_deduped.tsv":
+          "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\ncounting\tcounting\td\tfoundation\n",
+      }),
+      "build/3b_tagged_deduped.tsv:2: expected 7 tab-separated fields, received 4. Run: deno run -A pipeline.ts dedupe",
+    ],
+    [
+      "finalize",
+      "3b_aliases",
+      withFiles(finalBuild(), {
+        "build/3b_aliases.tsv": "dropped_id\tcanonical_id\nghost\tCounting\n",
+      }),
+      `build/3b_aliases.tsv:2: expected canonical_id as ${SLUG_AS}, received "Counting". Run: deno run -A pipeline.ts dedupe`,
+    ],
+    [
+      "finalize",
+      "4_difficulty",
+      withFiles(finalBuild(), {
+        "build/4_difficulty.tsv":
+          "id\tdifficulty\tdifficulty_raw\ncounting\t1\t1\naddition\t2\t2\nmultiplication\t21\t3\n",
+      }),
+      'build/4_difficulty.tsv:4: expected difficulty as an integer 1–20, received "21". Run: deno run -A pipeline.ts difficulty',
+    ],
+    [
+      "finalize",
+      "6_edges",
+      withFiles(finalBuild(), {
+        "build/6_edges.tsv": "skill_id\tprereq_id\naddition\tcounting",
+      }),
+      'build/6_edges.tsv:2: expected a newline after the last row, received "addition\tcounting". Run: deno run -A pipeline.ts postproc',
+    ],
+    [
+      "status",
+      "1e_seed_edges",
+      withFiles(goodBuild(), {
+        "build/1e_seed_edges.tsv": seedHeader +
+          "counting\taddition\tkhan\t1.00\t2\t0\n",
+      }),
+      'build/1e_seed_edges.tsv:2: expected holdout as 0 or 1, received "2". Run: deno run -A pipeline.ts seed-edges',
+    ],
+    [
+      "status",
+      "2_ids",
+      withFiles(goodBuild(), {
+        "build/2_ids.tsv": goodBuild()["build/2_ids.tsv"] + "counting\n",
+      }),
+      'build/2_ids.tsv:7: expected unique id, received a second "counting". Run: deno run -A pipeline.ts embed',
+    ],
+    [
+      "status",
+      "5_prereqs",
+      withFiles(goodBuild(), {
+        "build/5_prereqs.tsv": "addition\tCounting\n",
+      }),
+      `build/5_prereqs.tsv:1: expected picks as "none" or slugs joined by commas, received "Counting". Run: deno run -A pipeline.ts prereq`,
+    ],
+    [
+      "prereq",
+      "2_pathological",
+      withFiles(finalBuild(), {
+        "build/2_ids.tsv": goodBuild()["build/2_ids.tsv"],
+        "build/2_embeddings.bin": goodBuild()["build/2_embeddings.bin"],
+        "build/2_pathological.tsv": "counting\nDep\n",
+      }),
+      `build/2_pathological.tsv:2: expected id as ${SLUG_AS}, received "Dep". Run: deno run -A pipeline.ts embed`,
+    ],
+    [
+      "status",
+      "skills.tsv",
+      withFiles(goodBuild(), {
+        "skills.tsv": goodBuild()["skills.tsv"] +
+          "late\tlate\tlate\t\t0\t\t\t\t\t\n",
+      }),
+      'skills.tsv:8: expected difficulty as an integer 1–20, received "0". Run: deno run -A pipeline.ts finalize',
+    ],
+  ];
+  await Promise.all(cases.map(async ([stage, name, fixture, expected]) => {
+    const { code, stderr } = await runIn(stage, fixture, []);
+    assert(code !== 0 && stderr.includes(expected), `${name}: ${stderr}`);
+  }));
 });
 
 // The repo's data/ as symlinks, with the given data/ and build/ files written
