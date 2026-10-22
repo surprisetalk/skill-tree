@@ -1497,7 +1497,7 @@ export function stageDifficulty() {
   // of seeds otherwise reverse.
   let seedAnchorAdjusted = 0;
   let seedPairs: number[][] = [];
-  let seedCyclePairs = 0;
+  let seedCyclePairs = 0, seedAnchorConflicts = 0;
   {
     const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
     const allSeeds = readSeeds().flatMap(({ pre, dep }) => {
@@ -1528,6 +1528,12 @@ export function stageDifficulty() {
     const seeds = allSeeds.filter(([si, di]) =>
       !(cycleOf.has(si) && cycleOf.get(si) === cycleOf.get(di))
     );
+    // A seed moves only the side with no grade anchor.
+    seedAnchorConflicts =
+      seeds.filter(([si, di]) =>
+        !Number.isNaN(anchor[si]) && !Number.isNaN(anchor[di]) &&
+        anchor[si] >= anchor[di]
+      ).length;
     // One pass per chain link at most. The seeds are a DAG, so a pass that
     // still moves a skill after seeds.length + 1 passes is a bug.
     const lowered = new Set<number>();
@@ -1536,8 +1542,13 @@ export function stageDifficulty() {
         let moved = false;
         for (const [si, di] of seeds) {
           if (v[si] < v[di]) continue;
-          v[si] = v[di] - 1.0;
-          lowered.add(si);
+          if (Number.isNaN(anchor[si])) {
+            v[si] = v[di] - 1.0;
+            lowered.add(si);
+          } else if (Number.isNaN(anchor[di])) {
+            v[di] = v[si] + 1.0;
+            lowered.add(di);
+          } else continue;
           moved = true;
         }
         if (!moved) break;
@@ -1604,8 +1615,9 @@ export function stageDifficulty() {
     let moved = false;
     for (const [si, di] of seedPairs) {
       if (band[si] < band[di]) continue;
-      if (band[di] > 1) band[si] = band[di] - 1;
-      else band[di] = band[si] + 1;
+      if (!Number.isNaN(anchor[si]) && !Number.isNaN(anchor[di])) continue;
+      if (!Number.isNaN(anchor[si]) || band[di] <= 1) band[di] = band[si] + 1;
+      else band[si] = band[di] - 1;
       if (band[di] > 20) {
         throw new Error(
           `[difficulty] seed ${skills[si].id} > ${skills[di].id} needs band ${
@@ -1712,7 +1724,9 @@ export function stageDifficulty() {
     grade_anchored_skills: gradeAnchoredSkills,
     grade_band_inversions: inversions,
     grade_band_worst_gap: worstInversion,
+    seed_pairs: seedPairs.length + seedCyclePairs,
     seed_cycle_pairs: seedCyclePairs,
+    seed_anchor_conflicts: seedAnchorConflicts,
     grade_band_inversion_samples: invSamples,
     total_seconds: (performance.now() - t0) / 1000,
   });

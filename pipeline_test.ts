@@ -127,6 +127,9 @@ const goodBuild = (): Fixture => {
       kendall_tau_vs_anchor: 0.8,
       grade_anchored_skills: 10,
       grade_band_inversions: 0,
+      seed_pairs: 100,
+      seed_cycle_pairs: 0,
+      seed_anchor_conflicts: 0,
     }),
     "build/1_stats.json": JSON.stringify({
       raw_rows: 1000,
@@ -217,6 +220,20 @@ Deno.test("status: a missing or still-Chinese translation scores below 1", async
       0.5,
     );
   }
+});
+
+Deno.test("status: seed pairs that contradict both grade anchors score below 1", async () => {
+  const build = goodBuild();
+  build["build/4_stats.json"] = (build["build/4_stats.json"] as string)
+    .replace('"seed_anchor_conflicts":0', '"seed_anchor_conflicts":50');
+  const { code, score } = await runIn("status", build);
+  assertEquals(code, 1);
+  assertEquals(
+    score(
+      "Under 1% of seed pairs contradict the grade anchors of both skills.",
+    ),
+    (0.5 - 1) / (0.01 - 1),
+  );
 });
 
 Deno.test("status: titles dropped for an empty key or slug score below 1", async () => {
@@ -597,14 +614,23 @@ Deno.test("difficulty: a seed self-loop or unknown id stops the stage", async ()
   );
 });
 
-Deno.test("difficulty: a seed cycle is skipped and counted", async () => {
-  const { code, stderr, files } = await runIn(
-    "difficulty",
-    withSeeds([["a", "b"], ["b", "a"]]),
-    ["build/4_stats.json"],
-  );
-  assertEquals(code, 0, stderr);
-  assertEquals(JSON.parse(files["build/4_stats.json"]).seed_cycle_pairs, 2);
+Deno.test("difficulty: a seed cycle is skipped and counted, and a seed never moves an anchored skill", async () => {
+  const outs = ["build/4_difficulty.tsv", "build/4_stats.json"];
+  const [cycle, conflict, none] = await Promise.all([
+    runIn("difficulty", withSeeds([["a", "b"], ["b", "a"]]), outs),
+    runIn("difficulty", withSeeds([["grade-high", "grade-low"]]), outs),
+    runIn("difficulty", withSeeds([]), outs),
+  ]);
+  assertEquals(cycle.code, 0, cycle.stderr);
+  const stats = (r: typeof cycle) => JSON.parse(r.files["build/4_stats.json"]);
+  assertEquals(stats(cycle).seed_cycle_pairs, 2);
+  assertEquals(conflict.code, 0, conflict.stderr);
+  assertEquals(stats(conflict).seed_anchor_conflicts, 1);
+  assertEquals(stats(none).seed_anchor_conflicts, 0);
+  assertEquals(stats(none).seed_cycle_pairs, 0);
+  const [moved, kept] = [conflict, none].map((r) => difficultyCol(r.files, 1));
+  assertEquals(moved.get("grade-high"), kept.get("grade-high"));
+  assertEquals(moved.get("grade-low"), kept.get("grade-low"));
 });
 
 // Stage list over a temp data dir whose OpenSALT folder holds only `items`.
