@@ -544,6 +544,34 @@ Deno.test("build tables: a bad cell stops the reading stage with a message that 
       }),
       'skills.tsv:8: expected difficulty as an integer 1–20, received "0". Run: deno run -A pipeline.ts finalize',
     ],
+    [
+      "postproc",
+      "5_prereqs ids",
+      withFiles(finalBuild(), {
+        "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\tghost\n",
+        "build/1e_seed_edges.tsv": seedHeader,
+      }),
+      'build/5_prereqs.tsv:2: expected a skill id, received "ghost". Run: deno run -A pipeline.ts prereq',
+    ],
+    [
+      "postproc",
+      "1e_seed_edges ids",
+      withFiles(finalBuild(), {
+        "build/5_prereqs.tsv": "addition\tcounting\n",
+        "build/1e_seed_edges.tsv": seedHeader +
+          "counting\taddition\tkhan\t1.00\t0\t0\nghost\taddition\tkhan\t1.00\t1\t0\n",
+      }),
+      'build/1e_seed_edges.tsv:3: expected a skill id, received "ghost". Run: deno run -A pipeline.ts seed-edges',
+    ],
+    [
+      "finalize",
+      "4_difficulty ids",
+      withFiles(finalBuild(), {
+        "build/4_difficulty.tsv": finalBuild()["build/4_difficulty.tsv"] +
+          "ghost\t4\t4\n",
+      }),
+      'build/4_difficulty.tsv:5: expected a skill id, received "ghost". Run: deno run -A pipeline.ts difficulty',
+    ],
   ];
   await Promise.all(cases.map(async ([stage, name, fixture, expected]) => {
     const { code, stderr } = await runIn(stage, fixture, []);
@@ -581,6 +609,9 @@ const farm = (files: Record<string, string>): string => {
 // Each of these exited 0, or crashed without naming the file.
 Deno.test("a bad input file or stage name stops the run and names the cause", async () => {
   const esco = Deno.readTextFileSync("data/esco/skills_en.csv");
+  const [skillsHead, skillsRow] = Deno.readTextFileSync("data/onet/Skills.txt")
+    .split("\n").map((l) => l.split("\t"));
+  const onetSkillId = skillsRow[skillsHead.indexOf("Element ID")];
   const cases: [string, Record<string, string>, string][] = [
     ["constructor", {}, "unknown stage: constructor"],
     [
@@ -602,6 +633,22 @@ Deno.test("a bad input file or stage name stops the run and names the cause", as
       "list",
       { "data/lightcast/skills.json": '{"attributions":[]}' },
       "data/lightcast/skills.json: expected",
+    ],
+    [
+      "list",
+      {
+        "data/onet/Content Model Reference.txt":
+          "Element ID\tElement Name\tDescription\nElement ID\tElement Name\tDescription\n",
+      },
+      "data/onet/Content Model Reference.txt:2: expected a data row, received a copy of the header",
+    ],
+    [
+      "list",
+      {
+        "data/onet/Content Model Reference.txt":
+          "Element ID\tElement Name\tDescription\nx\ty\tz\n",
+      },
+      `data/onet/Skills.txt:2: expected element "${onetSkillId}" in data/onet/Content Model Reference.txt, received none`,
     ],
     [
       "list",
@@ -961,4 +1008,23 @@ Deno.test("difficulty: a seed never raises a grade-anchored dependent", async ()
       difficultyCol(none.files, col).get("grade-high"),
     );
   }
+});
+
+Deno.test("trees: a dump with no slugs stops the stage", async () => {
+  const dir = Deno.makeTempDirSync();
+  Deno.mkdirSync(`${dir}/data/lcsh`, { recursive: true });
+  Deno.mkdirSync(`${dir}/build`);
+  Deno.writeFileSync(
+    `${dir}/data/lcsh/subjects.skosrdf.nt.gz`,
+    await gzip(
+      '<http://id.loc.gov/authorities/subjects/sh1> <http://www.w3.org/2004/02/skos/core#prefLabel> "Algebra"@en .\n' +
+        "<http://id.loc.gov/authorities/subjects/sh1> <http://www.w3.org/2004/02/skos/core#broader> <http://id.loc.gov/authorities/subjects/sh2> .\n",
+    ),
+  );
+  const out = await run(["trees"], dir, 10_000);
+  Deno.removeSync(dir, { recursive: true });
+  const stderr = new TextDecoder().decode(out.stderr);
+  const expected =
+    "gunzip -c data/lcsh/subjects.skosrdf.nt.gz: expected at least 1 slug with an ancestor, received 0";
+  assert(out.code !== 0 && stderr.includes(expected), stderr);
 });

@@ -1,6 +1,7 @@
 import {
   ALIASES,
   BUILD,
+  DIFFICULTY,
   EDGES,
   EMBED_DIM,
   FRAMEWORK_RE,
@@ -17,6 +18,7 @@ import {
   readTree,
   rerun,
   resumableOllama,
+  SEEDS,
   SIG_STOP,
   SKILLS_OUT,
   slugify,
@@ -492,28 +494,29 @@ export function stagePostproc() {
   const rawDiff = new Map([...diffs].map(([id, d]) => [id, d.raw]));
   const band = new Map([...diffs].map(([id, d]) => [id, d.band]));
 
-  let raw: [string, string][] = readTable(PREREQS).flatMap(({ skill, picks }) =>
-    picks.filter(Boolean).map((p): [string, string] => [skill, p])
-  );
-
-  // Apply dedupe aliases (transitive-collapsed)
-  {
-    const alias = loadAliasesCollapsed();
-    if (alias.size) {
-      raw = raw.map(([s, p]) =>
-        [alias.get(s) ?? s, alias.get(p) ?? p] as [string, string]
-      )
-        .filter(([s, p]) => s !== p);
+  // Both tables name skills from before dedupe, so an alias maps them in.
+  const alias = loadAliasesCollapsed();
+  const inSkills = (id: string, path: string, line: number) => {
+    if (!skill.has(alias.get(id) ?? id)) {
+      throw new Error(
+        `${path}:${line}: expected a skill id, received "${id}". ${
+          rerun(path)
+        }`,
+      );
     }
-  }
-
-  const beforeOrphan = raw.length;
-  raw = raw.filter(([s, p]) => skill.has(s) && skill.has(p));
-  if (beforeOrphan - raw.length > 0) {
-    console.log(
-      `[postproc] dropped ${beforeOrphan - raw.length} orphan-ref edges`,
-    );
-  }
+  };
+  let raw: [string, string][] = readTable(PREREQS).flatMap(
+    ({ skill: s, picks }, i) =>
+      picks.map((p): [string, string] => {
+        inSkills(s, PREREQS.path, i + 1);
+        inSkills(p, PREREQS.path, i + 1);
+        return [alias.get(s) ?? s, alias.get(p) ?? p];
+      }).filter(([a, b]) => a !== b),
+  );
+  readTable(SEEDS).forEach((r, i) => {
+    inSkills(r.src_id, SEEDS.path, i + 2);
+    inSkills(r.dst_id, SEEDS.path, i + 2);
+  });
   console.log(`[postproc] raw edges: ${raw.length}`);
 
   // Load seed edges for exemption
@@ -983,11 +986,20 @@ export function stagePostproc() {
 export function stageFinalize() {
   const skills = readTagged();
   const diff = new Map([...readDifficulty()].map(([id, d]) => [id, d.band]));
+  const skillIdSet = new Set<string>(skills.map((s) => s.id));
+  [...diff.keys()].forEach((id, i) => {
+    if (!skillIdSet.has(id)) {
+      throw new Error(
+        `${DIFFICULTY.path}:${i + 2}: expected a skill id, received "${id}". ${
+          rerun(DIFFICULTY.path)
+        }`,
+      );
+    }
+  });
 
   const alias = loadAliasesCollapsed();
   const remap = (id: string) => alias.get(id) ?? id;
 
-  const skillIdSet = new Set<string>(skills.map((s) => s.id));
   const prereqs = new Map<string, string[]>();
   const edgesPath = EDGES.path;
   readTable(EDGES).forEach(({ skill_id: s0, prereq_id: p0 }, i) => {

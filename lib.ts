@@ -107,6 +107,15 @@ function headed(path: string, rows: string[][]): string[][] {
       `${path}: expected a header row, received an empty file. Re-download the file.`,
     );
   }
+  const head = JSON.stringify(rows[0]);
+  const i = rows.findIndex((r, j) => j > 0 && JSON.stringify(r) === head);
+  if (i > 0) {
+    throw new Error(
+      `${path}:${
+        i + 1
+      }: expected a data row, received a copy of the header. A file was concatenated twice; re-download it.`,
+    );
+  }
   return rows;
 }
 

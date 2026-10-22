@@ -298,7 +298,13 @@ export function stageList() {
         if (!eid || seen.has(eid)) continue;
         seen.add(eid);
         const m = cmr.get(eid);
-        if (!m) throw new Error(`ONET element ${eid} missing from CMR`);
+        if (!m) {
+          throw new Error(
+            `${path}:${
+              i + 1
+            }: expected element "${eid}" in data/onet/Content Model Reference.txt, received none. Re-download both files.`,
+          );
+        }
         raw.push({
           id: "",
           title: m.name.trim(),
@@ -1223,6 +1229,13 @@ async function buildTree(
     if (anc.length) slugToAncestors.set(slug, anc.slice(0, 6));
   }
   console.log(`[trees] ${label}: ${slugToAncestors.size} slugs`);
+  if (!slugToAncestors.size) {
+    throw new Error(
+      `${
+        cmd.join(" ")
+      }: expected at least 1 slug with an ancestor, received 0. No labelled concept reaches a labelled broader concept; check the dump format.`,
+    );
+  }
   return { ancestors: slugToAncestors, topics };
 }
 
