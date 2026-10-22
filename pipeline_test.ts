@@ -662,3 +662,13 @@ Deno.test("list: OpenSALT keeps a row with an unclosed comment", async () => {
     JSON.stringify(ids.slice(-3)),
   );
 });
+
+Deno.test("list: OpenSALT leaves no literal tag from entity-encoded markup", async () => {
+  const { code, stderr, titles } = await listOpensalt([
+    { fullStatement: "Xi &lt;script&gt;alert(1)&lt;/script&gt; encoded here" },
+  ]);
+  assertEquals(code, 0, stderr);
+  const t = titles.find((t) => t.endsWith("encoded here"));
+  assert(t !== undefined, JSON.stringify(titles.slice(-3)));
+  assert(!/<\/?[a-z][^>]*>/i.test(t), t);
+});

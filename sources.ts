@@ -46,13 +46,14 @@ const BLOCK_TAG = new RegExp(
 );
 // The leading <body> keeps <title>, <meta>, <link>, and <base> text out of <head>.
 const htmlText = (s: string): string =>
+  // The parser decodes `&lt;b&gt;` to `<b>`, so a second strip removes it.
   new DOMParser().parseFromString(
     "<body>" + s.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
       .replace(BLOCK_TAG, " ")
       .replace(/<!--(?![\s\S]*?-->)/g, "&lt;!--")
       .replace(new RegExp(`<(?!${TAG}|!--)`, "gi"), "&lt;"),
     "text/html",
-  ).body.textContent;
+  ).body.textContent.replace(new RegExp(`<${TAG}`, "gi"), " ");
 
 const normalizeText = (s: string, decode = true): string => {
   if (!s) return "";
