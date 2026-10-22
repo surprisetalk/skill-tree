@@ -554,19 +554,21 @@ const withSeeds = (pairs: string[][]): Fixture => ({
 });
 
 Deno.test("difficulty: a seed chain is ordered in any seed order", async () => {
-  for (const pairs of [[["a", "b"], ["b", "c"]], [["b", "c"], ["a", "b"]]]) {
-    const { code, stderr, files } = await runIn(
-      "difficulty",
-      withSeeds(pairs),
-      ["build/4_difficulty.tsv"],
-    );
-    assertEquals(code, 0, stderr);
-    const raw = difficultyCol(files, 2);
-    assert(
-      raw.get("a")! < raw.get("b")! && raw.get("b")! < raw.get("c")!,
-      `chain raws a=${raw.get("a")} b=${raw.get("b")} c=${raw.get("c")}`,
-    );
-  }
+  await Promise.all(
+    [[["a", "b"], ["b", "c"]], [["b", "c"], ["a", "b"]]].map(async (pairs) => {
+      const { code, stderr, files } = await runIn(
+        "difficulty",
+        withSeeds(pairs),
+        ["build/4_difficulty.tsv"],
+      );
+      assertEquals(code, 0, stderr);
+      const raw = difficultyCol(files, 2);
+      assert(
+        raw.get("a")! < raw.get("b")! && raw.get("b")! < raw.get("c")!,
+        `chain raws a=${raw.get("a")} b=${raw.get("b")} c=${raw.get("c")}`,
+      );
+    }),
+  );
 });
 
 Deno.test("difficulty: a seed dependent at the lowest band still ranks above its prereq", async () => {
@@ -585,14 +587,24 @@ Deno.test("difficulty: a seed dependent at the lowest band still ranks above its
   );
 });
 
-Deno.test("difficulty: a seed self-loop or cycle stops the stage", async () => {
-  for (
-    const pairs of [[["a", "a"]], [["a", "b"], ["b", "a"]], [["a", "ghost"]]]
-  ) {
-    const { code, stderr } = await runIn("difficulty", withSeeds(pairs), []);
-    assert(code !== 0, `seeds ${JSON.stringify(pairs)} exit 0`);
-    assert(/cycle|self-loop|not in build\/1_skills/.test(stderr), stderr);
-  }
+Deno.test("difficulty: a seed self-loop or unknown id stops the stage", async () => {
+  await Promise.all(
+    [[["a", "a"]], [["a", "ghost"]]].map(async (pairs) => {
+      const { code, stderr } = await runIn("difficulty", withSeeds(pairs), []);
+      assert(code !== 0, `seeds ${JSON.stringify(pairs)} exit 0`);
+      assert(/self-loop|not in build\/1_skills/.test(stderr), stderr);
+    }),
+  );
+});
+
+Deno.test("difficulty: a seed cycle is skipped and counted", async () => {
+  const { code, stderr, files } = await runIn(
+    "difficulty",
+    withSeeds([["a", "b"], ["b", "a"]]),
+    ["build/4_stats.json"],
+  );
+  assertEquals(code, 0, stderr);
+  assertEquals(JSON.parse(files["build/4_stats.json"]).seed_cycle_pairs, 2);
 });
 
 // Stage list over a temp data dir whose OpenSALT folder holds only `items`.

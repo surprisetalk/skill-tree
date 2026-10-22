@@ -21,6 +21,7 @@ import {
   skillIndex,
   slugify,
   STOPWORDS,
+  stronglyConnected,
   TAGGED,
   Tagged,
   TAGGED_HEADER,
@@ -1496,9 +1497,10 @@ export function stageDifficulty() {
   // of seeds otherwise reverse.
   let seedAnchorAdjusted = 0;
   let seedPairs: number[][] = [];
+  let seedCyclePairs = 0;
   {
     const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
-    const seeds = readSeeds().flatMap(({ pre, dep }) => {
+    const allSeeds = readSeeds().flatMap(({ pre, dep }) => {
       const si = idToIdx.get(pre), di = idToIdx.get(dep);
       if (pre === dep) {
         throw new Error(
@@ -1512,23 +1514,36 @@ export function stageDifficulty() {
       }
       return [[si, di]];
     });
-    // One pass per chain link at most. A pass that still moves a skill after
-    // seeds.length + 1 passes means the seeds hold a cycle.
+    // Seeds inside a cycle cannot order anything; postproc breaks them by rank.
+    const adj = new Map<number, number[]>();
+    for (const [si, di] of allSeeds) adj.set(si, [...adj.get(si) ?? [], di]);
+    const cycleOf = new Map<number, number>();
+    stronglyConnected(adj).forEach((comp, c) =>
+      comp.forEach((n) => cycleOf.set(n, c))
+    );
+    seedCyclePairs =
+      allSeeds.filter(([si, di]) =>
+        cycleOf.has(si) && cycleOf.get(si) === cycleOf.get(di)
+      ).length;
+    const seeds = allSeeds.filter(([si, di]) =>
+      !(cycleOf.has(si) && cycleOf.get(si) === cycleOf.get(di))
+    );
+    // One pass per chain link at most. The seeds are a DAG, so a pass that
+    // still moves a skill after seeds.length + 1 passes is a bug.
     const lowered = new Set<number>();
     const settle = (v: Float32Array) => {
       for (let pass = 0;; pass++) {
         let moved = false;
         for (const [si, di] of seeds) {
-          if (v[si] >= v[di]) {
-            v[si] = v[di] - 1.0;
-            lowered.add(si);
-            moved = true;
-          }
+          if (v[si] < v[di]) continue;
+          v[si] = v[di] - 1.0;
+          lowered.add(si);
+          moved = true;
         }
         if (!moved) break;
         if (pass > seeds.length) {
           throw new Error(
-            `[difficulty] seed cycle after ${pass} passes over ${seeds.length} seeds. Expected a DAG in build/1e_seed_edges.tsv. Received a pair chain that never settles. Fix: find and drop one reversed pair.`,
+            `[difficulty] seed order never settles after ${pass} passes over ${seeds.length} seeds. Expected a DAG outside the cycles. Received a pair chain that keeps moving. Fix: report a bug in the seed cycle filter.`,
           );
         }
       }
@@ -1697,6 +1712,7 @@ export function stageDifficulty() {
     grade_anchored_skills: gradeAnchoredSkills,
     grade_band_inversions: inversions,
     grade_band_worst_gap: worstInversion,
+    seed_cycle_pairs: seedCyclePairs,
     grade_band_inversion_samples: invSamples,
     total_seconds: (performance.now() - t0) / 1000,
   });

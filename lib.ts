@@ -719,6 +719,72 @@ export function topoOrder(
   return order;
 }
 
+// Tarjan, iterative. Returns each strongly connected component of 2+ nodes.
+// `adj` maps a node to its successors; a node with no successors may be absent.
+export function stronglyConnected<T>(adj: Map<T, T[]>): T[][] {
+  const index = new Map<T, number>();
+  const lowlink = new Map<T, number>();
+  const onStack = new Set<T>();
+  const stack: T[] = [];
+  let idx = 0;
+  const sccs: T[][] = [];
+  const nodes = new Set<T>(adj.keys());
+  for (const ws of adj.values()) for (const w of ws) nodes.add(w);
+  const strongconnect = (v0: T) => {
+    const callStack: { node: T; iter: Iterator<T>; minLink: number }[] = [];
+    index.set(v0, idx);
+    lowlink.set(v0, idx);
+    idx++;
+    stack.push(v0);
+    onStack.add(v0);
+    callStack.push({
+      node: v0,
+      iter: (adj.get(v0) || [])[Symbol.iterator](),
+      minLink: lowlink.get(v0)!,
+    });
+    while (callStack.length) {
+      const top = callStack[callStack.length - 1];
+      const next = top.iter.next();
+      if (next.done) {
+        lowlink.set(top.node, top.minLink);
+        if (lowlink.get(top.node) === index.get(top.node)) {
+          const comp: T[] = [];
+          while (true) {
+            const w = stack.pop()!;
+            onStack.delete(w);
+            comp.push(w);
+            if (w === top.node) break;
+          }
+          if (comp.length > 1) sccs.push(comp);
+        }
+        callStack.pop();
+        if (callStack.length) {
+          const parent = callStack[callStack.length - 1];
+          parent.minLink = Math.min(parent.minLink, top.minLink);
+        }
+        continue;
+      }
+      const w = next.value;
+      if (!index.has(w)) {
+        index.set(w, idx);
+        lowlink.set(w, idx);
+        idx++;
+        stack.push(w);
+        onStack.add(w);
+        callStack.push({
+          node: w,
+          iter: (adj.get(w) || [])[Symbol.iterator](),
+          minLink: lowlink.get(w)!,
+        });
+      } else if (onStack.has(w)) {
+        top.minLink = Math.min(top.minLink, index.get(w)!);
+      }
+    }
+  };
+  for (const n of nodes) if (!index.has(n)) strongconnect(n);
+  return sccs;
+}
+
 // ---------- build tables ----------
 
 export const LIST_HEADER = "id\ttitle\tdescription\tsources\ttags";

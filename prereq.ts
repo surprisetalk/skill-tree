@@ -20,6 +20,7 @@ import {
   SKILLS_HEADER,
   slugify,
   STOPWORDS,
+  stronglyConnected,
   topoOrder,
   WIKI_CAT_RE,
   YEAR_RE,
@@ -877,73 +878,7 @@ export function stagePostproc() {
       arr.push(s);
       adj.set(p, arr);
     }
-    const index = new Map<string, number>();
-    const lowlink = new Map<string, number>();
-    const onStack = new Set<string>();
-    const stack: string[] = [];
-    let idx = 0;
-    const sccs: string[][] = [];
-    const nodes = new Set<string>();
-    for (const [s, p] of final) {
-      nodes.add(s);
-      nodes.add(p);
-    }
-    const strongconnect = (v0: string) => {
-      const callStack: {
-        node: string;
-        iter: Iterator<string>;
-        minLink: number;
-      }[] = [];
-      index.set(v0, idx);
-      lowlink.set(v0, idx);
-      idx++;
-      stack.push(v0);
-      onStack.add(v0);
-      callStack.push({
-        node: v0,
-        iter: (adj.get(v0) || [])[Symbol.iterator](),
-        minLink: lowlink.get(v0)!,
-      });
-      while (callStack.length) {
-        const top = callStack[callStack.length - 1];
-        const next = top.iter.next();
-        if (next.done) {
-          lowlink.set(top.node, top.minLink);
-          if (lowlink.get(top.node) === index.get(top.node)) {
-            const comp: string[] = [];
-            while (true) {
-              const w = stack.pop()!;
-              onStack.delete(w);
-              comp.push(w);
-              if (w === top.node) break;
-            }
-            if (comp.length > 1) sccs.push(comp);
-          }
-          callStack.pop();
-          if (callStack.length) {
-            const parent = callStack[callStack.length - 1];
-            parent.minLink = Math.min(parent.minLink, top.minLink);
-          }
-          continue;
-        }
-        const w = next.value;
-        if (!index.has(w)) {
-          index.set(w, idx);
-          lowlink.set(w, idx);
-          idx++;
-          stack.push(w);
-          onStack.add(w);
-          callStack.push({
-            node: w,
-            iter: (adj.get(w) || [])[Symbol.iterator](),
-            minLink: lowlink.get(w)!,
-          });
-        } else if (onStack.has(w)) {
-          top.minLink = Math.min(top.minLink, index.get(w)!);
-        }
-      }
-    };
-    for (const n of nodes) if (!index.has(n)) strongconnect(n);
+    const sccs = stronglyConnected(adj);
     if (sccs.length === 0) break;
     if (round === 100) {
       throw new Error(
