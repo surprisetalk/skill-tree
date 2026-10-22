@@ -138,7 +138,11 @@ const goodBuild = (): Fixture => {
   };
 };
 
-const runIn = async (stage: string, fixture: Fixture) => {
+const runIn = async (
+  stage: string,
+  fixture: Fixture,
+  outFiles = ["skills.tsv"],
+) => {
   const dir = Deno.makeTempDirSync();
   for (const [path, body] of Object.entries(fixture)) {
     const parent = path.slice(0, path.lastIndexOf("/") + 1);
@@ -148,7 +152,9 @@ const runIn = async (stage: string, fixture: Fixture) => {
     } else Deno.writeFileSync(`${dir}/${path}`, body);
   }
   const out = await run([stage], dir, 10_000);
-  const skills = Deno.readTextFileSync(`${dir}/skills.tsv`);
+  const files = Object.fromEntries(
+    outFiles.map((f) => [f, Deno.readTextFileSync(`${dir}/${f}`)]),
+  );
   Deno.removeSync(dir, { recursive: true });
   const stderr = new TextDecoder().decode(out.stderr);
   const stdout = new TextDecoder().decode(out.stdout);
@@ -158,7 +164,7 @@ const runIn = async (stage: string, fixture: Fixture) => {
   return {
     code: out.code,
     stderr,
-    skills,
+    files,
     score: (name: string) => report[name]?.["0"],
   };
 };
@@ -311,7 +317,10 @@ const finalBuild = (): Fixture => {
 Deno.test("finalize: writes a DAG of unique skills, or stops", async () => {
   const good = await runIn("finalize", finalBuild());
   assertEquals(good.code, 0, good.stderr);
-  assertEquals(good.skills.split("\n")[2].split("\t")[5], "counting");
+  assertEquals(
+    good.files["skills.tsv"].split("\n")[2].split("\t")[5],
+    "counting",
+  );
   const cases: [string, string, string][] = [
     ["build/6_edges.tsv", "counting\tmultiplication\n", "expected a DAG"],
     [
@@ -436,4 +445,66 @@ Deno.test("list: no field holds double-encoded UTF-8", () => {
   const mojibake = /[ÂÃâ][\u0080-¿ŒœŠšŸŽžƒˆ˜–-›€™]|Â(\s|$)/;
   const bad = rows.filter((c) => c.some((f) => mojibake.test(f)));
   assertEquals(bad.slice(0, 3).map((c) => c[0]), [], `${bad.length} rows`);
+});
+
+// A tiny difficulty input. Embeddings are orthogonal, so each anchor keeps its
+// own value and an unanchored skill gets the default raw 10.
+const difficultyBuild = (): Fixture => {
+  const skills: [string, string, string][] = [
+    ["grade-low", "Grade low", "grade:1"],
+    ["grade-high", "Grade high", "grade:12"],
+    ["khan-low", "Khan low", ""],
+    ["khan-high", "Khan high", ""],
+    ["do-the-budget", "Do the budget.", ""],
+    ["review-art-or-design-materials", "Review art or design materials.", ""],
+    ["pre", "Pre", ""],
+    ["dep", "Dep", ""],
+  ];
+  const emb = new Float32Array(skills.length * 768);
+  skills.forEach((_, i) => emb[i * 768 + i] = 1);
+  const onetHeader =
+    "O*NET-SOC Code\tElement ID\tElement Name\tScale ID\tData Value\tN\tStandard Error\tLower CI Bound\tUpper CI Bound\tRecommend Suppress\tNot Relevant\tDate\tDomain Source\n";
+  return {
+    "build/3b_tagged_deduped.tsv": [
+      "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+      ...skills.map(([id, title, tags]) =>
+        [id, title, "", "test", tags, "", ""].join("\t")
+      ),
+    ].join("\n") + "\n",
+    "build/2_ids.tsv": skills.map(([id]) => id).join("\n") + "\n",
+    "build/2_embeddings.bin": new Uint8Array(emb.buffer),
+    "build/3b_aliases.tsv": "dropped_id\tcanonical_id\n",
+    "build/1e_seed_edges.tsv":
+      "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback\npre\tdep\tkhan\t1.00\t0\t0\n",
+    "data/khanacademy/khandata.tsv":
+      "Code\tData Name\tPrereq(s)\tH-Position\tV-Position\tDisplay Name\tLink to Practice problem\n" +
+      "1\tkhan-low\troot\t0\t0\tKhan low\t\n2\tkhan-high\t1\t0\t10\tKhan high\t\n",
+    "data/onet/Job Zones.txt":
+      "O*NET-SOC Code\tJob Zone\tDate\tDomain Source\n11-1011.00\t3\t08/2023\tAnalyst\n",
+    "data/onet/Content Model Reference.txt":
+      "Element ID\tElement Name\tDescription\n1\tWorker\tWorker\n",
+    "data/onet/Skills.txt": onetHeader,
+    "data/onet/Knowledge.txt": onetHeader,
+    "data/onet/Abilities.txt": onetHeader,
+    "data/onet/Task Statements.txt":
+      "O*NET-SOC Code\tTask ID\tTask\tTask Type\tIncumbents Responding\tDate\tDomain Source\n11-1011.00\t1\tDo the budget.\tCore\t5\t08/2023\tIncumbent\n",
+    "data/onet/Tasks to DWAs.txt":
+      "O*NET-SOC Code\tTask ID\tDWA ID\tDate\tDomain Source\n11-1011.00\t1\t4.A.1.I01.D01\t07/2014\tAnalyst\n",
+    "data/onet/DWA Reference.txt":
+      "Element ID\tIWA ID\tDWA ID\tDWA Title\n4.A.1\t4.A.1.I01\t4.A.1.I01.D01\tReview art or design materials.\n",
+  };
+};
+
+Deno.test("difficulty: a DWA title anchors its skill", async () => {
+  const { code, stderr, files } = await runIn("difficulty", difficultyBuild(), [
+    "build/4_difficulty.tsv",
+    "build/4_stats.json",
+  ]);
+  assertEquals(code, 0, stderr);
+  // The task statement and the DWA title each anchor one skill.
+  assertEquals(
+    JSON.parse(files["build/4_stats.json"]).anchors.zone,
+    2,
+    "the DWA title skill has no job-zone anchor",
+  );
 });

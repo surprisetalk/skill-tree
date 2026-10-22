@@ -1275,11 +1275,13 @@ export function stageDifficulty() {
       }
     }
     {
+      const dwaPath = "data/onet/DWA Reference.txt";
+      const dwaRows = readTsv(dwaPath);
+      const iDwa = col(dwaRows, "DWA ID", dwaPath),
+        iTitle = col(dwaRows, "DWA Title", dwaPath);
       const dwaTitle = new Map<string, string>();
-      for (
-        const r of readTsv("data/onet/DWA Reference.txt").slice(1)
-      ) {
-        if (r[0] && r[1]) dwaTitle.set(r[0] || "", r[1] || "");
+      for (const r of dwaRows.slice(1)) {
+        if (r[iDwa] && r[iTitle]) dwaTitle.set(r[iDwa], r[iTitle]);
       }
       const t2d = readTsv("data/onet/Tasks to DWAs.txt");
       const iTid = col(t2d, "Task ID", "data/onet/Tasks to DWAs.txt"),
