@@ -107,8 +107,10 @@ function headed(path: string, rows: string[][]): string[][] {
       `${path}: expected a header row, received an empty file. Re-download the file.`,
     );
   }
-  const head = JSON.stringify(rows[0]);
-  const i = rows.findIndex((r, j) => j > 0 && JSON.stringify(r) === head);
+  const head = rows[0];
+  const i = rows.findIndex((r, j) =>
+    j > 0 && r.length === head.length && r.every((c, k) => c === head[k])
+  );
   if (i > 0) {
     throw new Error(
       `${path}:${
@@ -797,7 +799,10 @@ const STALE_SLUG: Cell<string> = {
   parse: (s) => /^[a-z0-9-]+$/.test(s) ? s : undefined,
 };
 const text: Cell<string> = { as: "text", parse: (s) => s };
-const filled: Cell<string> = { as: "text", parse: (s) => s || undefined };
+const filled: Cell<string> = {
+  as: "non-empty text",
+  parse: (s) => s || undefined,
+};
 const int = (lo: number, hi: number): Cell<number> => ({
   as: `an integer ${lo}–${hi}`,
   parse: (s) => {
@@ -1035,8 +1040,6 @@ export function writeTables(writes: Write[]) {
 
 export const writeTable = <C extends Columns>(s: Schema<C>, rows: string[][]) =>
   writeTables([[s, rows]]);
-
-export const readTagged = (schema = TAGGED_DEDUPED) => readTable(schema);
 
 export function readDifficulty(): Map<string, { band: number; raw: number }> {
   return new Map(

@@ -18,7 +18,6 @@ import {
   readJson,
   readMoocPairs,
   readTable,
-  readTagged,
   readTsv,
   resolveConcept,
   resumableOllama,
@@ -28,6 +27,7 @@ import {
   skillIndex,
   slugify,
   STOPWORDS,
+  TAGGED_DEDUPED,
   TOPIC_REFS,
   TRANSLATE_CACHE,
   writeStats,
@@ -1287,7 +1287,7 @@ export async function stageTrees() {
 
 export async function stageSeedEdges() {
   console.log("[seed-edges] collecting…");
-  const tagged = readTagged();
+  const tagged = readTable(TAGGED_DEDUPED);
   const idx = skillIndex(tagged);
   console.log(`[seed-edges] index: ${idx.idSet.size} ids`);
   type RawPair = {

@@ -14,7 +14,6 @@ import {
   readDifficulty,
   readSeeds,
   readTable,
-  readTagged,
   readTree,
   rerun,
   resumableOllama,
@@ -24,6 +23,7 @@ import {
   slugify,
   STOPWORDS,
   stronglyConnected,
+  TAGGED_DEDUPED,
   topoOrder,
   WIKI_CAT_RE,
   writeTable,
@@ -49,7 +49,7 @@ function parseSkillsWithDifficulty(): {
   diff: Int32Array;
   raw: Float32Array;
 } {
-  const skills: SkillWithDiff[] = readTagged().map((s) => {
+  const skills: SkillWithDiff[] = readTable(TAGGED_DEDUPED).map((s) => {
     let gs = Infinity, ge = -Infinity;
     for (const m of s.tags.matchAll(/grade:([A-Za-z0-9-]+)/g)) {
       const d = gradeToDifficulty(m[1]);
@@ -475,7 +475,7 @@ export async function stagePrereq() {
 
 export function stagePostproc() {
   const skill = new Map(
-    readTagged().map((s) => [s.id, {
+    readTable(TAGGED_DEDUPED).map((s) => [s.id, {
       title: s.title,
       tags: s.tags,
       topics: new Set(s.topics.split(",").filter(Boolean)),
@@ -984,7 +984,7 @@ export function stagePostproc() {
 // ---------- stage finalize ----------
 
 export function stageFinalize() {
-  const skills = readTagged();
+  const skills = readTable(TAGGED_DEDUPED);
   const diff = new Map([...readDifficulty()].map(([id, d]) => [id, d.band]));
   const skillIdSet = new Set<string>(skills.map((s) => s.id));
   [...diff.keys()].forEach((id, i) => {

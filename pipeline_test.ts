@@ -495,7 +495,7 @@ Deno.test("build tables: a bad cell stops the reading stage with a message that 
         "build/3_tagged.tsv":
           "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics\ncounting\t\td\tfoundation\t\t\t\n",
       },
-      'build/3_tagged.tsv:2: expected title as text, received ""',
+      'build/3_tagged.tsv:2: expected title as non-empty text, received ""',
     ],
     [
       "finalize",

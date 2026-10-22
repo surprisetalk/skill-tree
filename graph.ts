@@ -16,7 +16,6 @@ import {
   readCsv,
   readSeeds,
   readTable,
-  readTagged,
   readTree,
   readTsv,
   resolveConcept,
@@ -721,19 +720,20 @@ export async function stageTag() {
       topicSlugs.join(","),
     ]);
   }
-  writeTable(TAGGED_RAW, rows);
   // A stale deduped file would let later stages skip the new tags.
+  // Remove it first, so a crash never leaves a new raw file beside an old one.
   try {
     Deno.removeSync(TAGGED);
   } catch (e) {
     if (!(e instanceof Deno.errors.NotFound)) throw e;
   }
+  writeTable(TAGGED_RAW, rows);
 }
 
 // ---------- stage dedupe ----------
 
 export function stageDedupe() {
-  const rows = readTagged(TAGGED_RAW);
+  const rows = readTable(TAGGED_RAW);
   const vecs = normalizedEmbeddingsForSkills(rows.map((r) => r.id));
   const DEDUPE_COSINE = 0.96;
 
@@ -1133,7 +1133,9 @@ export function stageDedupe() {
     `[dedupe] backfill: topics+=${bfTopics}, occs+=${bfOccs}, lcsh-topics+=${bfLcsh}`,
   );
 
+  // TAGGED_DEDUPED marks the stage complete, so it goes last.
   writeTables([
+    [ALIASES, [...alias].map(([drop, keep]) => [drop, keep])],
     [
       TAGGED_DEDUPED,
       canons.map((c) => {
@@ -1149,14 +1151,13 @@ export function stageDedupe() {
         ];
       }),
     ],
-    [ALIASES, [...alias].map(([drop, keep]) => [drop, keep])],
   ]);
 }
 
 // ---------- stage difficulty ----------
 
 export function stageDifficulty() {
-  const skills = readTagged();
+  const skills = readTable(TAGGED_DEDUPED);
   const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
 
   const anchor = new Float32Array(skills.length);
@@ -1522,7 +1523,11 @@ export function stageDifficulty() {
   });
   // Seeds inside a cycle cannot order anything; postproc breaks them by rank.
   const succ = new Map<number, number[]>();
-  for (const [si, di] of allSeeds) succ.set(si, [...succ.get(si) ?? [], di]);
+  for (const [si, di] of allSeeds) {
+    const l = succ.get(si);
+    if (l) l.push(di);
+    else succ.set(si, [di]);
+  }
   const cycleOf = new Map<number, number>();
   stronglyConnected(succ).forEach((comp, c) =>
     comp.forEach((n) => cycleOf.set(n, c))
