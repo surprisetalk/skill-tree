@@ -128,6 +128,11 @@ const goodBuild = (): Fixture => {
       grade_anchored_skills: 10,
       grade_band_inversions: 0,
     }),
+    "build/1_stats.json": JSON.stringify({
+      raw_rows: 1000,
+      empty_key_drops: 0,
+      empty_slug_drops: 0,
+    }),
     "build/5_prereqs.tsv":
       "addition\tcounting\nmultiplication\taddition\nbiology\tnone\n",
     "build/1f_translate.tsv":
@@ -212,6 +217,21 @@ Deno.test("status: a missing or still-Chinese translation scores below 1", async
       0.5,
     );
   }
+});
+
+Deno.test("status: titles dropped for an empty key or slug score below 1", async () => {
+  const build = goodBuild();
+  build["build/1_stats.json"] = JSON.stringify({
+    raw_rows: 1000,
+    empty_key_drops: 5,
+    empty_slug_drops: 5,
+  });
+  const { code, score } = await runIn("status", build);
+  assertEquals(code, 1);
+  assertEquals(
+    score("Under 0.1% of source titles drop for an empty key or slug."),
+    0,
+  );
 });
 
 Deno.test("status: a missing build file scores 0 and names the stage to rerun", async () => {

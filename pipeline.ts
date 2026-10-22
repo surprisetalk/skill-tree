@@ -103,8 +103,8 @@ async function stageStatus() {
   const edgeCount = () => skills().reduce((n, s) => n + s.prereqs.length, 0);
   const usedAsPrereq = () => new Set(skills().flatMap((s) => s.prereqs));
   const seeds = readSeeds;
-  const stat = (key: string): number => {
-    const path = `${BUILD}/4_stats.json`;
+  const stat = (key: string, file = "4_stats.json"): number => {
+    const path = `${BUILD}/${file}`;
     const v = (readJson(need(path)) as Record<string, unknown>)[key];
     if (typeof v !== "number" || !Number.isFinite(v)) {
       throw new Error(
@@ -241,6 +241,14 @@ async function stageStatus() {
           1,
         ),
     ],
+    ["Under 0.1% of source titles drop for an empty key or slug.", () =>
+      grade(
+        (stat("empty_key_drops", "1_stats.json") +
+          stat("empty_slug_drops", "1_stats.json")) /
+          stat("raw_rows", "1_stats.json"),
+        0.001,
+        0.01,
+      )],
     ["At least 95% of OpenSALT skills carry a grade tag.", () => {
       const rows = readRows(
         `${BUILD}/1_skills.tsv`,
