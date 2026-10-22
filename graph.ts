@@ -1402,28 +1402,26 @@ export function stageDifficulty() {
   const SMOOTH_W = 0.3;
   const smoothJitter = (out: Float32Array) => {
     const smoothed = new Float32Array(out);
-    if (SMOOTH_W > 0) {
-      const topicSum = new Map<string, { sum: number; n: number }>();
-      for (let i = 0; i < skills.length; i++) {
-        for (const t of skills[i].topics.split(",")) {
-          if (!t) continue;
-          const e = topicSum.get(t) ?? { sum: 0, n: 0 };
-          e.sum += out[i];
-          e.n++;
-          topicSum.set(t, e);
-        }
+    const topicSum = new Map<string, { sum: number; n: number }>();
+    for (let i = 0; i < skills.length; i++) {
+      for (const t of skills[i].topics.split(",")) {
+        if (!t) continue;
+        const e = topicSum.get(t) ?? { sum: 0, n: 0 };
+        e.sum += out[i];
+        e.n++;
+        topicSum.set(t, e);
       }
-      for (let i = 0; i < skills.length; i++) {
-        let sum = 0, n = 0;
-        for (const t of skills[i].topics.split(",")) {
-          if (!t) continue;
-          const e = topicSum.get(t);
-          if (!e || e.n < 3) continue;
-          sum += (e.sum - out[i]) / (e.n - 1);
-          n++;
-        }
-        if (n > 0) smoothed[i] = (1 - SMOOTH_W) * out[i] + SMOOTH_W * (sum / n);
+    }
+    for (let i = 0; i < skills.length; i++) {
+      let sum = 0, n = 0;
+      for (const t of skills[i].topics.split(",")) {
+        if (!t) continue;
+        const e = topicSum.get(t);
+        if (!e || e.n < 3) continue;
+        sum += (e.sum - out[i]) / (e.n - 1);
+        n++;
       }
+      if (n > 0) smoothed[i] = (1 - SMOOTH_W) * out[i] + SMOOTH_W * (sum / n);
     }
 
     const jittered = new Float32Array(skills.length);
