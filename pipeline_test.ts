@@ -683,3 +683,14 @@ Deno.test("list: OpenSALT drops an unclosed script or style body", async () => {
   const bad = titles.filter((t) => /evil call|color:red/.test(t));
   assertEquals(bad, []);
 });
+
+Deno.test("list: OpenSALT keeps semicolon-less entities literal", async () => {
+  const { code, stderr, titles } = await listOpensalt([
+    { fullStatement: "Eps &copy=1 &para=2 &notin; query test here" },
+  ]);
+  assertEquals(code, 0, stderr);
+  assert(
+    titles.includes("Eps &copy=1 &para=2 ∉ query test here"),
+    JSON.stringify(titles.slice(-3)),
+  );
+});

@@ -52,6 +52,8 @@ const htmlText = (s: string): string =>
       s.replace(/<(script|style)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, " ")
         .replace(BLOCK_TAG, " ")
         .replace(/<!--(?![\s\S]*?-->)/g, "&lt;!--")
+        // HTML decodes "&copy" without a semicolon; "&copy=1" must stay text.
+        .replace(/&(?![a-z][a-z0-9]*;|#\d+;|#x[0-9a-f]+;)/gi, "&amp;")
         .replace(new RegExp(`<(?!${TAG}|!--)`, "gi"), "&lt;"),
     "text/html",
   ).body.textContent.replace(new RegExp(`<${TAG}`, "gi"), " ");
