@@ -733,7 +733,7 @@ export function stagePostproc() {
       kept++;
     }
   }
-  const final: [string, string][] = raw.filter((e) =>
+  let final: [string, string][] = raw.filter((e) =>
     keep.has(`${e[0]}\t${e[1]}`)
   );
   console.log(
@@ -978,6 +978,69 @@ export function stagePostproc() {
   console.log(
     `[postproc] cycle-breaker: ${cyclesBroken} edges (${cyclesSeedDropped} seed)`,
   );
+
+  // Transitive reduction: drop s -> p when another prereq of s reaches p.
+  // REVIEW: Per node, walk the prereqs nearest first and mark what each walk
+  // reaches. Memory is O(nodes + edges). Alternative: one reachability bitset
+  // per node. It is faster, but it costs nodes^2 / 8 bytes, 1.25 GB at 10^5.
+  {
+    const ids = [...new Set(final.flat())];
+    const idx = new Map(ids.map((id, i) => [id, i]));
+    const pres: number[][] = ids.map(() => []);
+    const deps: number[][] = ids.map(() => []);
+    for (const [s, p] of final) {
+      pres[idx.get(s)!].push(idx.get(p)!);
+      deps[idx.get(p)!].push(idx.get(s)!);
+    }
+    // Kahn order: every prereq comes before its dependents.
+    const left = pres.map((a) => a.length);
+    const pos = new Int32Array(ids.length).fill(-1);
+    const queue = left.flatMap((n, i) => n === 0 ? [i] : []);
+    for (let head = 0; head < queue.length; head++) {
+      pos[queue[head]] = head;
+      for (const d of deps[queue[head]]) if (--left[d] === 0) queue.push(d);
+    }
+    if (queue.length !== ids.length) {
+      throw new Error(
+        `postproc: expected a DAG before the transitive reduction, received ${
+          ids.length - queue.length
+        } of ${ids.length} nodes on or below a cycle. Check the cycle breaker.`,
+      );
+    }
+    const MAX_STEPS = 2_000_000_000;
+    let steps = 0;
+    const mark = new Int32Array(ids.length).fill(-1);
+    const redundant = new Set<string>();
+    for (let s = 0; s < ids.length; s++) {
+      for (const p of pres[s].toSorted((a, b) => pos[b] - pos[a])) {
+        if (mark[p] === s) {
+          redundant.add(`${ids[s]}\t${ids[p]}`);
+          continue;
+        }
+        mark[p] = s;
+        const stack = [p];
+        while (stack.length) {
+          for (const q of pres[stack.pop()!]) {
+            if (++steps > MAX_STEPS) {
+              throw new Error(
+                `postproc: expected the transitive reduction within ${MAX_STEPS} edge visits, received ${steps} at node ${s} of ${ids.length} (${
+                  ids[s]
+                }). Cap the edges per skill in the hub caps, or switch to bitsets.`,
+              );
+            }
+            if (mark[q] !== s) {
+              mark[q] = s;
+              stack.push(q);
+            }
+          }
+        }
+      }
+    }
+    final = final.filter(([s, p]) => !redundant.has(`${s}\t${p}`));
+    console.log(
+      `[postproc] transitive reduction: dropped ${redundant.size} edges in ${steps} visits`,
+    );
+  }
 
   // Write (sorted for deterministic output across runs)
   final.sort((a, b) =>

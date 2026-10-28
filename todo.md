@@ -1,14 +1,5 @@
 ## Next
 
-- [ ] `skills.tsv` lists only direct prereqs. An edge that another path implies
-      is gone, so that a goal closure stays small.
-  1. In stage `postproc`, after the cycle breaker, drop edge s → p when p is
-     reachable from s without that edge. The graph is a DAG there, so one
-     reverse-topological pass with reachability bitsets is enough.
-  2. Log the dropped count.
-  3. Test: on a fixture of a → b → c plus a → c, the output keeps a → b and b →
-     c only. Assert also that the closure of every node is unchanged.
-
 - [ ] `deno task status` reports the precision and recall of the prereq edges
       against held-out expert pairs. The pairs come from no source that stage
       `seed-edges` reads.

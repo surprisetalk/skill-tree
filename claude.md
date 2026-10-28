@@ -342,4 +342,5 @@ Caches for per-stage resumption. Key files:
   counts, read by stage `status`). `raw` ignores seeds; only `band` holds the
   seed order.
 - `5_prereqs.tsv` — LLM picks: `skill<TAB>p1,p2` or `skill<TAB>none`.
-- `6_edges.tsv` — post-processed DAG edges (skill_id, prereq_id).
+- `6_edges.tsv` — post-processed DAG edges (skill_id, prereq_id), transitively
+  reduced: no edge is implied by a path of other edges.
