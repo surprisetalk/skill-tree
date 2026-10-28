@@ -170,6 +170,22 @@ counting (K) through calculus (AP). Source:
 - `Display Name` — human-readable exercise title
 - `root` in Prereq(s) means no prerequisites
 
+### data/learningcommons/ — Learning Commons Knowledge Graph (gzipped JSON lines)
+
+US state standards and learning components, v1.16.0, CC BY 4.0 on every row.
+`data/download.ts` streams the 986 MB export and keeps **graph.jsonl.gz**, a
+filtered extract that git tracks. One JSON object per line, `k` names the kind:
+
+- `attributions` — `statements[]`, each row cites one by index (`attribution`).
+- `component` — `id, text, grades[]`. `grades` is the union of the grades of the
+  standards it `supports`.
+- `item` — `id, text, code, type, grades[]`: a `StandardsFrameworkItem` of a
+  framework with `isCurrent` true. The export's own groupings are left out.
+- `edge` — `rel, from, to`, only `buildsTowards` (Coherence Map, source is the
+  prereq) and `hasStandardAlignment` (state to CCSS) between kept items.
+
+The version sits in one constant, `LC_VERSION`, in `data/download.ts`.
+
 ### data/opensalt/ — OpenSALT Standards Frameworks (CASE JSON)
 
 K-12 standards frameworks from opensalt.net in 1EdTech CASE format. Includes
@@ -221,13 +237,24 @@ A new build table gets a schema; a new id goes through `slugify`.
 **Parsers**:
 
 - Stage `list`: ESCO, O\*NET (Skills/Knowledge/Abilities/Tasks/DWAs/Tech),
-  Lightcast, OpenSALT, and the hubs in `data/_foundations.json`. OpenSALT
-  statements parse as HTML with `deno-dom`; a `script`, `style`, or head element
-  in one stops the stage. Other sources keep `<…>` as text.
+  Lightcast, OpenSALT, Learning Commons, and the hubs in
+  `data/_foundations.json`. OpenSALT statements parse as HTML with `deno-dom`; a
+  `script`, `style`, or head element in one stops the stage. Learning Commons
+  statements parse the same way and pass the same scaffolding filters
+  (`cleanStandard`). A component is one skill with tags
+  `learningcommons:component` and `grade:*`. A standard is one skill per
+  distinct statement, tags `learningcommons:standard`, `grade:*`, and
+  `code:<statementCode>`. A `buildsTowards` endpoint also gets
+  `learningcommons:coherence` and skips the long-title drop. Other sources keep
+  `<…>` as text.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, OpenSALT
-  precedes, OpenSALT within-framework grade ordering. Pairs resolve to skill IDs
-  by exact match, then by embedding (cosine ≥ 0.90 and a shared token).
-  Unresolved pairs go to `build/1e_unresolved.tsv` with a reason per label.
+  precedes, OpenSALT within-framework grade ordering, Learning Commons
+  `buildsTowards`. The last resolves through `build/1m_lc_ids.tsv` and
+  `3b_aliases.tsv`, not by label. A pair with an end that stage `list` dropped
+  goes to `build/1e_unresolved.tsv` with reason `no-skill`. Pairs resolve to
+  skill IDs by exact match, then by embedding (cosine ≥ 0.90 and a shared
+  token). Unresolved pairs go to `build/1e_unresolved.tsv` with a reason per
+  label.
 - Stage `trees`: LCSH (gunzip) and DBpedia (bzcat) SKOS broader chains, cached
   as `slug → ancestors[]`. The same pass picks each dump's 5000 most-used
   broader targets as the topic refs of stage `tag`.
@@ -243,8 +270,11 @@ true prerequisites. Resumable via `5_prereqs.tsv`. `SKIP_LLM=1` reuses that
 cache as is, for a regression build without the generator.
 
 **Merge step** (stage `dedupe`): token-sort signature merge + per-topic
-Jaccard+cosine merge. Canonical ID = shortest title. Dropped IDs become aliases
-in `3b_aliases.tsv`; stages `postproc` and `finalize` remap edges through it.
+Jaccard+cosine merge + Learning Commons candidates (a Learning Commons row and
+an OpenSALT row that share a `code:*` tag, cosine ≥ 0.90; a
+`hasStandardAlignment` pair, cosine ≥ 0.96). Canonical ID = shortest title.
+Dropped IDs become aliases in `3b_aliases.tsv`; stages `postproc` and `finalize`
+remap edges through it.
 
 ### data/download.ts — Dataset Downloader
 
@@ -294,6 +324,8 @@ Caches for per-stage resumption. Key files:
 
 - `1_skills.tsv` — post-parse, post-dedupe skill list (id, title, description,
   sources, tags). `1_stats.json` — its per-source counts.
+- `1m_lc_ids.tsv` — Learning Commons node id to skill id (`node_id, skill_id`),
+  written by stage `list`.
 - `1b_infill.tsv`, `1c_summarize.tsv`, `1d_onet_desc.tsv`,
   `1e_opensalt_desc.tsv`, `1f_translate.tsv` — Ollama enrichment caches,
   `key<TAB>value`.

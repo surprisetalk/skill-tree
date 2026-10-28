@@ -50,3 +50,13 @@ Evidence for each note: `research.md`.
   licence and attribution string. The readme lists the attributions.
   Alternative: drop every non-commercial or copyleft source (Junyi, MOOCCubeX
   GPL-3.0). That loses the MOOCCubeX CS and math seed pairs.
+- Git tracks a filtered extract of Learning Commons
+  (`data/learningcommons/graph.jsonl.gz`, CC BY 4.0), and `data/download.ts`
+  streams the 986 MB export to build it. The extract keeps the rows of current
+  frameworks, every `attributionStatement` once, and the edges that stages
+  `dedupe` and `seed-edges` read. Alternative: keep the raw jsonl, gitignored.
+  Then `deno task test` fails on a fresh clone until a 986 MB download ends.
+- Stage `list` writes `build/1m_lc_ids.tsv` (node id to skill id), so that
+  `buildsTowards` and `hasStandardAlignment` edges resolve exactly. Alternative:
+  an `lc:<id>` tag per node. It needs no file, but the tag cap of 20 loses most
+  nodes of a statement that fifty states repeat.

@@ -1,6 +1,7 @@
 import { DOMParser, type Element } from "@b-fuze/deno-dom";
 import { TextLineStream } from "@std/streams/text-line-stream";
 import {
+  ALIASES,
   BUILD,
   cleanDef,
   col,
@@ -10,12 +11,15 @@ import {
   h32,
   HAN_RE,
   isTranslation,
+  LC_EXTRACT,
+  LC_IDS,
   loadRawEmbeddings,
   loadTsvCache,
   normalize,
   normalizedEmbeddingsForSkills,
   readCsv,
   readJson,
+  readLearningCommons,
   readMoocPairs,
   readTable,
   readTsv,
@@ -227,6 +231,172 @@ function readFoundations(): Foundations {
   }
   return f;
 }
+
+const SCAFFOLDING_TYPES = new Set([
+  "Grade Level",
+  "Domain",
+  "Strand",
+  "Course",
+  "Topic",
+  "Cluster",
+  "Component",
+  "Section",
+  "Module",
+  "Chapter",
+  "Unit",
+  "Sub-Domain",
+  "Category",
+  "Connection",
+  "Grade",
+  "Grade Band",
+  "Quarter",
+  "Section Heading",
+  "Pathway",
+  "Subject",
+  "Dimension",
+  "Cognitive Complexity",
+  "Performance Level",
+  "Assignment",
+  "Lesson",
+  "Job Role",
+  "Employee",
+  "Team Leader",
+  "People Leader",
+  "Senior Leader",
+]);
+const SCAFFOLDING_RE =
+  /^(\s*)?(grade|kindergarten|pre-?k|elementary|middle school|high school|[0-9]+(st|nd|rd|th)\s+grade|unit\s+\d|chapter\s+\d|section\s+\d|module\s+\d|standard\s+\d|topic\s+\d|strand|domain)\b/i;
+const SCAFFOLDING_SIMPLE_RE = new RegExp(
+  [
+    /^DEPRECATED\b/,
+    /^(?:Use the (?:clock|timer)|Click the|Press the|Drag the|Open the app)/,
+    /^(?:Constructed Response|Hook Activity|Background Information|Vocabulary Activity|Document Analysis)\s*:/,
+    /^(?:Sample Problem|Example)\s*:/,
+    /^Particular Topics in /,
+    /^(?:CFItemType|Course|Subject)\s*:/,
+    /\?\s*(?:Hook Activity|Background Information|Vocabulary Activity|Document Analysis|Writing)$/,
+    /\s+(?:Hook Activity|Writing Activity|Vocabulary Activity|Assessment Activity)$/,
+    /^(?:Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]*/,
+    /^with\s+(?:prompting|guidance|support)\b/,
+    /^by\s+(?:date|the\s+end\s+of)\b/,
+    /^(?:train|instruct|teach)\s+\w+s?\s+to\b/,
+  ].map((r) => r.source).join("|"),
+  "i",
+);
+// CASE educationLevel uses "KG" and "TK"; stage difficulty expects "K".
+const normGrade = (g: string): string => {
+  const u = g.trim().toUpperCase();
+  if (u === "KG" || u === "TK") return "K";
+  if (u === "PR" || u === "PRE-K" || u === "PRE-KINDERGARTEN") return "PK";
+  return u;
+};
+const truncTitle = (t: string, cap: number): string => {
+  if (t.length <= cap) return t;
+  const head = t.slice(0, cap);
+  const lastDot = Math.max(
+    head.lastIndexOf(". "),
+    head.lastIndexOf("? "),
+    head.lastIndexOf("! "),
+  );
+  if (lastDot > cap * 0.5) return head.slice(0, lastDot + 1).trim();
+  const lastSpace = head.lastIndexOf(" ");
+  return (lastSpace > cap * 0.5 ? head.slice(0, lastSpace) : head).trim() +
+    "…";
+};
+type Standard = {
+  title: string;
+  description: string;
+  stuPrefix: boolean;
+  truncated: boolean;
+};
+
+// The OpenSALT and Learning Commons statements share these filters. A bare
+// statement has no abbreviation or notes; typed means the source gave a type.
+function cleanStandard(
+  fullStmt: string,
+  abbrev: string,
+  notes: string,
+  typed: boolean,
+): Standard | "scaffPat" | "pureVerb" {
+  if (!fullStmt && !abbrev) {
+    return "scaffPat";
+  }
+  const CODE_RE = /^[A-Z0-9\u2013\u2014–-][\w.\u2013\u2014–-]*$/;
+  let title: string, description: string;
+  if (
+    abbrev && (!fullStmt || abbrev.length < fullStmt.length) &&
+    !(abbrev.length <= 20 && CODE_RE.test(abbrev))
+  ) {
+    title = abbrev;
+    description = fullStmt && fullStmt !== abbrev ? fullStmt : notes;
+  } else {
+    title = fullStmt;
+    description = notes && notes !== fullStmt ? notes : "";
+  }
+  title = title.replace(/^[•▪►■◆]\s*/, "").replace(/^\d+\.\s+/, "");
+  const before = title;
+  title = stripStudentPrefix(title);
+  title = title.replace(
+    /^(Can|Could|Should|How to|What is|Why does)\s+/i,
+    (_m, _g, _off, _s) => "",
+  );
+  if (title && title[0] === title[0].toLowerCase()) {
+    title = title[0].toUpperCase() + title.slice(1);
+  }
+  const stuPrefix = title !== before;
+  title = title.replace(
+    /^(Benchmark|Standard|Indicator)\s+[\d.]+\s*:\s*/i,
+    "",
+  ).trim();
+  let truncated = false;
+  if (title.length > 300) {
+    title = truncTitle(title, 300);
+    truncated = true;
+  }
+  if (title.length <= 2 || (title.length <= 20 && CODE_RE.test(title))) {
+    return "scaffPat";
+  }
+  if (SCAFFOLDING_SIMPLE_RE.test(title)) {
+    return "scaffPat";
+  }
+  if (
+    /^(Essential|Proficient|Advanced|Intermediate|Beginning|Emerging|Developing|Extending|Exceeding|Level)\s+[IVX0-9]+/i
+      .test(title) && title.length < 30
+  ) {
+    return "scaffPat";
+  }
+  if (/^You\s+[a-z]/i.test(title) && title.length > 20) {
+    return "scaffPat";
+  }
+  // A bare acronym ("WCAG", "IoT") is a label, not a standard.
+  if (!/\s/.test(title) && title.length < 30) {
+    return "scaffPat";
+  }
+  if (SCAFFOLDING_RE.test(title) && title.length < 50 && !typed) {
+    return "scaffPat";
+  }
+  if (
+    /^(understand|recognize|demonstrate|apply|identify|know|explain|describe)\s+(the|how|that|what|why|when|where|a|an)\s/i
+      .test(title) &&
+    title.length < 60 && !typed
+  ) {
+    return "pureVerb";
+  }
+  description = description.replace(
+    /^(Students?\s+(will|demonstrate)|The student|This unit|Module \d+|The course|Courses)\s[^.]*?\.\s+/i,
+    "",
+  );
+  return { title, description, stuPrefix, truncated };
+}
+
+// Stage finalize shows a code:* tag as a display title, so a sub-item label
+// like "a" must not become one.
+const codeTag = (raw: string): string | null => {
+  const code = raw.trim().replace(/^Khan\s+/i, "");
+  return code.length >= 4 && (/[A-Z]/.test(code) || /\./.test(code))
+    ? `code:${code}`
+    : null;
+};
 
 export function stageList() {
   const foundations = readFoundations();
@@ -503,57 +673,6 @@ export function stageList() {
 
   // OpenSALT CFItems
   {
-    const SCAFFOLDING_TYPES = new Set([
-      "Grade Level",
-      "Domain",
-      "Strand",
-      "Course",
-      "Topic",
-      "Cluster",
-      "Component",
-      "Section",
-      "Module",
-      "Chapter",
-      "Unit",
-      "Sub-Domain",
-      "Category",
-      "Connection",
-      "Grade",
-      "Grade Band",
-      "Quarter",
-      "Section Heading",
-      "Pathway",
-      "Subject",
-      "Dimension",
-      "Cognitive Complexity",
-      "Performance Level",
-      "Assignment",
-      "Lesson",
-      "Job Role",
-      "Employee",
-      "Team Leader",
-      "People Leader",
-      "Senior Leader",
-    ]);
-    const SCAFFOLDING_RE =
-      /^(\s*)?(grade|kindergarten|pre-?k|elementary|middle school|high school|[0-9]+(st|nd|rd|th)\s+grade|unit\s+\d|chapter\s+\d|section\s+\d|module\s+\d|standard\s+\d|topic\s+\d|strand|domain)\b/i;
-    const SCAFFOLDING_SIMPLE_RE = new RegExp(
-      [
-        /^DEPRECATED\b/,
-        /^(?:Use the (?:clock|timer)|Click the|Press the|Drag the|Open the app)/,
-        /^(?:Constructed Response|Hook Activity|Background Information|Vocabulary Activity|Document Analysis)\s*:/,
-        /^(?:Sample Problem|Example)\s*:/,
-        /^Particular Topics in /,
-        /^(?:CFItemType|Course|Subject)\s*:/,
-        /\?\s*(?:Hook Activity|Background Information|Vocabulary Activity|Document Analysis|Writing)$/,
-        /\s+(?:Hook Activity|Writing Activity|Vocabulary Activity|Assessment Activity)$/,
-        /^(?:Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]*/,
-        /^with\s+(?:prompting|guidance|support)\b/,
-        /^by\s+(?:date|the\s+end\s+of)\b/,
-        /^(?:train|instruct|teach)\s+\w+s?\s+to\b/,
-      ].map((r) => r.source).join("|"),
-      "i",
-    );
     // Test, template, and duplicate frameworks.
     const FRAMEWORK_BLOCKLIST = new Set([
       "pcg-georgia-s-k-12-mathematics-standards-implementation-sy2023-2024-2",
@@ -576,26 +695,6 @@ export function stageList() {
       "indiana-academic-standards-for-mathematics-2020",
       "mathematics-b-e-s-t",
     ]);
-    // CASE educationLevel uses "KG" and "TK"; stage difficulty expects "K".
-    const normGrade = (g: string): string => {
-      const u = g.trim().toUpperCase();
-      if (u === "KG" || u === "TK") return "K";
-      if (u === "PR" || u === "PRE-K" || u === "PRE-KINDERGARTEN") return "PK";
-      return u;
-    };
-    const truncTitle = (t: string, cap: number): string => {
-      if (t.length <= cap) return t;
-      const head = t.slice(0, cap);
-      const lastDot = Math.max(
-        head.lastIndexOf(". "),
-        head.lastIndexOf("? "),
-        head.lastIndexOf("! "),
-      );
-      if (lastDot > cap * 0.5) return head.slice(0, lastDot + 1).trim();
-      const lastSpace = head.lastIndexOf(" ");
-      return (lastSpace > cap * 0.5 ? head.slice(0, lastSpace) : head).trim() +
-        "…";
-    };
     let n = 0,
       scaffType = 0,
       scaffPat = 0,
@@ -630,84 +729,23 @@ export function stageList() {
           continue;
         }
         const where = `${path} item ${it.identifier}`;
-        const fullStmt = htmlText(it.fullStatement || "", where).trim();
-        const abbrev = htmlText(it.abbreviatedStatement || "", where).trim();
-        const notes = htmlText(it.notes || "", where).trim();
-        if (!fullStmt && !abbrev) {
-          scaffPat++;
-          continue;
-        }
-        const CODE_RE = /^[A-Z0-9\u2013\u2014–-][\w.\u2013\u2014–-]*$/;
-        let title: string, description: string;
-        if (
-          abbrev && (!fullStmt || abbrev.length < fullStmt.length) &&
-          !(abbrev.length <= 20 && CODE_RE.test(abbrev))
-        ) {
-          title = abbrev;
-          description = fullStmt && fullStmt !== abbrev ? fullStmt : notes;
-        } else {
-          title = fullStmt;
-          description = notes && notes !== fullStmt ? notes : "";
-        }
-        title = title.replace(/^[•▪►■◆]\s*/, "").replace(/^\d+\.\s+/, "");
-        const before = title;
-        title = stripStudentPrefix(title);
-        title = title.replace(
-          /^(Can|Could|Should|How to|What is|Why does)\s+/i,
-          (_m, _g, _off, _s) => "",
+        const cleaned = cleanStandard(
+          htmlText(it.fullStatement || "", where).trim(),
+          htmlText(it.abbreviatedStatement || "", where).trim(),
+          htmlText(it.notes || "", where).trim(),
+          Boolean(it.CFItemType),
         );
-        if (title && title[0] === title[0].toLowerCase()) {
-          title = title[0].toUpperCase() + title.slice(1);
-        }
-        if (title !== before) stuPrefix++;
-        title = title.replace(
-          /^(Benchmark|Standard|Indicator)\s+[\d.]+\s*:\s*/i,
-          "",
-        ).trim();
-        if (title.length > 300) {
-          title = truncTitle(title, 300);
-          truncated++;
-        }
-        if (title.length <= 2 || (title.length <= 20 && CODE_RE.test(title))) {
+        if (cleaned === "scaffPat") {
           scaffPat++;
           continue;
         }
-        if (SCAFFOLDING_SIMPLE_RE.test(title)) {
-          scaffPat++;
-          continue;
-        }
-        if (
-          /^(Essential|Proficient|Advanced|Intermediate|Beginning|Emerging|Developing|Extending|Exceeding|Level)\s+[IVX0-9]+/i
-            .test(title) && title.length < 30
-        ) {
-          scaffPat++;
-          continue;
-        }
-        if (/^You\s+[a-z]/i.test(title) && title.length > 20) {
-          scaffPat++;
-          continue;
-        }
-        // A bare acronym ("WCAG", "IoT") is a label, not a standard.
-        if (!/\s/.test(title) && title.length < 30) {
-          scaffPat++;
-          continue;
-        }
-        if (SCAFFOLDING_RE.test(title) && title.length < 50 && !it.CFItemType) {
-          scaffPat++;
-          continue;
-        }
-        if (
-          /^(understand|recognize|demonstrate|apply|identify|know|explain|describe)\s+(the|how|that|what|why|when|where|a|an)\s/i
-            .test(title) &&
-          title.length < 60 && !it.CFItemType
-        ) {
+        if (cleaned === "pureVerb") {
           pureVerb++;
           continue;
         }
-        description = description.replace(
-          /^(Students?\s+(will|demonstrate)|The student|This unit|Module \d+|The course|Courses)\s[^.]*?\.\s+/i,
-          "",
-        );
+        const { title, description } = cleaned;
+        if (cleaned.stuPrefix) stuPrefix++;
+        if (cleaned.truncated) truncated++;
         const localKey = title.toLowerCase();
         if (seenInFrame.has(localKey)) {
           perFrameDup++;
@@ -730,16 +768,9 @@ export function stageList() {
             if (kwSlug) tags.push(`topic:${kwSlug}`);
           }
         }
-        // Stage finalize shows a code:* tag as a display title, so a sub-item
-        // label like "a" must not become one.
         if (it.humanCodingScheme) {
-          const code = String(it.humanCodingScheme).trim().replace(
-            /^Khan\s+/i,
-            "",
-          );
-          if (code.length >= 4 && (/[A-Z]/.test(code) || /\./.test(code))) {
-            tags.push(`code:${code}`);
-          }
+          const t = codeTag(String(it.humanCodingScheme));
+          if (t) tags.push(t);
         }
         if (it.CFItemType) tags.push(`opensalt:${slugify(it.CFItemType)}`);
 
@@ -752,11 +783,92 @@ export function stageList() {
     );
   }
 
+  // Learning Commons: learning components and the standards of current
+  // frameworks. One skill per distinct statement; lcNodes keeps every node id.
+  const lcNodes = new Map<Skill, string[]>();
+  {
+    const lc = readLearningCommons();
+    const gradeTags = (grades: string[]) =>
+      grades.map((g) => `grade:${normGrade(g)}`);
+    for (const c of lc.components) {
+      // "With support from adults, share a feeling" names the skill after the comma.
+      const text = htmlText(c.text, `${LC_EXTRACT} component ${c.id}`).trim()
+        .replace(/^with\s+(?:prompting|guidance|support)\b[^,]*,\s*/i, "");
+      const skill: Skill = {
+        id: "",
+        title: text.charAt(0).toUpperCase() + text.slice(1),
+        description: "",
+        sources: ["learningcommons"],
+        tags: ["learningcommons:component", ...gradeTags(c.grades)],
+      };
+      raw.push(skill);
+      lcNodes.set(skill, [c.id]);
+    }
+    // REVIEW: A buildsTowards endpoint skips the long-title drop below, so its
+    // seed edge can resolve. Alternative: keep the drop and let stage enrich
+    // summarize them. Only 14 of 757 edges resolve without this, and a summary
+    // costs an Ollama run and loses the exact statement.
+    const coherence = new Set(
+      lc.edges.filter((e) => e.rel === "buildsTowards").flatMap((
+        e,
+      ) => [e.from, e.to]),
+    );
+    const byText = new Map<string, Skill>();
+    let scaffType = 0, scaffPat = 0, pureVerb = 0, nStd = 0;
+    for (const it of lc.items) {
+      if (it.type && SCAFFOLDING_TYPES.has(it.type)) {
+        scaffType++;
+        continue;
+      }
+      const text = htmlText(it.text, `${LC_EXTRACT} item ${it.id}`).trim();
+      // "(Begins in grade 3.)" and "(Not applicable to literature)" are notes.
+      const cleaned = /^\*?\([^)]*\)\*?$/.test(text)
+        ? "scaffPat"
+        : cleanStandard(text, "", "", Boolean(it.type));
+      if (cleaned === "scaffPat") {
+        scaffPat++;
+        continue;
+      }
+      if (cleaned === "pureVerb") {
+        pureVerb++;
+        continue;
+      }
+      // Fifty states repeat one statement; one skill holds all their nodes.
+      const tags = [
+        "learningcommons:standard",
+        ...(coherence.has(it.id) ? ["learningcommons:coherence"] : []),
+        ...gradeTags(it.grades),
+        ...(it.code ? [codeTag(it.code)].filter((t) => t !== null) : []),
+      ];
+      const seen = byText.get(cleaned.title);
+      if (seen) {
+        lcNodes.get(seen)!.push(it.id);
+        for (const t of tags) if (!seen.tags.includes(t)) seen.tags.push(t);
+        continue;
+      }
+      const skill: Skill = {
+        id: "",
+        title: cleaned.title,
+        description: cleaned.description,
+        sources: ["learningcommons"],
+        tags,
+      };
+      byText.set(cleaned.title, skill);
+      lcNodes.set(skill, [it.id]);
+      raw.push(skill);
+      nStd++;
+    }
+    console.log(
+      `  learningcommons: ${lc.components.length} components, ${nStd} standards from ${lc.items.length} items (scaff_type=${scaffType}, scaff_pat=${scaffPat}, pure_verb=${pureVerb})`,
+    );
+  }
+
   // Normalize + denoise
   let normalized = 0, denoised = 0;
   for (const s of raw) {
     const t0 = s.title, d0 = s.description;
-    const decode = !s.sources.includes("opensalt");
+    const decode = !s.sources.includes("opensalt") &&
+      !s.sources.includes("learningcommons");
     s.title = normalizeText(s.title, decode);
     s.description = normalizeText(s.description, decode);
     if (/^The SCED provides a series of unused codes/i.test(s.description)) {
@@ -837,14 +949,19 @@ export function stageList() {
       longTitleDropped++;
       continue;
     }
-    const fromOpensalt = s.sources.includes("opensalt");
+    const fromOpensalt = s.sources.includes("opensalt") ||
+      s.tags.includes("learningcommons:standard");
     const fromOnetTask = s.tags.some((t) => t === "onet:task");
     const wc = s.title.split(/\s+/).filter(Boolean).length;
-    if ((fromOpensalt || fromOnetTask) && (wc > 12 || s.title.length > 100)) {
+    const exempt = s.tags.includes("learningcommons:coherence");
+    if (
+      (fromOpensalt || fromOnetTask) && !exempt &&
+      (wc > 12 || s.title.length > 100)
+    ) {
       longTitleDropped++;
       continue;
     }
-    if (fromOpensalt) {
+    if (fromOpensalt && !exempt) {
       const slugBase = decodeEntities(s.title).toLowerCase()
         .replace(/[^a-z0-9\s-]/g, " ").trim().replace(/\s+/g, "-").replace(
           /-+/g,
@@ -873,6 +990,7 @@ export function stageList() {
       );
   const TAG_CAP = 20;
   const byKey = new Map<string, Skill>();
+  const keyNodes = new Map<string, string[]>();
   let collisions = 0, emptyKey = 0, emptySlug = 0;
   for (const s of raw) {
     const k = fuzzyKey(s.title);
@@ -880,6 +998,8 @@ export function stageList() {
       emptyKey++;
       continue;
     }
+    const nodes = lcNodes.get(s);
+    if (nodes) keyNodes.set(k, [...keyNodes.get(k) ?? [], ...nodes]);
     const existing = byKey.get(k);
     if (existing) {
       collisions++;
@@ -931,6 +1051,15 @@ export function stageList() {
   }
 
   const out = [...byKey.values()];
+  // REVIEW: Stage list writes the node-to-skill map, because the tag cap (20)
+  // would lose most of the ids of a statement that fifty states repeat.
+  // Alternative: a lc:<id> tag per node. It needs no file but loses nodes past
+  // the cap, and buildsTowards seed pairs then fail to resolve.
+  const lcRows: string[][] = [];
+  for (const [k, nodes] of keyNodes) {
+    const skill = byKey.get(k);
+    if (skill) { for (const n of nodes) lcRows.push([n, skill.id]); }
+  }
   const ids = new Set<string>();
   for (const s of out) {
     if (!s.id || ids.has(s.id)) {
@@ -941,9 +1070,10 @@ export function stageList() {
     ids.add(s.id);
   }
   const perSource = Object.fromEntries(
-    ["esco", "onet", "lightcast", "opensalt", "foundation"].map((
-      src,
-    ) => [src, out.filter((s) => s.sources.includes(src)).length]),
+    ["esco", "onet", "lightcast", "opensalt", "foundation", "learningcommons"]
+      .map((
+        src,
+      ) => [src, out.filter((s) => s.sources.includes(src)).length]),
   );
   for (const [src, n] of Object.entries(perSource)) {
     if (!n) {
@@ -957,6 +1087,7 @@ export function stageList() {
       `list: expected at least 20000 skills, received ${out.length}. Check the per-source counts above.`,
     );
   }
+  writeTable(LC_IDS, lcRows);
   const clean = (c: string) =>
     c
       // deno-lint-ignore no-control-regex -- strips C0 controls (tab, newline included) from source text
@@ -1284,6 +1415,35 @@ export async function stageTrees() {
 }
 
 // ---------- stage seed-edges ----------
+
+// Each buildsTowards edge runs prereq (source) to dependent (target). The export
+// links misconceptions with hinders and symmetric ties with relatesTo; the
+// extract holds neither. Aliases fold a skill that stage dedupe merged.
+export function lcSeedEdges(
+  skillOf: Map<string, string>,
+  alias: Map<string, string>,
+): {
+  edges: { src: string; dst: string; raw: string }[];
+  dropped: { from: string; to: string; raw: string; reason: string }[];
+} {
+  const edges: { src: string; dst: string; raw: string }[] = [];
+  const dropped: { from: string; to: string; raw: string; reason: string }[] =
+    [];
+  for (const e of readLearningCommons().edges) {
+    if (e.rel !== "buildsTowards") continue;
+    const raw = `${e.from}->${e.to}`;
+    const a = skillOf.get(e.from), b = skillOf.get(e.to);
+    if (!a || !b) {
+      dropped.push({ from: e.from, to: e.to, raw, reason: "no-skill" });
+      continue;
+    }
+    const src = alias.get(a) ?? a, dst = alias.get(b) ?? b;
+    if (src === dst) {
+      dropped.push({ from: e.from, to: e.to, raw, reason: "self-loop" });
+    } else edges.push({ src, dst, raw });
+  }
+  return { edges, dropped };
+}
 
 export async function stageSeedEdges() {
   console.log("[seed-edges] collecting…");
@@ -1754,6 +1914,41 @@ export async function stageSeedEdges() {
       fallback,
     });
     perSource[p.source].resolved++;
+  }
+  // Learning Commons pairs carry skill ids already: no label to resolve.
+  {
+    const aliases = new Map(
+      readTable(ALIASES).map((r) => [r.dropped_id, r.canonical_id]),
+    );
+    const lc = lcSeedEdges(
+      new Map(readTable(LC_IDS).map((r) => [r.node_id, r.skill_id])),
+      aliases,
+    );
+    perSource.learningcommons = {
+      total: lc.edges.length + lc.dropped.length,
+      resolved: lc.edges.length,
+    };
+    for (const e of lc.edges) {
+      for (const id of [e.src, e.dst]) {
+        if (!idx.idSet.has(id)) {
+          throw new Error(
+            `${LC_IDS.path}: expected skill id "${id}" in ${TAGGED_DEDUPED.path}, received none. Run: deno run -A pipeline.ts list, then every later stage.`,
+          );
+        }
+      }
+      edges.push({
+        ...e,
+        source: "learningcommons",
+        confidence: 1,
+        holdout: (h32("learningcommons|" + e.raw) % 5) === 0,
+        fallback: false,
+      });
+    }
+    for (const d of lc.dropped) {
+      quarantine.push(
+        `${d.from}\t${d.to}\tlearningcommons\t${d.raw}\t${d.reason}\t${d.reason}`,
+      );
+    }
   }
   Deno.writeTextFileSync(
     `${BUILD}/1e_unresolved.tsv`,

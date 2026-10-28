@@ -177,7 +177,15 @@ const runIn = async (
   }
   const out = await run([stage], dir, 10_000);
   const files = Object.fromEntries(
-    outFiles.map((f) => [f, Deno.readTextFileSync(`${dir}/${f}`)]),
+    outFiles.map((f) => {
+      try {
+        return [f, Deno.readTextFileSync(`${dir}/${f}`)];
+      } catch (e) {
+        // A failed stage can write nothing; the caller asserts on its stderr.
+        if (e instanceof Deno.errors.NotFound && !out.success) return [f, ""];
+        throw e;
+      }
+    }),
   );
   Deno.removeSync(dir, { recursive: true });
   const stderr = new TextDecoder().decode(out.stderr);
@@ -751,6 +759,164 @@ Deno.test("list: every foundation lands in a skill", () => {
     assert(rows.some((c) => c[0] === id), `no skill has id ${id}`);
   }
 });
+
+// Learning Commons: 5 nodes and 3 edges. The ids are node uuids in the export.
+const lcExtract = (rows: object[]) =>
+  gzip(
+    [
+      { k: "attributions", statements: ["Learning Commons, CC BY 4.0"] },
+      ...rows,
+    ]
+      .map((r) => JSON.stringify(r)).join("\n") + "\n",
+  );
+const lcItem = (id: string, text: string, code = "") => ({
+  k: "item",
+  id,
+  text,
+  code,
+  type: "Standard",
+  grades: ["3"],
+  attribution: 0,
+});
+const lcFixture = () => [
+  lcItem("n1", "Add fractions with like denominators", "3.NF.A.1"),
+  lcItem("n2", "Compare two fractions with the same numerator"),
+  lcItem("n3", "Solve word problems about money"),
+  { k: "component", id: "n4", text: "Name a unit fraction", grades: ["3"] },
+  lcItem("n5", "Round whole numbers to the nearest ten"),
+  { k: "edge", rel: "buildsTowards", from: "n2", to: "n1" },
+  { k: "edge", rel: "buildsTowards", from: "n3", to: "n5" },
+  { k: "edge", rel: "hasStandardAlignment", from: "n3", to: "n5" },
+];
+
+Deno.test("list: Learning Commons rows carry the source, grade tags, and a clean title", () => {
+  const lc = rows.filter((c) => c[3].includes("learningcommons"));
+  assertGreater(lc.length, 1000, "too few Learning Commons rows");
+  assert(
+    lc.some((c) => c[4].split(",").includes("learningcommons:component")),
+    "no learning component",
+  );
+  assert(
+    lc.some((c) => c[4].split(",").includes("learningcommons:standard")),
+    "no standards item",
+  );
+  assert(lc.some((c) => /(^|,)grade:K(,|$)/.test(c[4])), "no grade:K tag");
+  assertEquals(
+    lc.filter((c) => /<\/?[a-z][^>]*>/i.test(c[1] + c[2])).length,
+    0,
+    "markup left in a Learning Commons row",
+  );
+  const ids = new Set(
+    Deno.readTextFileSync("build/1m_lc_ids.tsv").split("\n").slice(1)
+      .filter((l) => l).map((l) => l.split("\t")[1]),
+  );
+  assert(
+    lc.every((c) => ids.has(c[0])),
+    "a Learning Commons row has no node in build/1m_lc_ids.tsv",
+  );
+});
+
+Deno.test("lcSeedEdges: buildsTowards runs prereq to dependent through aliases; the rest is quarantined", async () => {
+  const { lcSeedEdges } = await import("./sources.ts");
+  const dir = Deno.makeTempDirSync();
+  Deno.mkdirSync(`${dir}/data/learningcommons`, { recursive: true });
+  Deno.writeFileSync(
+    `${dir}/data/learningcommons/graph.jsonl.gz`,
+    await lcExtract(lcFixture()),
+  );
+  const cwd = Deno.cwd();
+  Deno.chdir(dir);
+  try {
+    const { edges, dropped } = lcSeedEdges(
+      new Map([["n1", "add-fractions"], ["n2", "compare-fractions"], [
+        "n3",
+        "money",
+      ], ["n5", "round-tens"]]),
+      new Map([["compare-fractions", "fractions"], ["round-tens", "money"]]),
+    );
+    // n2 -> n1 resolves; n3 -> n5 folds into one skill through an alias.
+    assertEquals(edges.map((e) => [e.src, e.dst]), [[
+      "fractions",
+      "add-fractions",
+    ]]);
+    assertEquals(dropped.map((d) => d.reason), ["self-loop"]);
+    // A node that stage list dropped has no skill; the edge goes to quarantine.
+    const none = lcSeedEdges(new Map([["n1", "add-fractions"]]), new Map());
+    assertEquals(none.edges, []);
+    assertEquals(none.dropped.map((d) => d.reason), ["no-skill", "no-skill"]);
+  } finally {
+    Deno.chdir(cwd);
+    Deno.removeSync(dir, { recursive: true });
+  }
+});
+
+// Embeddings: one orthogonal axis per group, so a group of rows shares a vector.
+Deno.test(
+  "dedupe: a shared code:* tag across OpenSALT and Learning Commons, or an alignment edge, makes a candidate that the cosine test decides",
+  async () => {
+    const skills: [string, string, string, string, number][] = [
+      // id, title, sources, tags, vector axis
+      [
+        "os-code",
+        "Combine fractions sharing a denominator",
+        "opensalt",
+        "code:3.NF.A.1",
+        0,
+      ],
+      [
+        "lc-code",
+        "Add fractions with like denominators",
+        "learningcommons",
+        "code:3.NF.A.1",
+        0,
+      ],
+      ["os-far", "Estimate sums of decimals", "opensalt", "code:4.NBT.B.4", 1],
+      [
+        "lc-far",
+        "Order the planets by size",
+        "learningcommons",
+        "code:4.NBT.B.4",
+        2,
+      ],
+      ["lc-a", "Sketch a bar model of a story", "learningcommons", "", 3],
+      [
+        "lc-b",
+        "Draw tape diagrams for word problems",
+        "learningcommons",
+        "",
+        3,
+      ],
+      ["lc-c", "Recite the months of the year", "learningcommons", "", 4],
+      ["lc-d", "Name the days of a week", "learningcommons", "", 4],
+    ];
+    const emb = new Float32Array(skills.length * 768);
+    skills.forEach(([, , , , axis], i) => emb[i * 768 + axis] = 1);
+    const { code, stderr, files } = await runIn("dedupe", {
+      "build/3_tagged.tsv": [
+        "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+        ...skills.map(([id, title, sources, tags]) =>
+          [id, title, "", sources, tags, "", ""].join("\t")
+        ),
+      ].join("\n") + "\n",
+      "build/2_ids.tsv": skills.map(([id]) => id).join("\n") + "\n",
+      "build/2_embeddings.bin": new Uint8Array(emb.buffer),
+      "build/1j_lcsh_tree.tsv": "",
+      "build/1k_dbpedia_tree.tsv": "",
+      "build/1m_lc_ids.tsv": "node_id\tskill_id\nm-a\tlc-a\nm-b\tlc-b\n",
+      "data/learningcommons/graph.jsonl.gz": await lcExtract([
+        lcItem("m-a", "Sketch a bar model of a story"),
+        lcItem("m-b", "Draw tape diagrams for word problems"),
+        { k: "edge", rel: "hasStandardAlignment", from: "m-a", to: "m-b" },
+      ]),
+    }, ["build/3b_aliases.tsv"]);
+    assertEquals(code, 0, stderr);
+    // The code pair and the alignment pair merge. The pair with a far vector and
+    // the unaligned pair with one vector stay apart.
+    const pairs = files["build/3b_aliases.tsv"].split("\n").slice(1)
+      .filter((l) => l).map((l) => l.split("\t").sort().join("+")).sort();
+    assertEquals(pairs, ["lc-a+lc-b", "lc-code+os-code"]);
+  },
+);
 
 // A tiny difficulty input. Embeddings are orthogonal, so each anchor keeps its
 // own value and an unanchored skill gets the default raw 10.

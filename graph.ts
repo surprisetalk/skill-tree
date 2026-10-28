@@ -9,15 +9,18 @@ import {
   gradeToDifficulty,
   IDS,
   isJunkTopic,
+  LC_IDS,
   need,
   normalize,
   normalizedEmbeddingsForSkills,
   PATHOLOGICAL,
   readCsv,
+  readLearningCommons,
   readSeeds,
   readTable,
   readTree,
   readTsv,
+  rerun,
   resolveConcept,
   SIG_STOP,
   SKILL_LIST,
@@ -950,6 +953,83 @@ export function stageDedupe() {
   console.log(
     `[dedupe] cosine+jaccard merges: ${merged} (blocked ${cosBlocked} antonym, skipped ${skippedHuge} oversize buckets)`,
   );
+
+  // Learning Commons candidates skip the topic bucket and the Jaccard gate, and
+  // the cosine test decides. A pair whose skills share a code:* tag with
+  // OpenSALT needs 0.90, because the code is evidence. A pair that the graph
+  // marks hasStandardAlignment needs the full DEDUPE_COSINE.
+  // REVIEW: A shared code is a candidate, not an automatic merge. Alternative:
+  // merge every LC x OpenSALT pair that shares a code. It is free, but the same
+  // code means different standards in different states ("3.1.1"), and a wrong
+  // merge fuses two skills and their prereqs.
+  {
+    const DEDUPE_COSINE_CODE = 0.90;
+    const PAIR_BOUND = 5_000_000;
+    const rowOf = new Map(rows.map((r, i) => [r.id, i]));
+    const candidates = new Map<string, [number, number, number]>();
+    const add = (a: number, b: number, min: number) => {
+      if (a === b) return;
+      const k = a < b ? `${a},${b}` : `${b},${a}`;
+      const prev = candidates.get(k);
+      candidates.set(k, [a, b, prev ? Math.min(prev[2], min) : min]);
+      if (candidates.size > PAIR_BOUND) {
+        throw new Error(
+          `dedupe: expected at most ${PAIR_BOUND} Learning Commons merge candidates, received more than that. A code:* tag is shared by too many rows: raise PAIR_BOUND or tighten the code filter in sources.ts.`,
+        );
+      }
+    };
+    const byCode = new Map<string, { lc: number[]; os: number[] }>();
+    rows.forEach((r, i) => {
+      const lc = r.sources.includes("learningcommons"),
+        os = r.sources.includes("opensalt");
+      if (!lc && !os) return;
+      for (const t of r.tags.split(",")) {
+        if (!t.startsWith("code:")) continue;
+        const g = byCode.get(t) ?? { lc: [], os: [] };
+        if (lc) g.lc.push(i);
+        if (os) g.os.push(i);
+        byCode.set(t, g);
+      }
+    });
+    for (const g of byCode.values()) {
+      for (const a of g.lc) {
+        for (const b of g.os) add(a, b, DEDUPE_COSINE_CODE);
+      }
+    }
+    const skillOf = new Map(
+      readTable(LC_IDS).map((r) => [r.node_id, r.skill_id]),
+    );
+    const rowOfNode = (node: string): number | undefined => {
+      const id = skillOf.get(node);
+      if (id === undefined) return undefined;
+      const i = rowOf.get(id);
+      if (i === undefined) {
+        throw new Error(
+          `${LC_IDS.path}: expected skill id "${id}" in ${TAGGED_RAW.path}, received none. The files come from different runs: ${
+            rerun(LC_IDS.path)
+          }, then every later stage.`,
+        );
+      }
+      return i;
+    };
+    for (const e of readLearningCommons().edges) {
+      if (e.rel !== "hasStandardAlignment") continue;
+      const a = rowOfNode(e.from), b = rowOfNode(e.to);
+      if (a !== undefined && b !== undefined) add(a, b, DEDUPE_COSINE);
+    }
+    let lcMerged = 0, lcBlocked = 0;
+    for (const [a, b, min] of candidates.values()) {
+      let sc = 0;
+      const oa = a * EMBED_DIM, ob = b * EMBED_DIM;
+      for (let d = 0; d < EMBED_DIM; d++) sc += vecs[oa + d] * vecs[ob + d];
+      if (sc < min) continue;
+      if (union(a, b)) lcMerged++;
+      else lcBlocked++;
+    }
+    console.log(
+      `[dedupe] learning commons candidates: ${candidates.size}, merged ${lcMerged} (blocked ${lcBlocked} antonym)`,
+    );
+  }
 
   const alias = new Map<string, string>();
   let survivors = 0, dropped = 0;

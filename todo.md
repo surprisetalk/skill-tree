@@ -1,31 +1,5 @@
 ## Next
 
-- [ ] `skills.tsv` holds the Learning Commons standards and learning components,
-      with Coherence Map seed edges. Source and counts: `research.md` § Ingest.
-      CC BY 4.0 on every row; each row carries an `attributionStatement`.
-      Decision: bucket "grow after the main quest" in the projects strategy
-      (~/Documents/tasks/todo.md, projects entry, 27 Oct).
-  1. `data/download.ts` fetches
-     `cdn.learningcommons.org/knowledge-graph/v1.16.0/exports/{nodes,relationships}.jsonl`
-     (986 MB) into `data/learningcommons/`. Add `data/learningcommons/*.jsonl`
-     to `.gitignore`. Keep the version in one constant.
-  2. Run stage `list` on one grade band. Count rows before the full ingest.
-  3. Stage `list`: each `LearningComponent` node becomes a skill with
-     `sources: ["learningcommons"]`. It takes the `gradeLevel` of the standards
-     it `supports`, as `grade:*` tags.
-  4. Stage `list`: each `StandardsFrameworkItem` in a framework with `isCurrent`
-     true becomes a skill, through the OpenSALT scaffolding filters. Tag
-     `code:<statementCode>` and `grade:*` from `gradeLevel`.
-  5. Stage `dedupe`: merge rows that share a `code:*` tag with OpenSALT. Treat a
-     `hasStandardAlignment` pair as a merge candidate for the cosine pass, not
-     as an automatic merge.
-  6. Stage `seed-edges`: each `buildsTowards` edge becomes a seed pair with
-     source as prereq and target as dependent. Skip `relatesTo`: it is
-     symmetric. Skip `hinders`: it links misconceptions, not skills.
-  7. Count what OpenSALT and the planned CSP crawl add beyond Learning Commons:
-     jurisdictions × subjects. Write the count into the CSP entry.
-  8. Add a fixture of 5 nodes and 3 edges to `pipeline_test.ts`.
-
 - [ ] `skills.tsv` lists only direct prereqs. An edge that another path implies
       is gone, so that a goal closure stays small.
   1. In stage `postproc`, after the cycle breaker, drop edge s → p when p is
@@ -152,9 +126,23 @@
       Standards Project (CSP) and ASN, everything they give, with no row bound.
       Blocker: the full CSP download runs for hours, and its size decides
       whether `data/csp/` is committed like `data/opensalt/` (107 MB) or
-      gitignored. ASN bulk access needs your email request. Do the Learning
-      Commons entry first. Run the CSP crawl only for what that entry's step 7
-      shows missing.
+      gitignored. ASN bulk access needs your email request. Count (28 Oct,
+      Learning Commons v1.16.0): Learning Commons holds 209 jurisdiction ×
+      subject pairs in current frameworks: 52 jurisdictions (50 states,
+      Washington D.C., Multi-State) × 4 core subjects (ELA, math, science,
+      social studies), plus Multi-State durable skills. OpenSALT's 95 frameworks
+      name no jurisdiction or subject; by title, its 26 core-subject pairs all
+      sit in Learning Commons, and it adds about 10 pairs outside them (computer
+      science: Alabama and Massachusetts; CTE: North Carolina and North Dakota;
+      world languages: Florida and Colorado; Ontario and Western Canada math;
+      Kentucky early childhood; AP CS Principles). CSP lists 786 jurisdictions:
+      51 US states and D.C., 13 Canadian province entries, Common Core, 342
+      organizations, 375 schools or districts. Its subjects are finer than
+      Learning Commons': Texas alone has 48 subject titles, 33 of them not
+      deprecated. So CSP adds Canada, organizations, schools, and the non-core
+      subjects of each state (Texas: 29 beyond the core four). The full pair
+      count needs one GET per jurisdiction (786); this count used two. Decide
+      whether non-core subjects, Canada, and schools justify the crawl.
   1. `data/download.ts` fetches each CSP jurisdiction from
      `api.commonstandardsproject.com/api/v1` (no key), then each standard set,
      into `data/csp/{setId}.json`. It skips files that exist, uses a 30 s

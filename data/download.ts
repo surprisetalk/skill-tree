@@ -1,3 +1,5 @@
+import { TextLineStream } from "@std/streams/text-line-stream";
+
 const DATA = new URL(".", import.meta.url).pathname;
 
 async function exists(path: string): Promise<boolean> {
@@ -36,6 +38,221 @@ async function get(url: string, dest: string) {
 
 async function mkdir(path: string) {
   await Deno.mkdir(path, { recursive: true });
+}
+
+// Learning Commons knowledge graph, CC BY 4.0. The raw export is 986 MB, so the
+// step streams it and keeps a filtered, gzipped extract that git tracks.
+// REVIEW: Track an extract of only the rows stage list reads. Alternative: keep
+// the raw jsonl (986 MB, gitignored) and read it in stage list. It makes the
+// test fail on a fresh clone and costs a 986 MB download before every test run.
+const LC_VERSION = "v1.16.0";
+const LC_URL =
+  `https://cdn.learningcommons.org/knowledge-graph/${LC_VERSION}/exports`;
+const LC_EXTRACT = DATA + "learningcommons/graph.jsonl.gz";
+const LC_TIMEOUT_MS = 20 * 60_000;
+// The export gives each relationship's ends as node identifiers.
+const LC_EDGES = new Set(["buildsTowards", "hasStandardAlignment"]);
+
+type Json = Record<string, unknown>;
+
+async function* jsonLines(url: string): AsyncGenerator<Json> {
+  const t0 = performance.now();
+  const r = await fetch(url, { signal: AbortSignal.timeout(LC_TIMEOUT_MS) });
+  if (!r.ok || !r.body) {
+    throw new Error(
+      `expected a 200 response with a body from ${url}, received ${r.status} ${r.statusText}. Check LC_VERSION against github.com/learning-commons-org/knowledge-graph.`,
+    );
+  }
+  let n = 0;
+  try {
+    const lines = r.body.pipeThrough(new TextDecoderStream()).pipeThrough(
+      new TextLineStream(),
+    );
+    for await (const line of lines) {
+      n++;
+      if (!line) continue;
+      const o = JSON.parse(line);
+      if (typeof o !== "object" || o === null || Array.isArray(o)) {
+        throw new Error(
+          `expected a JSON object, received ${line.slice(0, 80)}`,
+        );
+      }
+      yield o as Json;
+    }
+  } catch (e) {
+    throw new Error(
+      `${url}:${n} after ${Math.round((performance.now() - t0) / 1000)} s: ${
+        (e as Error).message
+      }. Run the download again.`,
+    );
+  }
+}
+
+const lcStr = (o: Json, key: string, where: string): string => {
+  const v = o[key];
+  if (typeof v !== "string") {
+    throw new Error(
+      `${where}: expected "${key}" as a string, received ${
+        JSON.stringify(v)
+      }. The export schema changed: check LC_VERSION.`,
+    );
+  }
+  return v;
+};
+
+const lcGrades = (props: Json, where: string): string[] => {
+  const g = JSON.parse(lcStr(props, "gradeLevel", where));
+  if (!Array.isArray(g) || !g.every((x) => typeof x === "string")) {
+    throw new Error(
+      `${where}: expected gradeLevel as a JSON array of strings, received ${
+        JSON.stringify(g)
+      }`,
+    );
+  }
+  return g;
+};
+
+async function learningCommons() {
+  if (await exists(LC_EXTRACT)) {
+    console.log(`  skip: ${LC_EXTRACT} exists`);
+    return;
+  }
+  const frameworkCurrent = new Map<string, boolean>();
+  const items = new Map<string, Json>();
+  const itemGrades = new Map<string, string[]>();
+  const components = new Map<string, Json>();
+  for await (const o of jsonLines(`${LC_URL}/nodes.jsonl`)) {
+    const id = lcStr(o, "identifier", "nodes.jsonl");
+    const where = `nodes.jsonl ${id}`;
+    const props = o.properties as Json;
+    const label = (o.labels as string[])[0];
+    if (label === "StandardsFramework") {
+      const cur = lcStr(props, "isCurrent", where);
+      if (cur !== "true" && cur !== "false") {
+        throw new Error(
+          `${where}: expected isCurrent as "true" or "false", received "${cur}"`,
+        );
+      }
+      frameworkCurrent.set(id, cur === "true");
+    } else if (label === "StandardsFrameworkItem") {
+      const grades = lcGrades(props, where);
+      itemGrades.set(id, grades);
+      // The export marks its own scaffolding (domains, clusters) as groupings.
+      if (props.normalizedStatementType === "Standard Grouping") {
+        items.set(id, { grouping: true });
+        continue;
+      }
+      items.set(id, {
+        k: "item",
+        id,
+        text: props.description ?? "",
+        code: props.statementCode ?? "",
+        type: props.statementType ?? "",
+        grades,
+        attribution: lcStr(props, "attributionStatement", where),
+      });
+    } else if (label === "LearningComponent") {
+      components.set(id, {
+        k: "component",
+        id,
+        text: lcStr(props, "description", where),
+        attribution: lcStr(props, "attributionStatement", where),
+      });
+    }
+  }
+  console.log(
+    `  nodes: ${frameworkCurrent.size} frameworks, ${items.size} items, ${components.size} components`,
+  );
+
+  const parent = new Map<string, string>();
+  const supported = new Map<string, Set<string>>();
+  const edges: [string, string, string][] = [];
+  for await (const o of jsonLines(`${LC_URL}/relationships.jsonl`)) {
+    const rel = lcStr(o, "label", "relationships.jsonl");
+    const from = lcStr(o, "source_identifier", `relationships.jsonl ${rel}`);
+    const to = lcStr(o, "target_identifier", `relationships.jsonl ${rel}`);
+    if (rel === "hasChild") {
+      const sourceLabels = o.source_labels as string[];
+      if (sourceLabels[0].startsWith("Standards")) parent.set(to, from);
+    } else if (rel === "supports") {
+      const grades = itemGrades.get(to);
+      if (!grades) {
+        throw new Error(
+          `relationships.jsonl supports ${from}: expected a standards item as target ${to}, received none. The export schema changed: check LC_VERSION.`,
+        );
+      }
+      const set = supported.get(from) ?? new Set();
+      grades.forEach((g) => set.add(g));
+      supported.set(from, set);
+    } else if (LC_EDGES.has(rel)) edges.push([rel, from, to]);
+  }
+
+  // An item is current when the framework at the top of its hasChild chain is.
+  const kept = new Set<string>();
+  for (const [id, item] of items) {
+    if (item.grouping || !item.text) continue;
+    let top = id, hops = 0;
+    while (parent.has(top)) {
+      top = parent.get(top)!;
+      if (++hops > 50) {
+        throw new Error(
+          `relationships.jsonl: expected a hasChild chain under 50 levels from item ${id}, received a longer one. The graph has a cycle.`,
+        );
+      }
+    }
+    const cur = frameworkCurrent.get(top);
+    if (cur === undefined) {
+      throw new Error(
+        `relationships.jsonl: expected item ${id} under a framework, received the chain end ${top}. The export schema changed: check LC_VERSION.`,
+      );
+    }
+    if (cur) kept.add(id);
+  }
+
+  const attributions: string[] = [];
+  const lines: string[] = [];
+  const attributionOf = (s: string): number => {
+    let i = attributions.indexOf(s);
+    if (i < 0) i = attributions.push(s) - 1;
+    return i;
+  };
+  for (const id of kept) {
+    const item = items.get(id)!;
+    lines.push(JSON.stringify({
+      ...item,
+      attribution: attributionOf(item.attribution as string),
+    }));
+  }
+  for (const [id, c] of components) {
+    lines.push(JSON.stringify({
+      ...c,
+      grades: [...supported.get(id) ?? []],
+      attribution: attributionOf(c.attribution as string),
+    }));
+  }
+  let nEdges = 0;
+  for (const [rel, from, to] of edges) {
+    if (!kept.has(from) || !kept.has(to)) continue;
+    lines.push(JSON.stringify({ k: "edge", rel, from, to }));
+    nEdges++;
+  }
+  // The statements sit first, so a reader sees what the rows cite.
+  lines.unshift(
+    JSON.stringify({ k: "attributions", statements: attributions }),
+  );
+  const gz = await new Response(
+    new Blob([lines.join("\n") + "\n"]).stream().pipeThrough(
+      new CompressionStream("gzip"),
+    ),
+  ).arrayBuffer();
+  await mkdir(DATA + "learningcommons");
+  await Deno.writeFile(LC_EXTRACT + ".tmp", new Uint8Array(gz));
+  await Deno.rename(LC_EXTRACT + ".tmp", LC_EXTRACT);
+  console.log(
+    `  extract: ${kept.size} items, ${components.size} components, ${nEdges} edges, ${
+      (gz.byteLength / 1e6).toFixed(1)
+    } MB gzipped`,
+  );
 }
 
 const steps: { label: string; fn: () => Promise<void> }[] = [
@@ -104,6 +321,11 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
       const base =
         "https://lfs.aminer.cn/misc/moocdata/data/mooccube2/prerequisites";
       for (const name of ["psy.json", "math.json", "cs.json"]) {
+        // git tracks the gzip; the plain file is the optional original.
+        if (await exists(`${dir}/${name}.gz`)) {
+          console.log(`  skip: ${name}.gz exists`);
+          continue;
+        }
         await get(`${base}/${name}`, `${dir}/${name}`);
       }
     },
@@ -164,6 +386,11 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
         console.log("  skip: all frameworks already downloaded");
       }
     },
+  },
+  {
+    label:
+      "learning commons knowledge graph (US state standards, learning components; 986 MB streamed)",
+    fn: learningCommons,
   },
 ];
 

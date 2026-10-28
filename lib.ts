@@ -65,6 +65,7 @@ const STAGE_OF: Record<string, string> = {
   [`${BUILD}/1_skills.tsv`]: "list",
   [`${BUILD}/1e_seed_edges.tsv`]: "seed-edges",
   [`${BUILD}/1f_translate.tsv`]: "enrich",
+  [`${BUILD}/1m_lc_ids.tsv`]: "list",
   [`${BUILD}/1j_lcsh_tree.tsv`]: "trees",
   [`${BUILD}/1k_dbpedia_tree.tsv`]: "trees",
   [`${BUILD}/1l_topic_refs.tsv`]: "trees",
@@ -872,6 +873,12 @@ export const TAGGED_DEDUPED = table({
   key: "id",
   columns: TAGGED_COLUMNS,
 });
+// Learning Commons node id to the skill id that holds it after stage list.
+export const LC_IDS = table({
+  path: `${BUILD}/1m_lc_ids.tsv`,
+  key: "node_id",
+  columns: { node_id: filled, skill_id: SLUG },
+});
 export const ALIASES = table({
   path: `${BUILD}/3b_aliases.tsv`,
   key: "dropped_id",
@@ -1058,6 +1065,138 @@ export function readTree(path: string): Map<string, string[]> {
     m.set(slug, anc.split(","));
   });
   return m;
+}
+
+// ---------- Learning Commons ----------
+
+export type LearningCommons = {
+  components: { id: string; text: string; grades: string[] }[];
+  items: {
+    id: string;
+    text: string;
+    code: string;
+    type: string;
+    grades: string[];
+  }[];
+  edges: {
+    rel: "buildsTowards" | "hasStandardAlignment";
+    from: string;
+    to: string;
+  }[];
+};
+
+export const LC_EXTRACT = "data/learningcommons/graph.jsonl.gz";
+
+// The extract is the output of data/download.ts, one JSON object per line.
+export function readLearningCommons(): LearningCommons {
+  const fix =
+    "Re-download it: rm data/learningcommons/graph.jsonl.gz; deno run -A data/download.ts";
+  const out = new Deno.Command("gzip", {
+    args: ["-dc", LC_EXTRACT],
+    stdout: "piped",
+    stderr: "piped",
+  }).outputSync();
+  if (out.code !== 0) {
+    throw new Error(
+      `${LC_EXTRACT}: expected a gzip file, received gzip exit ${out.code}: ${
+        new TextDecoder().decode(out.stderr).trim()
+      }. ${fix}`,
+    );
+  }
+  const lc: LearningCommons = { components: [], items: [], edges: [] };
+  const ids = new Set<string>();
+  let sawAttributions = false;
+  const lines = new TextDecoder().decode(out.stdout).split("\n");
+  if (lines.pop() !== "") {
+    throw new Error(
+      `${LC_EXTRACT}: expected a newline after the last row. ${fix}`,
+    );
+  }
+  lines.forEach((line, i) => {
+    const where = `${LC_EXTRACT}:${i + 1}`;
+    let o: Record<string, unknown>;
+    try {
+      o = JSON.parse(line);
+    } catch {
+      throw new Error(
+        `${where}: expected a JSON object, received ${
+          line.slice(0, 80)
+        }. ${fix}`,
+      );
+    }
+    const str = (k: string, nonEmpty = true): string => {
+      const v = o[k];
+      if (typeof v !== "string" || (nonEmpty && !v)) {
+        throw new Error(
+          `${where}: expected ${k} as ${
+            nonEmpty ? "non-empty " : ""
+          }text, received ${JSON.stringify(v)}. ${fix}`,
+        );
+      }
+      return v;
+    };
+    const grades = (): string[] => {
+      const v = o.grades;
+      if (!Array.isArray(v) || !v.every((g) => typeof g === "string" && g)) {
+        throw new Error(
+          `${where}: expected grades as an array of text, received ${
+            JSON.stringify(v)
+          }. ${fix}`,
+        );
+      }
+      return v;
+    };
+    const k = o.k;
+    if (k === "attributions") {
+      sawAttributions = true;
+    } else if (k === "component" || k === "item") {
+      const id = str("id");
+      if (ids.has(id)) {
+        throw new Error(
+          `${where}: expected a unique id, received a second "${id}". ${fix}`,
+        );
+      }
+      ids.add(id);
+      if (k === "component") {
+        lc.components.push({ id, text: str("text"), grades: grades() });
+      } else {
+        lc.items.push({
+          id,
+          text: str("text"),
+          code: str("code", false),
+          type: str("type", false),
+          grades: grades(),
+        });
+      }
+    } else if (k === "edge") {
+      const rel = str("rel");
+      if (rel !== "buildsTowards" && rel !== "hasStandardAlignment") {
+        throw new Error(
+          `${where}: expected rel as buildsTowards or hasStandardAlignment, received "${rel}". ${fix}`,
+        );
+      }
+      lc.edges.push({ rel, from: str("from"), to: str("to") });
+    } else {
+      throw new Error(
+        `${where}: expected k as attributions, component, item, or edge, received ${
+          JSON.stringify(k)
+        }. ${fix}`,
+      );
+    }
+  });
+  if (!sawAttributions) {
+    throw new Error(
+      `${LC_EXTRACT}: expected an attributions row, received none. ${fix}`,
+    );
+  }
+  for (const e of lc.edges) {
+    if (!ids.has(e.from) || !ids.has(e.to)) {
+      throw new Error(
+        `${LC_EXTRACT}: expected both ends of ${e.rel} ${e.from} -> ${e.to} among the items, received a missing one. ${fix}`,
+      );
+    }
+  }
+  return lc;
 }
 
 // ---------- shared by two stage files ----------
