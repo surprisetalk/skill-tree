@@ -256,6 +256,9 @@ export const isJunkTopic = (t: string): boolean =>
   FRAMEWORK_RE.test(t) || WIKI_CAT_RE.test(t) || YEAR_RE.test(t);
 
 const GEN_MODEL = "gpt-oss:20b";
+// REVIEW: 4x the ~45 thinking tokens measured at think "low". Alternative: no
+// cap on thinking. A runaway thought then holds a worker until the timeout.
+const THINK_TOKENS = 200;
 export const CACHE_PATH = `${BUILD}/2_cache.bin`;
 const CACHE_RECORD_BYTES = 32 + EMBED_DIM * 4;
 
@@ -358,7 +361,15 @@ export async function resumableOllama<T extends { id: string }>(
           model: GEN_MODEL,
           prompt: promptFn(item),
           stream: false,
-          options: { temperature: 0.1, num_predict: opts.numPredict ?? 120 },
+          // gpt-oss thinks before it answers, and the thinking counts against
+          // num_predict: at "low" it took ~45 tokens on a standard summary, so
+          // a 60-token limit returned an empty response. The allowance keeps
+          // numPredict an answer budget.
+          think: "low",
+          options: {
+            temperature: 0.1,
+            num_predict: (opts.numPredict ?? 120) + THINK_TOKENS,
+          },
         });
         if (typeof response !== "string") {
           throw new Error(

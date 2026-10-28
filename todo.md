@@ -4,53 +4,45 @@
 
 - [ ] You get a fresh `skills.tsv` that includes the fixes from audit passes
       9–16, and `deno task status` passes. Blocker: a multi-hour Ollama run on
-      the Mac. Ollama runs with `nomic-embed-text`; `gpt-oss:20b` is not pulled.
-      `build/` holds only the committed caches. Decision: regenerate every LLM
-      cache. Deleting `5_prereqs.tsv` applies the R1–R10 and DR1 candidate fixes
-      to every skill. Deleting the Haiku enrichment caches removes the ~10%
-      wrong descriptions (E2) and applies the ENR1–4 prompts.
+      the Mac. `build/` holds only the committed caches. Decision: regenerate
+      every LLM cache. Deleting `5_prereqs.tsv` applies the R1–R10 and DR1
+      candidate fixes to every skill. Deleting the Haiku enrichment caches
+      removes the ~10% wrong descriptions (E2) and applies the ENR1–4 prompts.
   1. Golden diff of the split refactor, before you delete a cache: in worktrees
      at `46783a1` and `6044561`, run every stage but `enrich` with `SKIP_LLM=1`
      and the committed caches. The two `skills.tsv` files must match byte for
      byte.
-  2. `ollama pull gpt-oss:20b`. The Mac has only `nomic-embed-text` today, so
-     stages `enrich` and `prereq` stop on their first request.
-  3. Smoke-test one prompt per `num_predict` (60, 120, 200, 600) with
-     `curl localhost:11434/api/generate`. gpt-oss thinks before it answers, and
-     the thinking counts against `num_predict`, so a short limit can return an
-     empty `response`. If it does, raise that limit or send `think: "low"` in
-     the `/api/generate` call of `resumableOllama` (lib.ts).
-  4. `git rm build/1b_infill.tsv build/1c_summarize.tsv build/1d_onet_desc.tsv build/5_prereqs.tsv`.
-  5. Run `deno run -A pipeline.ts enrich`. It also translates the MOOCCubeX
+  2. `git rm build/1b_infill.tsv build/1c_summarize.tsv build/1d_onet_desc.tsv build/5_prereqs.tsv`.
+  3. Run `deno run -A pipeline.ts enrich`. It also translates the MOOCCubeX
      labels into `build/1f_translate.tsv`; commit that cache. Stage `list` drops
      25k long titles today, because the summarize cache has only 3.4k rows and
      the OpenSALT description cache is empty.
-  6. Run `list`, `trees`, `embed`, `tag`, `dedupe`, `seed-edges`, and
+  4. Run `list`, `trees`, `embed`, `tag`, `dedupe`, `seed-edges`, and
      `difficulty`, one `deno run -A pipeline.ts <stage>` each. They need only
      `nomic-embed-text`. Stage `seed-edges` runs after `dedupe` for the first
      time; watch its foundation-wiring count and quarantine.
-  7. Stage `seed-edges` logs `cap dropped N pairs` when the 50000 OpenSALT
+  5. Stage `seed-edges` logs `cap dropped N pairs` when the 50000 OpenSALT
      grade-pair cap cuts. If it cuts, decide: raise the cap or throw.
-  8. Stage `seed-edges` quarantines a whole source without a word. Set a floor
+  6. Stage `seed-edges` quarantines a whole source without a word. Set a floor
      per source from this run's resolved/total counts, the course-prereq source
      included. Make the stage throw when a source resolves under its floor.
-  9. Before stage `prereq`: `difficulty_raw` no longer holds the seed order, and
+  7. Before stage `prereq`: `difficulty_raw` no longer holds the seed order, and
      stage `prereq` picks candidates by raw (`raw[j] < raw[i] - MIN_DIFF`,
      prereq.ts). Count the seed pairs whose prereq raw sits at or above its
      dependent's raw. Count the skills whose candidate pool would gain such a
      prereq if its raw sat 1.0 below its dependent, as the old seed pass set it.
      Show both counts. Then decide: restore a seed-ordered raw, have stage
      `prereq` read `band`, or keep raw as is.
-  10. Run `prereq`, `postproc`, and `finalize`.
-  11. Run `deno task status`. The three LectureBank conditions use placeholder
-      floors (`EXPERT_PRECISION_FLOOR`, `EXPERT_RECALL_FLOOR`,
-      `EXPERT_MIN_POSITIVES` in pipeline.ts, marked `REVIEW`). Set them from the
-      run's precision, recall, and matched count (stderr line
-      `expert
+  8. Run `prereq`, `postproc`, and `finalize`.
+  9. Run `deno task status`. The three LectureBank conditions use placeholder
+     floors (`EXPERT_PRECISION_FLOOR`, `EXPERT_RECALL_FLOOR`,
+     `EXPERT_MIN_POSITIVES` in pipeline.ts, marked `REVIEW`). Set them from the
+     run's precision, recall, and matched count (stderr line
+     `expert
       pairs:`), then delete the `REVIEW` prefix. The first run
-      embeds about 500 topic names with Ollama. Write a todo entry for each
-      condition below 1.0.
-  12. Seed conditions: if `seed_anchor_conflicts` is high, look for unanchored
+     embeds about 500 topic names with Ollama. Write a todo entry for each
+     condition below 1.0.
+  10. Seed conditions: if `seed_anchor_conflicts` is high, look for unanchored
       seed chains longer than 20. Stage `difficulty` drops every pair of such a
       chain, where dropping the fewest would do. If `seed_cycle_pairs` is high,
       check the OpenSALT grade-order pairs across frameworks.
