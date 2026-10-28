@@ -863,6 +863,72 @@ export function stageList() {
     );
   }
 
+  // DigComp 3.0: one skill per LearningOutcome, tagged with area, competence,
+  // and proficiency level. Stage difficulty reads the level tag.
+  // REVIEW: Read LearningOutcome nodes only. Alternative: also read the 362
+  // CompetenceStatement nodes. Each repeats an outcome's sentence, so they
+  // would add no skills and cost a join.
+  {
+    const path = "data/digcomp/digcomp3.jsonld";
+    const j = readJson<{ "@graph": Record<string, unknown>[] }>(path);
+    if (!Array.isArray(j["@graph"])) {
+      throw new Error(
+        `${path}: expected a JSON-LD object with an @graph array, received keys ${
+          Object.keys(j)
+        }. Fetch the file again with data/download.ts.`,
+      );
+    }
+    const str = (n: Record<string, unknown>, k: string): string => {
+      const v = n[k];
+      if (typeof v !== "string" || !v.trim()) {
+        throw new Error(
+          `${path} ${n["@id"]}: expected ${k} as a non-empty string, received ${
+            JSON.stringify(v)
+          }. Fetch the file again with data/download.ts.`,
+        );
+      }
+      return v;
+    };
+    const byType = (t: string) => j["@graph"].filter((n) => n["@type"] === t);
+    const names = (t: string) =>
+      new Map(byType(t).map((n) => [str(n, "@id"), str(n, "name")]));
+    const areas = names("CompetenceArea"), comps = names("Competence");
+    const levels = new Set(
+      byType("ProficiencyLevel").map((n) => str(n, "four_levels_name")),
+    );
+    let nDig = 0;
+    for (const n of byType("LearningOutcome")) {
+      const where = `${path} ${n["@id"]}`;
+      const area = areas.get(str(n, "competence_area_id")),
+        comp = comps.get(str(n, "competence_id"));
+      const level = str(n, "four_levels_proficiency_name").replace(
+        /^ProficiencyLevel\//,
+        "",
+      );
+      if (!area || !comp || !levels.has(level)) {
+        throw new Error(
+          `${where}: expected a known area, competence, and level, received ${
+            JSON.stringify([n.competence_area_id, n.competence_id, level])
+          }. Fetch the file again with data/download.ts.`,
+        );
+      }
+      raw.push({
+        id: "",
+        title: str(n, "description"),
+        description: "",
+        sources: ["digcomp"],
+        tags: [
+          "digcomp:outcome",
+          `digcomp:area:${slugify(area)}`,
+          `digcomp:competence:${slugify(comp)}`,
+          `digcomp:level:${slugify(level)}`,
+        ],
+      });
+      nDig++;
+    }
+    console.log(`  digcomp: ${nDig} outcomes`);
+  }
+
   // Normalize + denoise
   let normalized = 0, denoised = 0;
   for (const s of raw) {
@@ -1070,7 +1136,15 @@ export function stageList() {
     ids.add(s.id);
   }
   const perSource = Object.fromEntries(
-    ["esco", "onet", "lightcast", "opensalt", "foundation", "learningcommons"]
+    [
+      "esco",
+      "onet",
+      "lightcast",
+      "opensalt",
+      "foundation",
+      "learningcommons",
+      "digcomp",
+    ]
       .map((
         src,
       ) => [src, out.filter((s) => s.sources.includes(src)).length]),

@@ -255,6 +255,24 @@ async function learningCommons() {
   );
 }
 
+// DigComp 3.0 Data Supplement, CC BY 4.0, 452 KB. Git tracks it.
+const DIGCOMP_URL =
+  "https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/DIGCOMP/DIGCOMP3.0/DigComp%203.0%20Data%20Supplement%2024%20Nov%202025.jsonld";
+
+async function digcomp() {
+  const dest = DATA + "digcomp/digcomp3.jsonld";
+  if (await exists(dest)) {
+    console.log(`  skip: ${dest} exists`);
+    return;
+  }
+  await mkdir(DATA + "digcomp");
+  console.log(`  GET ${DIGCOMP_URL}`);
+  const r = await fetch(DIGCOMP_URL, { signal: AbortSignal.timeout(60_000) });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}: ${DIGCOMP_URL}`);
+  await Deno.writeTextFile(dest + ".tmp", await r.text());
+  await Deno.rename(dest + ".tmp", dest);
+}
+
 const steps: { label: string; fn: () => Promise<void> }[] = [
   {
     label:
@@ -392,6 +410,7 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
       "learning commons knowledge graph (US state standards, learning components; 986 MB streamed)",
     fn: learningCommons,
   },
+  { label: "digcomp 3.0 outcomes (452 KB)", fn: digcomp },
 ];
 
 console.log(`Downloading ${steps.length} datasets to ${DATA}\n`);

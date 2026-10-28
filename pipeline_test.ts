@@ -61,7 +61,7 @@ Deno.test("list: OpenSALT markup is parsed away and Lightcast quoted tags stay",
 
 Deno.test("list stats: all four sources contribute, and dedupe merged rows", () => {
   const s = JSON.parse(Deno.readTextFileSync("build/1_stats.json"));
-  for (const src of ["esco", "onet", "lightcast", "opensalt"]) {
+  for (const src of ["esco", "onet", "lightcast", "opensalt", "digcomp"]) {
     assertGreater(s.per_source[src], 0, `${src} has 0 rows`);
   }
   assertGreater(s.dedupe_collisions, 0, "no dedupe collisions");
@@ -776,6 +776,35 @@ Deno.test("list: every foundation lands in a skill", () => {
   for (const id of ["addition", "multiplication", "fractions", "loops"]) {
     assert(rows.some((c) => c[0] === id), `no skill has id ${id}`);
   }
+});
+
+Deno.test("list: DigComp outcomes carry the source, area, competence, and level tags", () => {
+  const dc = rows.filter((c) => c[3].includes("digcomp"));
+  // 523 LearningOutcome nodes; dedupe may merge a few.
+  assertGreater(dc.length, 480, "too few DigComp rows");
+  const tagsOf = (c: string[]) => c[4].split(",");
+  for (const c of dc.filter((c) => tagsOf(c).includes("digcomp:outcome"))) {
+    const t = tagsOf(c);
+    assert(t.some((x) => x.startsWith("digcomp:area:")), `${c[0]}: no area`);
+    assert(
+      t.some((x) => x.startsWith("digcomp:competence:")),
+      `${c[0]}: no competence`,
+    );
+    assert(
+      t.some((x) =>
+        /^digcomp:level:(basic|intermediate|advanced|highly-advanced)$/.test(x)
+      ),
+      `${c[0]}: no level`,
+    );
+  }
+  assert(
+    dc.some((c) =>
+      c[1].startsWith(
+        "Acknowledge the benefits of using different digital search tools",
+      )
+    ),
+    "LO1.1.01 missing",
+  );
 });
 
 // Learning Commons: 5 nodes and 3 edges. The ids are node uuids in the export.

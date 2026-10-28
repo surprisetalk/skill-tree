@@ -1277,6 +1277,21 @@ export function stageDifficulty() {
     }
   }
 
+  // REVIEW: The 4 named DigComp levels take the job-zone anchor scale
+  // (11.5 + 1.5 * zone, zones 1 to 4), because both rate adult skill. Alternative:
+  // a separate scale. It needs a fourth anchor source and a calibration of its own.
+  let digcompAnchored = 0;
+  for (let i = 0; i < skills.length; i++) {
+    const m = skills[i].tags.match(
+      /(?:^|,)digcomp:level:(basic|intermediate|advanced|highly-advanced)(?:,|$)/,
+    );
+    if (!m || !Number.isNaN(anchor[i])) continue;
+    const zone = ["basic", "intermediate", "advanced", "highly-advanced"]
+      .indexOf(m[1]) + 1;
+    anchor[i] = 11.5 + 1.5 * zone;
+    digcompAnchored++;
+  }
+
   let zoneAnchored = 0;
   {
     const zoneRows = readTsv("data/onet/Job Zones.txt");
@@ -1376,7 +1391,7 @@ export function stageDifficulty() {
     if (!Number.isNaN(anchor[i])) anchorIdxs.push(i);
   }
   console.log(
-    `[difficulty] anchors: grade=${gradeAnchored}, khan=${khanAnchored}, zone=${zoneAnchored}, total=${anchorIdxs.length}`,
+    `[difficulty] anchors: grade=${gradeAnchored}, khan=${khanAnchored}, digcomp=${digcompAnchored}, zone=${zoneAnchored}, total=${anchorIdxs.length}`,
   );
   // With no anchors of one kind, kNN still runs and every band skews.
   if (!gradeAnchored || !khanAnchored || !zoneAnchored) {
@@ -1708,6 +1723,7 @@ export function stageDifficulty() {
       grade: gradeAnchored,
       khan: khanAnchored,
       zone: zoneAnchored,
+      digcomp: digcompAnchored,
       total: anchorIdxs.length,
     },
     within_topic: withinTopic,

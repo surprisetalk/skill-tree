@@ -170,6 +170,14 @@ counting (K) through calculus (AP). Source:
 - `Display Name` — human-readable exercise title
 - `root` in Prereq(s) means no prerequisites
 
+### data/digcomp/ — DigComp 3.0 Data Supplement (JSON-LD)
+
+EU digital competence framework for adults, CC BY 4.0. **digcomp3.jsonld** holds
+`@graph` nodes of `@type` CompetenceArea (5), Competence (21), ProficiencyLevel,
+CompetenceStatement, LearningOutcome, and Glossary. A LearningOutcome has
+`description`, `type`, `competence_area_id`, `competence_id`, and
+`four_levels_proficiency_name` (Basic, Intermediate, Advanced, Highly advanced).
+
 ### data/learningcommons/ — Learning Commons Knowledge Graph (gzipped JSON lines)
 
 US state standards and learning components, v1.16.0, CC BY 4.0 on every row.
@@ -237,14 +245,16 @@ A new build table gets a schema; a new id goes through `slugify`.
 **Parsers**:
 
 - Stage `list`: ESCO, O\*NET (Skills/Knowledge/Abilities/Tasks/DWAs/Tech),
-  Lightcast, OpenSALT, Learning Commons, and the hubs in
-  `data/_foundations.json`. OpenSALT statements parse as HTML with `deno-dom`; a
-  `script`, `style`, or head element in one stops the stage. Learning Commons
-  statements parse the same way and pass the same scaffolding filters
-  (`cleanStandard`). A component is one skill with tags
-  `learningcommons:component` and `grade:*`. A standard is one skill per
-  distinct statement, tags `learningcommons:standard`, `grade:*`, and
-  `code:<statementCode>`. A `buildsTowards` endpoint also gets
+  Lightcast, OpenSALT, Learning Commons, DigComp, and the hubs in
+  `data/_foundations.json`. Each DigComp LearningOutcome is one skill with tags
+  `digcomp:outcome`, `digcomp:area:*`, `digcomp:competence:*`, and
+  `digcomp:level:*`; stage `difficulty` anchors the level at job zone 1-4.
+  OpenSALT statements parse as HTML with `deno-dom`; a `script`, `style`, or
+  head element in one stops the stage. Learning Commons statements parse the
+  same way and pass the same scaffolding filters (`cleanStandard`). A component
+  is one skill with tags `learningcommons:component` and `grade:*`. A standard
+  is one skill per distinct statement, tags `learningcommons:standard`,
+  `grade:*`, and `code:<statementCode>`. A `buildsTowards` endpoint also gets
   `learningcommons:coherence` and skips the long-title drop. Other sources keep
   `<…>` as text.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, OpenSALT
@@ -307,10 +317,11 @@ Columns:
 - `display_title` — title truncated to ≤80 chars (or `code:XXX` tag for OpenSALT
   codes); for UIs that can't render long compliance statements.
 - `difficulty` — integer band 1-20 derived from grade anchors (OpenSALT
-  `educationLevel` + Khan V-Position) and O\*NET job zones via kNN smoothing and
-  isotonic PAV calibration. One pass then puts each expert seed prereq at least
-  one band below its dependent. An anchored skill never moves; a seed pair that
-  cannot fit, or sits in a cycle, is dropped and counted in `4_stats.json`.
+  `educationLevel` + Khan V-Position) DigComp levels, and O\*NET job zones via
+  kNN smoothing and isotonic PAV calibration. One pass then puts each expert
+  seed prereq at least one band below its dependent. An anchored skill never
+  moves; a seed pair that cannot fit, or sits in a cycle, is dropped and counted
+  in `4_stats.json`.
 - `prereqs` — comma-separated prereq IDs. Strict DAG, no self-loops, all IDs
   resolve within the file.
 - `occupations` / `topics` — comma-separated slugs from embedding match +

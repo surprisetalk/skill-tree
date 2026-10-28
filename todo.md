@@ -25,16 +25,6 @@
   3. Keep only `timing = before`. Treat each OR group (`is_alternative`) as its
      own pair, because each alternative alone meets the requirement.
 
-- [ ] Adult digital skills from DigComp 3.0 appear in `skills.tsv` with
-      difficulty anchors.
-  1. Fetch `DigComp 3.0 Data Supplement 24 Nov 2025.jsonld` (CC BY 4.0) into
-     `data/digcomp/` and commit it.
-  2. Stage `list`: each `LearningOutcome` node becomes a skill, tagged with its
-     competence and area.
-  3. Map the 4 named levels onto the job-zone anchor scale of stage
-     `difficulty`: Basic = 1, Intermediate = 2, Advanced = 3, Highly advanced
-     = 4. Write the mapping with a `REVIEW:` comment.
-
 - [ ] Certification exam objectives appear in `skills.tsv`, tagged with the
       occupations they certify. Source: Cert Atlas.
   1. Read the terms of CompTIA, AWS, and Microsoft for reuse of exam objective
