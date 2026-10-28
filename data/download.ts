@@ -43,6 +43,18 @@ async function mkdir(path: string) {
   await Deno.mkdir(path, { recursive: true });
 }
 
+// Writes through a temp file, so a crash leaves no half-written gzip.
+async function writeGzip(dest: string, data: BlobPart): Promise<number> {
+  const gz = new Uint8Array(
+    await new Response(
+      new Blob([data]).stream().pipeThrough(new CompressionStream("gzip")),
+    ).arrayBuffer(),
+  );
+  await Deno.writeFile(dest + ".tmp", gz);
+  await Deno.rename(dest + ".tmp", dest);
+  return gz.byteLength;
+}
+
 // Learning Commons knowledge graph, CC BY 4.0. The raw export is 986 MB, so the
 // step streams it and keeps a filtered, gzipped extract that git tracks.
 // REVIEW: Track an extract of only the rows stage list reads. Alternative: keep
@@ -243,17 +255,11 @@ async function learningCommons() {
   lines.unshift(
     JSON.stringify({ k: "attributions", statements: attributions }),
   );
-  const gz = await new Response(
-    new Blob([lines.join("\n") + "\n"]).stream().pipeThrough(
-      new CompressionStream("gzip"),
-    ),
-  ).arrayBuffer();
   await mkdir(DATA + "learningcommons");
-  await Deno.writeFile(LC_EXTRACT + ".tmp", new Uint8Array(gz));
-  await Deno.rename(LC_EXTRACT + ".tmp", LC_EXTRACT);
+  const gzBytes = await writeGzip(LC_EXTRACT, lines.join("\n") + "\n");
   console.log(
     `  extract: ${kept.size} items, ${components.size} components, ${nEdges} edges, ${
-      (gz.byteLength / 1e6).toFixed(1)
+      (gzBytes / 1e6).toFixed(1)
     } MB gzipped`,
   );
 }
@@ -489,11 +495,7 @@ async function courses() {
         `${url}: expected SHA-256 ${f.sha256}, received ${hex}. The authors may have published a new version: check data.mendeley.com/datasets/fs2hvkps7z, then update COURSES_FILES.`,
       );
     }
-    const gz = await new Response(
-      new Blob([raw]).stream().pipeThrough(new CompressionStream("gzip")),
-    ).arrayBuffer();
-    await Deno.writeFile(dest + ".tmp", new Uint8Array(gz));
-    await Deno.rename(dest + ".tmp", dest);
+    await writeGzip(dest, raw);
   }
 }
 
@@ -602,13 +604,7 @@ async function certAtlas() {
       }
     }),
   );
-  const gz = await new Response(
-    new Blob([JSON.stringify(exams)]).stream().pipeThrough(
-      new CompressionStream("gzip"),
-    ),
-  ).arrayBuffer();
-  await Deno.writeFile(dest + ".tmp", new Uint8Array(gz));
-  await Deno.rename(dest + ".tmp", dest);
+  await writeGzip(dest, JSON.stringify(exams));
   console.log(`  ${exams.length} exams written to ${dest}`);
 }
 

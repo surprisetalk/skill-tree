@@ -1194,8 +1194,7 @@ export const LC_EXTRACT = "data/learningcommons/graph.jsonl.gz";
 
 // The extract is the output of data/download.ts, one JSON object per line.
 export function readLearningCommons(): LearningCommons {
-  const fix =
-    "Re-download it: rm data/learningcommons/graph.jsonl.gz; deno run -A data/download.ts";
+  const fix = `Re-download it: rm ${LC_EXTRACT}; deno run -A data/download.ts`;
   const out = new Deno.Command("gzip", {
     args: ["-dc", LC_EXTRACT],
     stdout: "piped",
