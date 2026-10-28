@@ -139,8 +139,22 @@ async function learningCommons() {
   for await (const o of jsonLines(`${LC_URL}/nodes.jsonl`)) {
     const id = lcStr(o, "identifier", "nodes.jsonl");
     const where = `nodes.jsonl ${id}`;
+    const labels = o.labels;
+    if (
+      !Array.isArray(labels) || typeof labels[0] !== "string" ||
+      typeof o.properties !== "object" || o.properties === null ||
+      Array.isArray(o.properties)
+    ) {
+      throw new Error(
+        `${where}: expected labels as an array of text and properties as an object, received labels ${
+          JSON.stringify(labels)
+        } and properties ${
+          JSON.stringify(o.properties)?.slice(0, 80)
+        }. The export schema changed: check LC_VERSION.`,
+      );
+    }
     const props = o.properties as Json;
-    const label = (o.labels as string[])[0];
+    const label = labels[0];
     if (label === "StandardsFramework") {
       const cur = lcStr(props, "isCurrent", where);
       if (cur !== "true" && cur !== "false") {
@@ -566,7 +580,16 @@ async function certAtlas() {
     }
     return v.trim();
   };
-  const arr = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
+  const arr = (v: unknown, where: string): unknown[] => {
+    if (!Array.isArray(v)) {
+      throw new Error(
+        `${where}: expected an array, received ${
+          JSON.stringify(v)?.slice(0, 80)
+        }. The Cert Atlas schema changed: update certAtlas() in data/download.ts.`,
+      );
+    }
+    return v;
+  };
   const exams: unknown[] = new Array(wanted.length);
   let next = 0;
   await Promise.all(
@@ -581,23 +604,30 @@ async function certAtlas() {
           id: str(e.exam_id, url),
           name: str(e.exam_name, url),
           body: str(e.certifying_body, url),
-          domains: arr(e.domains).map((d, j) => {
+          domains: arr(e.domains, `${url} domains`).map((d, j) => {
             const dom = d as Record<string, unknown>;
             return {
               name: str(dom.name, `${url} domains[${j}].name`),
               // An objective is an object, or a bare title string.
-              objectives: arr(dom.objectives).map((o, k) => {
-                const w = `${url} domains[${j}].objectives[${k}]`;
-                if (typeof o === "string") return { title: str(o, w), sub: [] };
-                const ob = o as Record<string, unknown>;
-                return {
-                  title: str(ob.title, w),
-                  // A sub-objective is a string, or an object with a title.
-                  sub: arr(ob.sub_objectives).map((x) =>
-                    str(typeof x === "object" && x ? (x as Json).title : x, w)
-                  ),
-                };
-              }),
+              // The source omits the key for a domain with no objectives.
+              objectives: ("objectives" in dom
+                ? arr(dom.objectives, `${url} domains[${j}].objectives`)
+                : []).map((o, k) => {
+                  const w = `${url} domains[${j}].objectives[${k}]`;
+                  if (typeof o === "string") {
+                    return { title: str(o, w), sub: [] };
+                  }
+                  const ob = o as Record<string, unknown>;
+                  return {
+                    title: str(ob.title, w),
+                    // A sub-objective is a string, or an object with a title.
+                    sub: arr(ob.sub_objectives, `${w} sub_objectives`).map((
+                      x,
+                    ) =>
+                      str(typeof x === "object" && x ? (x as Json).title : x, w)
+                    ),
+                  };
+                }),
             };
           }),
         };
@@ -610,6 +640,7 @@ async function certAtlas() {
 
 console.log(`Downloading ${steps.length} datasets to ${DATA}\n`);
 
+const failed: string[] = [];
 for (const [i, step] of steps.entries()) {
   console.log(`\n[${i + 1}/${steps.length}] ${step.label}`);
   try {
@@ -617,5 +648,14 @@ for (const [i, step] of steps.entries()) {
     console.log("  done");
   } catch (e) {
     console.error(`  ERROR: ${e instanceof Error ? e.message : e}`);
+    failed.push(step.label);
   }
+}
+if (failed.length) {
+  console.error(
+    `\n${failed.length} of ${steps.length} steps failed: ${
+      failed.join("; ")
+    }. Read the ERROR lines above, then run the downloader again; finished steps skip.`,
+  );
+  Deno.exit(1);
 }

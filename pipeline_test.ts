@@ -870,8 +870,20 @@ Deno.test("list: Cert Atlas objectives carry the source and the exam; dropped ve
     ca.some((c) => c[1].toLowerCase() === "security controls"),
     "CompTIA Security+ objective 1.1 missing",
   );
-  const dropped = ca.filter((c) => /\((Microsoft|AWS)\)/.test(c[2]));
-  assertEquals(dropped.map((c) => c[0]).slice(0, 3), [], "dropped vendor row");
+  // The downloader filters on vendor_slug; the file keeps only certifying_body
+  // as `body`. "AWS - American Welding Society" is a kept exam, not Amazon.
+  const exams = JSON.parse(
+    new TextDecoder().decode(
+      new Deno.Command("gzip", {
+        args: ["-dc", "data/certatlas/exams.json.gz"],
+        stdout: "piped",
+      }).outputSync().stdout,
+    ),
+  ) as { body: string }[];
+  const dropped = exams.filter((e) =>
+    /^(microsoft|aws|amazon web services)$/i.test(e.body)
+  );
+  assertEquals(dropped.length, 0, "an exam of a dropped vendor");
 });
 
 // Learning Commons: 5 nodes and 3 edges. The ids are node uuids in the export.
@@ -1079,6 +1091,43 @@ Deno.test("readCoursePairs: an unknown timing or alternative flag throws with th
   }
 });
 
+Deno.test("readCoursePairs: an empty duplicate title is no title, and a missing file names the downloader", async () => {
+  const courses = COURSE_HEAD + [
+    "d1,A100,Algebra,",
+    "d1,A100,,",
+    "d1,B200,Calculus,",
+    "d1,B200,Analysis,",
+  ].join("\n") + "\n";
+  const edges = EDGE_HEAD + edgeRow("d1", "A100", "B200", 0, 0, "before");
+  const r = await inCourseDir(courses, edges, async (m) => {
+    const ok = await m.readCoursePairs();
+    Deno.removeSync("data/courses/courses.csv.gz");
+    let err = "";
+    try {
+      await m.readCoursePairs();
+    } catch (e) {
+      err = (e as Error).message;
+    }
+    return { ok, err };
+  });
+  assertEquals(r.ok.pairs, []);
+  assertEquals(r.ok.dropped.map((d) => d.reason), ["ambiguous-code"]);
+  assert(
+    r.err.includes(
+      "data/courses/courses.csv.gz: missing. Run: deno run -A data/download.ts",
+    ),
+    r.err,
+  );
+});
+
+Deno.test("readCoursePairs: one distinct title beside an empty one joins", async () => {
+  const courses = COURSE_HEAD +
+    "d1,A100,Algebra,\nd1,A100,,\nd1,B200,Calculus,\n";
+  const edges = EDGE_HEAD + edgeRow("d1", "A100", "B200", 0, 0, "before");
+  const r = await inCourseDir(courses, edges, (m) => m.readCoursePairs());
+  assertEquals(r.pairs.map((p) => [p.src, p.dst]), [["Algebra", "Calculus"]]);
+});
+
 Deno.test("readCoursePairs: a truncated gzip names the file to delete, because the downloader skips an existing file", async () => {
   const err = await inCourseDir(
     COURSE_HEAD + "d1,A,Algebra,\n",
@@ -1182,6 +1231,7 @@ const difficultyBuild = (): Fixture => {
     ["a", "A", ""],
     ["b", "B", ""],
     ["c", "C", ""],
+    ["dig", "Dig", "digcomp:level:advanced"],
   ];
   const emb = new Float32Array(skills.length * 768);
   skills.forEach((_, i) => emb[i * 768 + i] = 1);
@@ -1250,6 +1300,10 @@ Deno.test(
         band.get("dep")
       }`,
     );
+    // A digcomp level anchors at the job-zone scale: advanced is zone 3,
+    // 11.5 + 1.5 * 3.
+    assertEquals(JSON.parse(files["build/4_stats.json"]).anchors.digcomp, 1);
+    assertEquals(difficultyCol(files, 2).get("dig"), 16);
   }),
 );
 
@@ -1405,6 +1459,110 @@ const listOpensalt = async (items: Record<string, string>[]) => {
   return { code: out.code, stdout, stderr, titles, ids };
 };
 
+// Stage list over a temp data dir whose `name` folder holds only `files`.
+const listWithData = async (
+  name: string,
+  files: Record<string, Uint8Array>,
+) => {
+  const dir = Deno.makeTempDirSync();
+  Deno.mkdirSync(`${dir}/data/${name}`, { recursive: true });
+  for (const d of Deno.readDirSync("data")) {
+    if (d.name !== name) {
+      Deno.symlinkSync(`${Deno.cwd()}/data/${d.name}`, `${dir}/data/${d.name}`);
+    }
+  }
+  for (const [f, bytes] of Object.entries(files)) {
+    Deno.writeFileSync(`${dir}/data/${name}/${f}`, bytes);
+  }
+  const out = await run(["list"], dir, LIST_BOUND_MS);
+  Deno.removeSync(dir, { recursive: true });
+  return {
+    code: out.code,
+    stderr: new TextDecoder().decode(out.stderr),
+  };
+};
+
+const exam = (over: Record<string, unknown> = {}, objective: unknown = {
+  title: "Security controls",
+  sub: [],
+}) => ({
+  id: "x1",
+  name: "X1",
+  body: "Body",
+  domains: [{ name: "D", objectives: [objective] }],
+  ...over,
+});
+
+Deno.test(
+  "list: a bad Cert Atlas file stops the stage and names the exam",
+  early(async () => {
+    const cases: [string, Uint8Array | Promise<Uint8Array>, string[]][] = [
+      ["not json", gz("{"), ["certatlas/exams.json.gz", "expected JSON"]],
+      [
+        "domains not an array",
+        gz(JSON.stringify([exam({ domains: "none" })])),
+        ["exam x1 domains", "expected an array", '"none"'],
+      ],
+      [
+        "objective title not a string",
+        gz(JSON.stringify([exam({}, { title: 7, sub: [] })])),
+        ["exam x1 domains[0] objectives[0] title", "non-empty string"],
+      ],
+      [
+        "sub not strings",
+        gz(JSON.stringify([exam({}, { title: "T one", sub: [3] })])),
+        ["objectives[0] sub[0]", "non-empty string"],
+      ],
+      [
+        "question prefix only",
+        gz(JSON.stringify([exam({}, { title: "What is ?", sub: [] })])),
+        ["X1 / D", "words after the question prefix", '"What is ?"'],
+      ],
+    ];
+    await Promise.all(cases.map(async ([name, bytes, wants]) => {
+      const r = await listWithData("certatlas", {
+        "exams.json.gz": await bytes,
+      });
+      assert(r.code !== 0, `${name}: exit 0`);
+      for (const w of wants) {
+        assert(r.stderr.includes(w), `${name}: no "${w}" in ${r.stderr}`);
+      }
+      assert(!r.stderr.includes("TypeError"), `${name}: ${r.stderr}`);
+    }));
+  }),
+);
+
+Deno.test(
+  "list: a null Learning Commons line or a comma in a tag stops the stage with the file and line",
+  early(async () => {
+    const [nul, comma] = await Promise.all([
+      listWithData("learningcommons", {
+        "graph.jsonl.gz": await gz(
+          '{"k":"attributions","statements":["x"]}\nnull\n',
+        ),
+      }),
+      listWithData("learningcommons", {
+        "graph.jsonl.gz": await lcExtract([
+          lcItem("n1", "Add fractions with like denominators", "3.NF.A,1"),
+        ]),
+      }),
+    ]);
+    assert(nul.code !== 0, "null line: exit 0");
+    assert(
+      nul.stderr.includes("graph.jsonl.gz:2: expected a JSON object") &&
+        !nul.stderr.includes("Cannot read properties"),
+      nul.stderr,
+    );
+    assert(comma.code !== 0, "comma tag: exit 0");
+    assert(
+      comma.stderr.includes(
+        'expected tags without a comma, received "code:3.NF.A,1"',
+      ),
+      comma.stderr,
+    );
+  }),
+);
+
 // Straße and Strasse differ as titles but fold to one 80-char slug.
 const LONG =
   "Explain careful classroom experiments compare observed predicted results";
@@ -1518,8 +1676,8 @@ Deno.test(
     // Shared embeddings make kNN smoothing pull grade-low and grade-high together.
     const same = (pairs: string[][]) => {
       const build = withSeeds(pairs);
-      const emb = new Float32Array(768 * 11);
-      for (let i = 0; i < 11; i++) emb[i * 768 + (i === 1 ? 0 : i)] = 1;
+      const emb = new Float32Array(768 * 12);
+      for (let i = 0; i < 12; i++) emb[i * 768 + (i === 1 ? 0 : i)] = 1;
       build["build/2_embeddings.bin"] = new Uint8Array(emb.buffer);
       return build;
     };

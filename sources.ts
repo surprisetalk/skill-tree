@@ -950,28 +950,61 @@ export function stageList() {
         }. ${fix}`,
       );
     }
-    const exams = JSON.parse(new TextDecoder().decode(out.stdout)) as {
-      name: string;
-      body: string;
-      domains: {
-        name: string;
-        objectives: { title: string; sub: string[] }[];
-      }[];
-    }[];
-    if (!Array.isArray(exams) || !exams.length) {
+    const bad = (where: string, expected: string, got: unknown): never => {
       throw new Error(
-        `${path}: expected a non-empty array of exams, received ${typeof exams}. ${fix}`,
+        `${path} ${where}: expected ${expected}, received ${
+          JSON.stringify(got)?.slice(0, 80)
+        }. ${fix}`,
       );
+    };
+    const field = (o: unknown, k: string, where: string): unknown => {
+      if (typeof o !== "object" || o === null || Array.isArray(o)) {
+        bad(where, "an object", o);
+      }
+      return (o as Record<string, unknown>)[k];
+    };
+    const text = (v: unknown, where: string): string =>
+      typeof v === "string" && v ? v : bad(where, "a non-empty string", v);
+    const list = (v: unknown, where: string): unknown[] =>
+      Array.isArray(v) ? v : bad(where, "an array", v);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(out.stdout));
+    } catch (e) {
+      bad("", "JSON", (e as Error).message);
     }
+    if (!Array.isArray(parsed) || !parsed.length) {
+      bad("", "a non-empty array of exams", parsed);
+    }
+    const exams = (parsed as unknown[]).map((e, i) => {
+      const w = `exam ${i}`;
+      const id = text(field(e, "id", w), `${w} id`);
+      const x = `exam ${id}`;
+      return {
+        name: text(field(e, "name", x), `${x} name`),
+        body: text(field(e, "body", x), `${x} body`),
+        domains: list(field(e, "domains", x), `${x} domains`).map((d, j) => {
+          const dw = `${x} domains[${j}]`;
+          return {
+            name: text(field(d, "name", dw), `${dw} name`),
+            objectives: list(field(d, "objectives", dw), `${dw} objectives`)
+              .map((o, k) => {
+                const ow = `${dw} objectives[${k}]`;
+                return {
+                  title: text(field(o, "title", ow), `${ow} title`),
+                  sub: list(field(o, "sub", ow), `${ow} sub`).map((t, m) =>
+                    text(t, `${ow} sub[${m}]`)
+                  ),
+                };
+              }),
+          };
+        }),
+      };
+    });
     let nCert = 0, nNonLatin = 0;
     for (const e of exams) {
       for (const d of e.domains) {
         for (const o of d.objectives) {
-          if (!o.title) {
-            throw new Error(
-              `${path} ${e.name} / ${d.name}: expected an objective title, received "". ${fix}`,
-            );
-          }
           // The stage drops titles with no Latin letter (empty key). One
           // Oracle exam ships a Japanese copy, so count them here, in the log.
           if (!/[a-z]/i.test(o.title)) {
@@ -984,6 +1017,13 @@ export function stageList() {
             /^(Can|Could|Should|How to|What is|Why does)\s+/i,
             "",
           ).replace(/\?$/, "");
+          if (!title) {
+            throw new Error(
+              `${path} ${e.name} / ${d.name}: expected an objective title with words after the question prefix, received ${
+                JSON.stringify(o.title)
+              }. Fix the title in the source, or drop the prefix from the strip in stageList.`,
+            );
+          }
           title = title[0].toUpperCase() + title.slice(1);
           raw.push({
             id: "",
@@ -1237,6 +1277,19 @@ export function stageList() {
     );
   }
   writeTable(LC_IDS, lcRows);
+  // The tags column joins tags with commas: a comma would split a tag.
+  for (const s of out) {
+    const t = s.tags.find((t) => t.includes(","));
+    if (t !== undefined) {
+      throw new Error(
+        `list: expected tags without a comma, received ${
+          JSON.stringify(t)
+        } on skill "${s.id}" (sources ${
+          s.sources.join(",")
+        }). Strip the comma where stageList builds the tag.`,
+      );
+    }
+  }
   const clean = (c: string) =>
     c
       // deno-lint-ignore no-control-regex -- strips C0 controls (tab, newline included) from source text

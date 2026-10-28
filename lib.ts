@@ -702,7 +702,11 @@ export async function readCoursePairs(): Promise<{
         parseCsvText(await new Response(stream).text(), { fieldsPerRecord: 0 }),
       );
     } catch (e) {
-      if (e instanceof Deno.errors.NotFound) throw e;
+      if (e instanceof Deno.errors.NotFound) {
+        throw new Deno.errors.NotFound(
+          `${path}: missing. Run: deno run -A data/download.ts`,
+        );
+      }
       throw new Error(
         `${path}: expected a gzip file of RFC 4180 CSV with a constant field count, received ${
           (e as Error).message
@@ -716,12 +720,16 @@ export async function readCoursePairs(): Promise<{
     iCode = col(courses, "code", "data/courses/courses.csv.gz"),
     iTitle = col(courses, "title", "data/courses/courses.csv.gz");
   // A code printed twice with different titles is a parse artifact in the
-  // source: the pair has no sure title.
+  // source: the pair has no sure title. An empty title is no title.
+  // REVIEW: A prereq code missing from `code` but present as `canonical_code`
+  // stays no-course. Alternative: index canonical_code too. It may join a
+  // different course, because the dataset does not say canonical_code is an alias.
   const titles = new Map<string, Set<string>>();
   for (const c of courses.slice(1)) {
     const k = `${c[iDs]}\t${c[iCode]}`;
     if (!titles.has(k)) titles.set(k, new Set());
-    titles.get(k)!.add(clean(c[iTitle]));
+    const t = clean(c[iTitle]);
+    if (t) titles.get(k)!.add(t);
   }
   const edgesPath = "data/courses/prereq_edges.csv.gz";
   const edges = await read("prereq_edges");
@@ -1218,16 +1226,20 @@ export function readLearningCommons(): LearningCommons {
   }
   lines.forEach((line, i) => {
     const where = `${LC_EXTRACT}:${i + 1}`;
-    let o: Record<string, unknown>;
+    let parsed: unknown;
     try {
-      o = JSON.parse(line);
-    } catch {
+      parsed = JSON.parse(line);
+    } catch { /* the check below reports it */ }
+    if (
+      typeof parsed !== "object" || parsed === null || Array.isArray(parsed)
+    ) {
       throw new Error(
         `${where}: expected a JSON object, received ${
           line.slice(0, 80)
         }. ${fix}`,
       );
     }
+    const o = parsed as Record<string, unknown>;
     const str = (k: string, nonEmpty = true): string => {
       const v = o[k];
       if (typeof v !== "string" || (nonEmpty && !v)) {
