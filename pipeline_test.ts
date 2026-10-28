@@ -493,6 +493,25 @@ Deno.test("postproc: keeps direct prereqs only, with every closure unchanged", a
   );
 });
 
+// Two picks that one alias folds into one edge are one edge, not a redundant pair.
+const reduceDupP = early(() =>
+  runIn("postproc", {
+    ...finalBuild(),
+    "build/3b_aliases.tsv": "dropped_id\tcanonical_id\nplus\taddition\n",
+    "build/5_prereqs.tsv":
+      "addition\tcounting\nmultiplication\taddition,plus\n",
+    "build/1e_seed_edges.tsv": seedHeader,
+  }, ["build/6_edges.tsv"])
+);
+Deno.test("postproc: an edge that an alias repeats survives once", async () => {
+  const out = await reduceDupP();
+  assertEquals(out.code, 0, out.stderr);
+  assertEquals(
+    out.files["build/6_edges.tsv"],
+    "skill_id\tprereq_id\naddition\tcounting\nmultiplication\taddition\n",
+  );
+});
+
 // Each of these wrote a skills.tsv that breaks its own invariants, exit 0.
 Deno.test(
   "finalize: writes a DAG of unique skills, or stops",

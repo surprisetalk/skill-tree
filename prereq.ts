@@ -984,6 +984,8 @@ export function stagePostproc() {
   // reaches. Memory is O(nodes + edges). Alternative: one reachability bitset
   // per node. It is faster, but it costs nodes^2 / 8 bytes, 1.25 GB at 10^5.
   {
+    // An alias can fold two picks into one edge. A repeat would mark itself redundant.
+    final = [...new Map(final.map((e) => [`${e[0]}\t${e[1]}`, e])).values()];
     const ids = [...new Set(final.flat())];
     const idx = new Map(ids.map((id, i) => [id, i]));
     const pres: number[][] = ids.map(() => []);
