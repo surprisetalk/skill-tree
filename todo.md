@@ -1,21 +1,5 @@
 ## Next
 
-- [ ] Certification prerequisites order the Cert Atlas objectives in
-      `skills.tsv`.
-  1. `certAtlas()` in `data/download.ts` keeps `prerequisites` and
-     `certification_name` per exam. Delete `data/certatlas/exams.json.gz` and
-     run the downloader again.
-  2. Resolve each `required_certification` description to one exam. Matching a
-     known exam name inside the free text gives 67 of 119 right, 8 ambiguous
-     ("CCT or UFT"), 44 none. It is wrong for "FE exam" (picks one of 20 NCEES
-     disciplines) and "ACA Professional Level papers" (picks an unrelated exam).
-     Require the same certifying body, and send a name that matches many exams
-     to `1e_unresolved.tsv`.
-  3. Stage `seed-edges`: each objective of the required exam is a prereq of each
-     objective of the dependent exam. That is up to 20 x 20 pairs per edge, and
-     a title that two exams share (Security Controls) can close a cycle. Decide
-     first whether to emit exam-to-exam pairs at the domain level instead.
-
 ## Blocked on you
 
 - [ ] You get a fresh `skills.tsv` that includes the fixes from audit passes

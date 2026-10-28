@@ -64,22 +64,23 @@ provenance keep their rows out of a build.
 
 ## Rejected
 
-| Source                                                                    | Reason                                                                                                                                           |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ESCO-PrereqSkill                                                          | Inverse `isEssentialSkillFor` from ESCO, which skill-tree already ingests. Its edges are skill → knowledge topic, not learning order. No licence |
-| SkillDAG (HF)                                                             | LLM-agent tool skills, with LLM-written edges                                                                                                    |
-| MathlibGraph, Metamath, Stacks Project                                    | Formal proof dependencies, not learning order                                                                                                    |
-| Wikidata P4967 "prerequisite"                                             | 466 statements, mostly noise ("posthumous edition" → "death")                                                                                    |
-| O\*NET CTDL-ASN frameworks                                                | Same content as O\*NET, which skill-tree already ingests. Hierarchy only                                                                         |
-| NICE Framework v2.2                                                       | Role → knowledge membership, no order. No licence statement                                                                                      |
-| SFIA 9                                                                    | Licence forbids product use without a paid licence                                                                                               |
-| XES3G5M                                                                   | A KC tree with no prereq edges. Chinese. Data licence unread (Google Drive)                                                                      |
-| OpenStax                                                                  | Table of contents only. The calculus bundle is CC BY-NC-SA                                                                                       |
-| Khan Academy API                                                          | `/api/v1/topictree` returns 410                                                                                                                  |
-| LinkedIn, Coursera, Workday, ALEKS, IXL, Math Academy graphs              | Closed. Their designs are public, their data is not                                                                                              |
-| Kuperman AoA                                                              | The primary download is dead. The only copy is a 2,614-word CC BY-NC subset                                                                      |
-| CEFR descriptors, Jump$tart, Lexile, EFCamDat, English Vocabulary Profile | Non-commercial, permission-only, or proprietary                                                                                                  |
-| training.gov.au                                                           | The SOAP service needs an account. The data licence is unread                                                                                    |
+| Source                                                                    | Reason                                                                                                                                                                  |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ESCO-PrereqSkill                                                          | Inverse `isEssentialSkillFor` from ESCO, which skill-tree already ingests. Its edges are skill → knowledge topic, not learning order. No licence                        |
+| SkillDAG (HF)                                                             | LLM-agent tool skills, with LLM-written edges                                                                                                                           |
+| MathlibGraph, Metamath, Stacks Project                                    | Formal proof dependencies, not learning order                                                                                                                           |
+| Wikidata P4967 "prerequisite"                                             | 466 statements, mostly noise ("posthumous edition" → "death")                                                                                                           |
+| O\*NET CTDL-ASN frameworks                                                | Same content as O\*NET, which skill-tree already ingests. Hierarchy only                                                                                                |
+| NICE Framework v2.2                                                       | Role → knowledge membership, no order. No licence statement                                                                                                             |
+| SFIA 9                                                                    | Licence forbids product use without a paid licence                                                                                                                      |
+| XES3G5M                                                                   | A KC tree with no prereq edges. Chinese. Data licence unread (Google Drive)                                                                                             |
+| OpenStax                                                                  | Table of contents only. The calculus bundle is CC BY-NC-SA                                                                                                              |
+| Khan Academy API                                                          | `/api/v1/topictree` returns 410                                                                                                                                         |
+| LinkedIn, Coursera, Workday, ALEKS, IXL, Math Academy graphs              | Closed. Their designs are public, their data is not                                                                                                                     |
+| Kuperman AoA                                                              | The primary download is dead. The only copy is a 2,614-word CC BY-NC subset                                                                                             |
+| CEFR descriptors, Jump$tart, Lexile, EFCamDat, English Vocabulary Profile | Non-commercial, permission-only, or proprietary                                                                                                                         |
+| training.gov.au                                                           | The SOAP service needs an account. The data licence is unread                                                                                                           |
+| Cert Atlas `required_certification` edges                                 | Only 67 of 119 free-text names resolve to one exam. An exam-to-exam edge says nothing about which objective needs which, so it seeds noise. The objectives still ingest |
 
 ## Design lessons
 
