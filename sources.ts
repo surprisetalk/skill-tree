@@ -930,6 +930,83 @@ export function stageList() {
     console.log(`  digcomp: ${nDig} outcomes`);
   }
 
+  // Cert Atlas: one skill per exam objective. The description names the exam,
+  // its certifying body, and the domain, so stage tag can match occupations.
+  // REVIEW: No tags. Stage tag matches occupations by embedding, as for every
+  // other source. Alternative: a certatlas:exam:<id> tag per objective. It
+  // keeps the exam, but a title that fifty exams repeat (Overview) would hit the
+  // tag cap, and nothing reads the tag.
+  // REVIEW: A domain with no objectives yields no skill. Alternative: make the
+  // domain a skill. Its names are exam sections (Reading, Writing), not skills.
+  {
+    const path = "data/certatlas/exams.json.gz";
+    const fix =
+      "Re-download it: rm data/certatlas/exams.json.gz; deno run -A data/download.ts";
+    const out = new Deno.Command("gzip", {
+      args: ["-dc", path],
+      stdout: "piped",
+      stderr: "piped",
+    }).outputSync();
+    if (out.code !== 0) {
+      throw new Error(
+        `${path}: expected a gzip file, received gzip exit ${out.code}: ${
+          new TextDecoder().decode(out.stderr).trim()
+        }. ${fix}`,
+      );
+    }
+    const exams = JSON.parse(new TextDecoder().decode(out.stdout)) as {
+      name: string;
+      body: string;
+      domains: {
+        name: string;
+        objectives: { title: string; sub: string[] }[];
+      }[];
+    }[];
+    if (!Array.isArray(exams) || !exams.length) {
+      throw new Error(
+        `${path}: expected a non-empty array of exams, received ${typeof exams}. ${fix}`,
+      );
+    }
+    let nCert = 0, nNonLatin = 0;
+    for (const e of exams) {
+      for (const d of e.domains) {
+        for (const o of d.objectives) {
+          if (!o.title) {
+            throw new Error(
+              `${path} ${e.name} / ${d.name}: expected an objective title, received "". ${fix}`,
+            );
+          }
+          // The stage drops titles with no Latin letter (empty key). One
+          // Oracle exam ships a Japanese copy, so count them here, in the log.
+          if (!/[a-z]/i.test(o.title)) {
+            nNonLatin++;
+            continue;
+          }
+          // A question title ("How to analyze performance") names a skill
+          // after its verb, as cleanStandard does for OpenSALT.
+          let title = o.title.replace(
+            /^(Can|Could|Should|How to|What is|Why does)\s+/i,
+            "",
+          ).replace(/\?$/, "");
+          title = title[0].toUpperCase() + title.slice(1);
+          raw.push({
+            id: "",
+            title,
+            description: `${e.name} (${e.body}), ${d.name}.${
+              o.sub.length ? " " + o.sub.join("; ") : ""
+            }`,
+            sources: ["certatlas"],
+            tags: [],
+          });
+          nCert++;
+        }
+      }
+    }
+    console.log(
+      `  certatlas: ${nCert} objectives from ${exams.length} exams (${nNonLatin} without a Latin letter dropped)`,
+    );
+  }
+
   // Normalize + denoise
   let normalized = 0, denoised = 0;
   for (const s of raw) {
@@ -1145,6 +1222,7 @@ export function stageList() {
       "foundation",
       "learningcommons",
       "digcomp",
+      "certatlas",
     ]
       .map((
         src,

@@ -61,7 +61,16 @@ Deno.test("list: OpenSALT markup is parsed away and Lightcast quoted tags stay",
 
 Deno.test("list stats: all four sources contribute, and dedupe merged rows", () => {
   const s = JSON.parse(Deno.readTextFileSync("build/1_stats.json"));
-  for (const src of ["esco", "onet", "lightcast", "opensalt", "digcomp"]) {
+  for (
+    const src of [
+      "esco",
+      "onet",
+      "lightcast",
+      "opensalt",
+      "digcomp",
+      "certatlas",
+    ]
+  ) {
     assertGreater(s.per_source[src], 0, `${src} has 0 rows`);
   }
   assertGreater(s.dedupe_collisions, 0, "no dedupe collisions");
@@ -805,6 +814,17 @@ Deno.test("list: DigComp outcomes carry the source, area, competence, and level 
     ),
     "LO1.1.01 missing",
   );
+});
+
+Deno.test("list: Cert Atlas objectives carry the source and the exam; dropped vendors stay out", () => {
+  const ca = rows.filter((c) => c[3].includes("certatlas"));
+  assertGreater(ca.length, 4000, "too few Cert Atlas rows");
+  assert(
+    ca.some((c) => c[1].toLowerCase() === "security controls"),
+    "CompTIA Security+ objective 1.1 missing",
+  );
+  const dropped = ca.filter((c) => /\((Microsoft|AWS)\)/.test(c[2]));
+  assertEquals(dropped.map((c) => c[0]).slice(0, 3), [], "dropped vendor row");
 });
 
 // Learning Commons: 5 nodes and 3 edges. The ids are node uuids in the export.

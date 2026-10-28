@@ -415,6 +415,7 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
     label: "university course prerequisites (Mendeley; 37 MB, 8 MB gzipped)",
     fn: courses,
   },
+  { label: "cert atlas exam objectives (1 MB gzipped)", fn: certAtlas },
 ];
 
 // University course prerequisites (Mendeley fs2hvkps7z v2, CC BY 4.0). The raw
@@ -468,6 +469,121 @@ async function courses() {
     ).arrayBuffer();
     await Deno.writeFile(dest, new Uint8Array(gz));
   }
+}
+
+// Cert Atlas (github.com/hans6883/cert-atlas, MIT): exam objectives of about
+// 1900 certifications. The raw repo is 32 MB in 1965 files, so git tracks one
+// gzip of the fields that stage list reads.
+// REVIEW: Drop Microsoft and AWS. Microsoft Learn terms
+// (https://learn.microsoft.com/legal/termsofuse) bar copying "any information"
+// from the site without written consent. AWS site terms
+// (https://aws.amazon.com/terms/) bar download and commercial reuse without
+// written consent, and the exam guides sit on that site. Alternative: keep
+// them, since objective titles are facts. It costs a takedown risk if skills.tsv
+// ships. CompTIA stays: its terms page (comptia.org) did not load, and it
+// grants no reuse either, so the same risk applies to it. The other 355
+// certifying bodies are unread.
+// REVIEW: Track one slim gzip. Alternative: gitignore the 17 MB of raw files.
+// It makes the test fail on a fresh clone and costs 1965 requests per clone.
+const CA_BASE =
+  "https://raw.githubusercontent.com/hans6883/cert-atlas/master/data";
+const CA_DROPPED_VENDORS = new Set(["microsoft", "aws"]);
+const CA_TIMEOUT_MS = 30_000;
+const CA_WORKERS = 8;
+
+async function certAtlasGet(url: string): Promise<unknown> {
+  // The host answers a burst of requests with a transient failure: retry once.
+  let last = "";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const r = await fetch(url, {
+        signal: AbortSignal.timeout(CA_TIMEOUT_MS),
+      });
+      if (r.ok) return await r.json();
+      last = `${r.status} ${r.statusText}`;
+    } catch (e) {
+      last = (e as Error).message;
+    }
+  }
+  throw new Error(
+    `${url}: expected a JSON file, received ${last} after 2 tries. Run the downloader again; if it repeats, check github.com/hans6883/cert-atlas.`,
+  );
+}
+
+async function certAtlas() {
+  const dest = DATA + "certatlas/exams.json.gz";
+  if (await exists(dest)) {
+    console.log(`  skip: ${dest} exists`);
+    return;
+  }
+  await mkdir(DATA + "certatlas");
+  const index = await certAtlasGet(`${CA_BASE}/index.json`) as {
+    exams: { exam_id: string; vendor_slug: string }[];
+  };
+  const wanted = index.exams.filter((e) =>
+    !CA_DROPPED_VENDORS.has(e.vendor_slug)
+  );
+  console.log(
+    `  ${index.exams.length} exams in the index, ${wanted.length} after dropping ${[
+      ...CA_DROPPED_VENDORS,
+    ]}`,
+  );
+  const str = (v: unknown, where: string): string => {
+    if (typeof v !== "string" || !v.trim()) {
+      throw new Error(
+        `${where}: expected a non-empty string, received ${
+          JSON.stringify(v)
+        }. The Cert Atlas schema changed: update certAtlas() in data/download.ts.`,
+      );
+    }
+    return v.trim();
+  };
+  const arr = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
+  const exams: unknown[] = new Array(wanted.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: CA_WORKERS }, async () => {
+      while (next < wanted.length) {
+        const i = next++;
+        const { exam_id, vendor_slug } = wanted[i];
+        const url = `${CA_BASE}/${vendor_slug}/${exam_id}.json`;
+        const e = await certAtlasGet(url) as Record<string, unknown>;
+        // weight_percent is a property of the exam, not of a skill: leave it.
+        exams[i] = {
+          id: str(e.exam_id, url),
+          name: str(e.exam_name, url),
+          body: str(e.certifying_body, url),
+          domains: arr(e.domains).map((d, j) => {
+            const dom = d as Record<string, unknown>;
+            return {
+              name: str(dom.name, `${url} domains[${j}].name`),
+              // An objective is an object, or a bare title string.
+              objectives: arr(dom.objectives).map((o, k) => {
+                const w = `${url} domains[${j}].objectives[${k}]`;
+                if (typeof o === "string") return { title: str(o, w), sub: [] };
+                const ob = o as Record<string, unknown>;
+                return {
+                  title: str(ob.title, w),
+                  // A sub-objective is a string, or an object with a title.
+                  sub: arr(ob.sub_objectives).map((x) =>
+                    str(typeof x === "object" && x ? (x as Json).title : x, w)
+                  ),
+                };
+              }),
+            };
+          }),
+        };
+      }
+    }),
+  );
+  const gz = await new Response(
+    new Blob([JSON.stringify(exams)]).stream().pipeThrough(
+      new CompressionStream("gzip"),
+    ),
+  ).arrayBuffer();
+  await Deno.writeFile(dest + ".tmp", new Uint8Array(gz));
+  await Deno.rename(dest + ".tmp", dest);
+  console.log(`  ${exams.length} exams written to ${dest}`);
 }
 
 console.log(`Downloading ${steps.length} datasets to ${DATA}\n`);

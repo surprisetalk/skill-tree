@@ -15,17 +15,21 @@
      because few matches make the score noise. The full-build entry sets the
      floors.
 
-- [ ] Certification exam objectives appear in `skills.tsv`, tagged with the
-      occupations they certify. Source: Cert Atlas.
-  1. Read the terms of CompTIA, AWS, and Microsoft for reuse of exam objective
-     titles. If any forbids reuse, drop that vendor and note why.
-  2. `data/download.ts` fetches `data/index.json` and each exam file from
-     `raw.githubusercontent.com/hans6883/cert-atlas/master/`.
-  3. Stage `list`: each objective becomes a skill. `weight_percent` is not a
-     skill property, so do not use it.
-  4. Stage `seed-edges`: a `required_certification` prereq makes each objective
-     of the required exam a candidate prereq. Resolve the free-text cert name to
-     an exam first. Unresolved names go to `1e_unresolved.tsv`.
+- [ ] Certification prerequisites order the Cert Atlas objectives in
+      `skills.tsv`.
+  1. `certAtlas()` in `data/download.ts` keeps `prerequisites` and
+     `certification_name` per exam. Delete `data/certatlas/exams.json.gz` and
+     run the downloader again.
+  2. Resolve each `required_certification` description to one exam. Matching a
+     known exam name inside the free text gives 67 of 119 right, 8 ambiguous
+     ("CCT or UFT"), 44 none. It is wrong for "FE exam" (picks one of 20 NCEES
+     disciplines) and "ACA Professional Level papers" (picks an unrelated exam).
+     Require the same certifying body, and send a name that matches many exams
+     to `1e_unresolved.tsv`.
+  3. Stage `seed-edges`: each objective of the required exam is a prereq of each
+     objective of the dependent exam. That is up to 20 x 20 pairs per edge, and
+     a title that two exams share (Security Controls) can close a cycle. Decide
+     first whether to emit exam-to-exam pairs at the domain level instead.
 
 ## Blocked on you
 

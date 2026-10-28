@@ -195,6 +195,14 @@ CompetenceStatement, LearningOutcome, and Glossary. A LearningOutcome has
 `description`, `type`, `competence_area_id`, `competence_id`, and
 `four_levels_proficiency_name` (Basic, Intermediate, Advanced, Highly advanced).
 
+### data/certatlas/ — Certification Exam Objectives (gzipped JSON, MIT)
+
+From github.com/hans6883/cert-atlas (QuizForge). **exams.json.gz** is one array
+that `data/download.ts` slims from the repo's per-exam files:
+`{id, name, body, domains: [{name, objectives: [{title, sub: string[]}]}]}`. It
+omits `weight_percent` and Microsoft and AWS exams, whose site terms bar reuse.
+Run `gzip -dc data/certatlas/exams.json.gz | jq length` for the exam count.
+
 ### data/learningcommons/ — Learning Commons Knowledge Graph (gzipped JSON lines)
 
 US state standards and learning components, v1.16.0, CC BY 4.0 on every row.
@@ -262,16 +270,19 @@ A new build table gets a schema; a new id goes through `slugify`.
 **Parsers**:
 
 - Stage `list`: ESCO, O\*NET (Skills/Knowledge/Abilities/Tasks/DWAs/Tech),
-  Lightcast, OpenSALT, Learning Commons, DigComp, and the hubs in
-  `data/_foundations.json`. Each DigComp LearningOutcome is one skill with tags
-  `digcomp:outcome`, `digcomp:area:*`, `digcomp:competence:*`, and
-  `digcomp:level:*`; stage `difficulty` anchors the level at job zone 1-4.
-  OpenSALT statements parse as HTML with `deno-dom`; a `script`, `style`, or
-  head element in one stops the stage. Learning Commons statements parse the
-  same way and pass the same scaffolding filters (`cleanStandard`). A component
-  is one skill with tags `learningcommons:component` and `grade:*`. A standard
-  is one skill per distinct statement, tags `learningcommons:standard`,
-  `grade:*`, and `code:<statementCode>`. A `buildsTowards` endpoint also gets
+  Lightcast, OpenSALT, Learning Commons, DigComp, Cert Atlas, and the hubs in
+  `data/_foundations.json`. Each Cert Atlas objective is one skill with source
+  `certatlas`, no tags, and a description of exam, certifying body, domain, and
+  sub-objectives; a title with no Latin letter is dropped and counted. Each
+  DigComp LearningOutcome is one skill with tags `digcomp:outcome`,
+  `digcomp:area:*`, `digcomp:competence:*`, and `digcomp:level:*`; stage
+  `difficulty` anchors the level at job zone 1-4. OpenSALT statements parse as
+  HTML with `deno-dom`; a `script`, `style`, or head element in one stops the
+  stage. Learning Commons statements parse the same way and pass the same
+  scaffolding filters (`cleanStandard`). A component is one skill with tags
+  `learningcommons:component` and `grade:*`. A standard is one skill per
+  distinct statement, tags `learningcommons:standard`, `grade:*`, and
+  `code:<statementCode>`. A `buildsTowards` endpoint also gets
   `learningcommons:coherence` and skips the long-title drop. Other sources keep
   `<…>` as text.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, course
