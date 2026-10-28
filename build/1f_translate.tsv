@@ -1,0 +1,957 @@
+文件管理	File Management
+辅助存储器	Secondary storage
+重新启动	Restart
+操作命令	Command
+二进制数字	Binary digits
+并行编译	Parallel Compilation
+中断信号	Interrupt Signal
+软中断	Software Interrupt
+储存空间	Storage Space
+文件分配	File Allocation
+程序状态	Program State
+中断服务程序	Interrupt Service Routine
+先来先服务	First-Come, First-Served
+存储分配	Memory Allocation
+缓存	Cache
+冲突检测	Conflict Detection
+载波侦听	Carrier Sense
+互连网络	Interconnection Network
+广播网络	Broadcast Network
+连接请求	Connection Request
+链路状态分组	Link‑state packet
+高速缓存	Cache Memory
+写访问	Write Access
+段表	Segment Table
+中断机制	Interrupt Mechanism
+程序指令	Program Instruction
+指令流	Instruction Stream
+进程切换	Context Switching
+通用操作系统	General-Purpose Operating System
+互联网协议	Internet Protocol
+互联网电视	Internet TV
+指令功能	Instruction Function
+执行状态	Execution State
+数字信息	Digital Information
+磁盘镜像	Disk Image
+执行开销	Execution Overhead
+操作语义	Operational Semantics
+分布式操作系统	Distributed Operating Systems
+控制线	Control Signal
+中断控制	Interrupt Control
+禁止中断	No Interruption
+命令接口	Command Interface
+第二代计算机	Second‑Generation Computers
+指令缓存	Instruction Cache
+叶节点	Leaf Node
+B树	B‑Tree
+方波信号	Square Wave
+多媒体通信	Multimedia Communication
+子程序调用指令	Subroutine Call Instruction
+二进制信号	Binary Signal
+主存储器	Main Memory
+特权指令	Privileged Instructions
+分时系统	Time‑Sharing System
+虚拟机管理器	Virtual Machine Manager
+伙伴系统	Partner System
+内部中断	Internal Interrupt
+控制总线	Control Bus
+开中断	Enable Interrupt
+中断控制器	Interrupt Controller
+多进程	Multiprocessing
+指令译码器	Instruction Decoder
+中断优先级	Interrupt Priority
+机器周期	Machine Cycle
+执行系统	Operating System
+处理流程	Processing Workflow
+处理器调度	CPU Scheduling
+允许中断	Allow Interrupts
+进程调度	Process Scheduling
+虚拟内存	Virtual Memory
+文件子系统	File Subsystem
+系统启动	System Boot
+面向连接的协议	Connection‑oriented Protocol
+进制转换	Base Conversion
+标号	Label Numbers
+变址寄存器	Index Register
+活动分区	Activity Partitioning
+网络延时	Network Latency
+开始符号	Start Symbol
+发送信号	Signal Transmission
+保护位	Protective Position
+远程系统	Remote Systems
+多用户系统	Multi-User Systems
+视窗操作系统	Windowing Operating System
+数据流分析	Data Flow Analysis
+解调器	Demodulator
+管理子系统	Management Subsystem
+程序状态字	Program Status Word
+动态分配内存	Dynamic Memory Allocation
+分治	Divide and Conquer
+快速排序	Quick Sort
+宏指令	Macro Instruction
+编译系统	Compiler System
+阻塞接收	Blocking Receive
+连接建立	Connection Establishment
+系统配置	System Configuration
+系统内核	System Kernel
+动态管理	Dynamic Management
+控制流分析	Control Flow Analysis
+逻辑地址空间	Logical Address Space
+随机存储器	Random Access Memory
+用户进程	User Process
+调度策略	Scheduling Policy
+指令指针寄存器	Instruction Pointer Register
+主引导记录	Primary Guidance Record
+设备驱动程序	Device Driver
+输出通道	Output Channel
+系统中断	System Interrupt
+顺序存储器	Sequential Storage
+预分配	Preallocation
+进程状态	Process State
+网络打印机	Network printer
+有线网络	Wired Network
+缺页	Missing Page
+系统调用表	System Call Table
+完全恢复	Full Recovery
+虚拟化技术	Virtualization Technology
+循环执行	Loop Execution
+死锁预防	Deadlock Prevention
+缺页中断	Page Fault Interrupt
+多核处理器	Multi-core Processor
+文件维护	File Maintenance
+控制块	Control Block
+大容量存储器	High-capacity memory
+虚拟存储管理	Virtual Memory Management
+错误代码	Error Code
+外部中断	External Interrupt
+纠错	Error Correction
+调用程序	Program Invocation
+测试驱动程序	Test-Driven Development
+实时系统	Real-Time Systems
+功能块	Functional Block
+虚拟地址空间	Virtual Address Space
+通信子网	Communication Subnetwork
+快速以太网	Fast Ethernet
+进程创建	Process Creation
+互操作	Interoperability
+调度程序	Scheduler
+点到点连接	Point-to-Point Connection
+优先级调度	Priority Scheduling
+内核服务	Kernel Services
+文件组织	File Organization
+内部程序	Internal Procedure
+段式存储管理	Segmented Memory Management
+嵌入式控制器	Embedded Controller
+拓扑关系	Topological Relations
+后集	Later Volumes
+外存储器	External Memory
+内部网关协议	Internal Gateway Protocol
+下一个头	Next Leader
+中断系统	Interrupt System
+程序状态字寄存器	Program Status Register
+电路逻辑	Logic Circuits
+高速总线	High‑speed bus
+线程控制块	Thread Control Block
+启动程序	Boot Program
+占用空间	Space Occupancy
+内核空间	Kernel Space
+优先级控制	Priority Control
+多处理器调度	Multiprocessor Scheduling
+面向对象编程	Object‑Oriented Programming
+代码优化	Code Optimization
+算法正确性	Algorithm Correctness
+进程复制	Process Duplication
+逻辑分区	Logical Partitioning
+接口分析	Interface Analysis
+访问冲突	Access Conflict
+服务系统	Service System
+同步控制	Synchronous Control
+访问策略	Access Control
+网络文件系统	Network File System
+编译技术	Compiler Technology
+FAT文件系统	FAT File System
+数据文件	Data File
+内核栈	Kernel Stack
+管理文件	File Management
+电话系统	Telephone System
+线程管理	Thread Management
+存储芯片	Memory Chip
+非终结符	Nonterminal Symbol
+介质访问控制	Media Access Control
+二进制编码	Binary Encoding
+分区表	Partitioned Table
+入度	Angle of Incidence
+无向图	Undirected Graph
+即插即用	Plug and Play
+局域网络	Local Area Network (LAN)
+可预测性	Predictability
+加载程序	Program Loading
+内存管理单元	Memory Management Unit
+内核模块	Kernel Module
+路由选择信息协议	Routing Information Protocol (RIP)
+通信工程	Communication Engineering
+虚页	Blank Page
+程序检测	Program Testing
+嵌入式操作系统	Embedded Operating Systems
+文件锁	File Lock
+重新执行	Re-execution
+人工智能语言	Artificial Intelligence Language
+单步	Single-Step
+扫描程序	Scanner Program
+就绪状态	Ready State
+远程访问	Remote Access
+外部输入	External Input
+配置文件	Configuration file
+非对称数字用户线	Asymmetric Digital User Line
+命令行接口	Command Line Interface (CLI)
+段长度	Segment Length
+引导记录	Guided Record
+顺序查找	Linear Search
+平均查找长度	Average Search Length
+计算复杂度	Computational Complexity
+文件控制块	File Control Block
+访问周期	Access Cycle
+批处理系统	Batch Processing System
+计数排序	Counting Sort
+协议数据单元	Protocol Data Unit (PDU)
+协调机制	Coordination Mechanism
+记录结构	Record Structure
+相对地址	Relative Address
+分页	Pagination
+路由协议	Routing Protocols
+交叉编译	Cross‑Compilation
+时间约束	Time Constraint
+交换过程	Exchange Process
+多级反馈队列	Multilevel Feedback Queue
+准入控制	Access Control
+本地终端	Local Terminal
+动态调度	Dynamic Scheduling
+密码	Password
+外部资源	External Resources
+中间件	Middleware
+死锁检测	Deadlock Detection
+概率	Probability
+伪码	Pseudocode
+硬件故障	Hardware Failure
+安全模式	Safe Mode
+动态更新	Dynamic Updating
+非法指令	Illegal Instruction
+X86架构	x86 Architecture
+域名系统	Domain Name System
+列地址	Column Address
+页帧	Page Frame
+目录结构	Directory Structure
+共享文件	Shared Files
+虚拟盘	Virtual Disk
+循环冗余校验	Cyclic Redundancy Check
+程序转换	Program Transformation
+结束标志	End Marker
+模拟环境	Simulation Environment
+引导扇区	Boot Sector
+并发进程	Concurrent Processes
+应用环境	Application Environment
+重新安装	Reinstall
+复位电路	Reset Circuit
+几何分布	Geometric Distribution
+选取	Selection
+图搜索	Graph Search
+访问权	Access Rights
+运行时间	Runtime
+黑箱	Black Box
+阻塞状态	Blocking State
+静态分配	Static Allocation
+时间效率	Time Efficiency
+路由聚合	Route Aggregation
+访问矩阵	Access Matrix
+编解码器	Encoder‑Decoder
+二路归并	Two-Way Merge
+死锁避免	Deadlock Avoidance
+恢复机制	Recovery Mechanism
+非屏蔽双绞线	Unshielded Twisted Pair (UTP)
+BASIC语言	BASIC Language
+节点对	Node Pair
+无序列表	Unordered List
+栈溢出	Stack Overflow
+拒绝	Refusal
+索引值	Index Value
+动态路由选择	Dynamic Route Selection
+子任务	Subtask
+接口标准	Interface Standard
+图的遍历	Graph Traversal
+深度优先搜索	Depth‑First Search
+编辑程序	Text Editor
+网络爬虫	Web Crawler
+处理单元	Processing Unit
+并发性	Concurrency
+路由算法	Routing Algorithms
+操作效率	Operational Efficiency
+函数的定义域	Domain of a Function
+欧拉函数	Euler's Totient Function
+正交坐标	Orthogonal coordinates
+标准正态分布	Standard Normal Distribution
+矩阵的秩	Matrix Rank
+正交补空间	Orthogonal Complement
+最大公因式	Greatest Common Divisor (GCD)
+可积性	Integrability
+初等数论	Elementary Number Theory
+应力函数	Stress function
+实数域	Real Number Field
+零空间	Null Space
+n维空间	n‑dimensional space
+梯度向量	Gradient Vector
+矩阵表示	Matrix Representation
+矩阵特征值	Matrix Eigenvalues
+不连续函数	Discontinuous Function
+欧氏空间	Euclidean space
+向量子空间	Vector Subspace
+代数基本定理	Fundamental Theorem of Algebra
+概率计算	Probability Calculation
+区间估计	Interval Estimation
+空间坐标系	Coordinate System
+射影变换	Projection Transform
+概率空间	Probability Space
+代数学	Algebra
+无偏估计量	Unbiased Estimator
+概率分布函数	Probability Distribution Function
+一元多项式	Univariate Polynomial
+微分几何	Differential Geometry
+平均变化率	Average rate of change
+指数分布	Exponential Distribution
+概率论与数理统计	Probability Theory and Mathematical Statistics
+样本空间	Sample Space
+基本初等函数	Elementary Functions
+贝叶斯公式	Bayes' Theorem
+全概率公式	Law of Total Probability
+边缘分布	Marginal Distribution
+施密特正交化	Schmidt Orthogonalization
+平均值定理	Mean Value Theorem
+理论力学	Classical Mechanics
+伯努利试验	Bernoulli trial
+空间维数	Spatial Dimension
+递增函数	Increasing function
+极大似然估计量	Maximum Likelihood Estimator
+线性系统理论	Linear System Theory
+正交向量	Orthogonal Vectors
+线性微分方程	Linear Differential Equations
+样本点	Sample Point
+连续型随机变量	Continuous Random Variable
+单峰函数	Unimodal Function
+质点力学	Particle Mechanics
+下界	Lower Bound
+力的合成	Force Addition
+应力应变关系	Stress–Strain Relationship
+概率函数	Probability Function
+样本均值	Sample Mean
+状态向量	State vector
+投影矩阵	Projection Matrix
+实向量空间	Real Vector Space
+矩阵求逆	Matrix Inversion
+厄米特矩阵	Hermite matrix
+基向量	Basis vector
+空间向量	Spatial Vector
+生成子空间	Generated Subspace
+联合概率密度函数	Joint probability density function
+不变子空间	Invariant Subspace
+坐标平面	Coordinate Plane
+函数问题	Function Problems
+增广矩阵	Augmented Matrix
+组合数学	Combinatorics
+刚体力学	Rigid Body Mechanics
+有限维向量空间	Finite-dimensional vector space
+法平面	Plane of Symmetry
+矩阵力学	Matrix Mechanics
+线性相关性	Linear Dependence
+坐标变换矩阵	Coordinate Transformation Matrix
+实值函数	Real-Valued Function
+场函数	Partition Function
+抛物线方程	Parabola Equation
+误差平方和	Sum of Squared Errors
+样本方差	Sample Variance
+不动点	Fixed Point
+三元一次方程组	System of Three Linear Equations
+极坐标方程	Polar equation
+反双曲函数	Inverse hyperbolic functions
+黎曼可积	Riemann Integrable
+微积分学	Calculus
+微分方程数值解	Numerical Methods for Differential Equations
+齐次微分方程	Homogeneous differential equation
+恒等映射	Identity map
+一次方程	Linear equation
+拉格朗日中值定理	Lagrange Mean Value Theorem
+李雅普诺夫函数	Lyapunov function
+矩阵范数	Matrix Norms
+总体方差	Total variance
+初值问题	Initial Value Problem
+非负整数	Nonnegative Integer
+加权平均	Weighted Average
+齐次方程	Linear equations
+均匀随机数	Uniform Random Numbers
+随机区间	Random Interval
+莱布尼茨公式	Leibniz Formula
+自然坐标	Natural Coordinates
+复数域	Complex Field
+实轴	Real Axis
+温度应变	Thermal Strain
+函数方程	Functional Equation
+一阶线性微分方程	First-order linear differential equation
+本构方程	Constitutive Equation
+极坐标	Polar coordinates
+柱坐标	Cylindrical Coordinates
+矩阵方程	Matrix Equations
+向量空间	Vector Space
+射影空间	Projective Space
+原点矩	Origin Moment
+随机现象	Random Phenomena
+无界函数	Unbounded Function
+积分公式	Integration Formulas
+基本函数	Basic Functions
+收敛性质	Convergence Properties
+运算律	Operation Laws
+齐次坐标	Homogeneous Coordinates
+无偏估计	Unbiased Estimation
+无限总体	Infinite Population
+酉矩阵	Unitary matrix
+简单随机样本	Simple Random Sample
+联合概率	Joint Probability
+正割函数	Secant function
+平面应力	Plane Stress
+非线性方程	Nonlinear Equations
+法方程	Law Equation
+张量	Tensor
+负整数	Negative Integer
+点集拓扑	Point-Set Topology
+微分方程的解	Solutions of Differential Equations
+半角公式	Half-Angle Formulas
+半正定矩阵	Positive semidefinite matrix
+定理证明	Theorem Proof
+二元一次方程组	System of two linear equations
+柯西中值定理	Cauchy's Mean Value Theorem
+格拉姆矩阵	Gram Matrix
+拉格朗日乘子法	Lagrange multipliers
+连续性随机变量	Continuous Random Variable
+非退化矩阵	Non-singular matrix
+内坐标	Internal Coordinates
+正规子群	Normal subgroup
+可积函数	Integrable function
+椭球面	Ellipsoid Surface
+几何概率	Geometric Probability
+抽样理论	Sampling Theory
+四次方程	Quartic Equation
+初等函数	Elementary Functions
+倍角公式	Double-Angle Formulas
+变分方法	Variational Method
+差分方程	Difference Equation
+微分方程的阶	Order of a Differential Equation
+列空间	Column Space
+正切函数	Tangent function
+算术平均	Arithmetic Mean
+一元方程	Linear equation
+双曲抛物面	Hyperbolic Paraboloid
+旋转矩阵	Rotation Matrix
+椭圆抛物面	Elliptic Paraboloid
+内部自由度	Internal Degrees of Freedom
+转移矩阵	Transition Matrix
+可微函数	Differentiable Function
+离散小波变换	Discrete Wavelet Transform
+洛必达法则	L'Hôpital's Rule
+大数定律	Law of Large Numbers
+判断矩阵	Decision Matrix
+线性空间	Vector Space
+范德蒙矩阵	Vandermonde matrix
+特征值和特征向量	Eigenvalues and Eigenvectors
+应力集中系数	Stress Concentration Factor
+平面应变	Plane strain
+微积分基本定理	Fundamental Theorem of Calculus
+化工过程	Chemical Process Engineering
+三角函数值	Trigonometric Function Values
+逻辑斯谛方程	Logistic Equation
+有理函数	Rational function
+原始方程	Primitive Equation
+必然事件	Inevitable Event
+随机试验	Random Experiment
+对角矩阵	Diagonal matrix
+平移变换	Translation
+似然函数	Likelihood function
+奇异值分解	Singular Value Decomposition
+对称矩阵	Symmetric Matrix
+曲面积分	Surface Integral
+负定矩阵	Negative definite matrix
+常数函数	Constant Function
+局部坐标	Local Coordinates
+二维问题	Two-Dimensional Problem
+显著性水平	Significance level
+连续曲线	Continuous Curve
+乘法公式	Multiplication Formula
+上界	Upper Bound
+拟合优度	Goodness of Fit
+法向量	Normal vector
+柯西准则	Cauchy Criterion
+多项式方程	Polynomial Equation
+旋转体	Solid of Revolution
+均匀性	Uniformity
+状态空间描述	State Space Representation
+欧拉定理	Euler's Theorem
+正交矩阵	Orthogonal matrix
+S矩阵	S‑matrix
+齐次线性方程	Homogeneous Linear Equations
+矩阵秩	Matrix Rank
+二次曲线	Conic Sections
+矩阵的逆	Matrix Inverse
+依概率收敛	Convergence in Probability
+几何边界条件	Geometric Boundary Conditions
+黎曼函数	Riemann Zeta Function
+一般方程	General Equation
+有界函数	Bounded Function
+置换矩阵	Permutation matrix
+奇异矩阵	Singular Matrix
+黎曼积分	Riemann Integral
+二项分布	Binomial Distribution
+误差向量	Error Vector
+切向量	Tangent Vector
+平均速度	Average Speed
+数值计算	Numerical Computation
+单调递增函数	Monotonically Increasing Function
+非负矩阵	Nonnegative Matrix
+非线性计算	Nonlinear Computation
+变量分离方程	Separable Differential Equation
+函数项级数	Functional series
+初始向量	Initial Vector
+塑性应变	Plastic strain
+对称函数	Symmetric Function
+类方程	Equivalent Equation
+刚度矩阵	Stiffness matrix
+共轭复根	Conjugate Complex Roots
+稳定矩阵	Stable Matrix
+塑性应变增量	Plastic strain increment
+局部坐标系	Local Coordinate System
+随机向量	Random Vector
+状态空间模型	State Space Model
+中值定理	Intermediate Value Theorem
+正交性	Orthogonality
+阿贝尔群	Abelian group
+热流密度	Heat flux density
+函数符号	Function Symbol
+行向量	Row vector
+等效应力	Equivalent Stress
+正定矩阵	Positive definite matrix
+几何解释	Geometric Interpretation
+像平面	Plane Geometry
+绝对值函数	Absolute Value Function
+阶梯函数	Step Function
+有限元方法	Finite Element Method
+关联矩阵	Incidence matrix
+全量理论	Total Quantity Theory
+发散级数	Divergent Series
+矩阵转置	Matrix Transposition
+高斯消元法	Gaussian Elimination
+弹塑性	Elastic‑Plasticity
+任意子	Arbitrary Element
+体积力	Body Force
+法线	Normal line
+回路矩阵	Loop matrix
+矩阵的迹	Matrix Trace
+一致收敛性	Uniform convergence
+勒让德多项式	Legendre Polynomials
+势函数	Potential Function
+正矩阵	Positive definite matrix
+凸多面体	Convex Polyhedron
+计算机科学与技术	Computer Science & Technology
+积分变换	Integral Transform
+过渡矩阵	Transition matrix
+弹性应变	Elastic strain
+均值不等式	Mean Inequalities
+位移函数	Displacement Function
+正交分解	Orthogonal Decomposition
+几何因素	Geometric Factors
+指数型母函数	Exponential Generating Function
+向量场	Vector Field
+能量原理	Energy Principle
+估计方法	Estimation Methods
+分部积分法	Integration by Parts
+光滑函数	Smooth Function
+像高	Image Height
+三元齐次线性方程组	Homogeneous linear system in three variables
+多元函数	Multivariate Functions
+网格划分	Grid Partitioning
+矩阵加法	Matrix Addition
+线性无关	Linear Independence
+闭集	Closed Set
+唯一性定理	Uniqueness Theorem
+阿贝尔定理	Abel's Theorem
+反射系统	Reflection System
+帕金森氏病	Parkinson’s disease
+社会隔离	Social Isolation
+创伤后应激障碍	Posttraumatic Stress Disorder
+认知因素	Cognitive Factors
+消费行为	Consumer Behavior
+生命伦理学	Bioethics
+样本	Sample
+社会心理学	Social Psychology
+负诱因	Negative Incentive
+催眠状态	Hypnotic State
+广告设计	Advertising Design
+大脑左半球	Left Hemisphere of the Brain
+精神科	Psychiatry
+性心理障碍	Sexual Psychopathology
+知觉过程	Perceptual Process
+推理能力	Reasoning Ability
+镜像神经元	Mirror Neurons
+统计概率	Statistical Probability
+顿悟	Epiphany
+自我心理学	Self Psychology
+认知领悟疗法	Cognitive Insight Therapy
+心理病理学	Psychopathology
+文化心理学	Cultural Psychology
+青少年期	Adolescence
+认知学习	Cognitive Learning
+生涯发展教育	Career Development Education
+神经化学	Neurochemistry
+压抑	Repression
+饥饿动机	Hunger Motivation
+认知失调理论	Cognitive Dissonance Theory
+心理障碍	Psychological Disorders
+神经生理学	Neurophysiology
+意志控制	Willpower Control
+人本主义心理学	Humanistic Psychology
+程序性知识	Procedural Knowledge
+意识流	Stream of Consciousness
+营销管理	Marketing Management
+产后	Postpartum
+社会规范	Social Norms
+消费心理学	Consumer Psychology
+童年期	Childhood
+社会认知	Social Cognition
+大众消费	Mass Consumption
+生理成熟	Physiological Maturity
+心理放松	Psychological Relaxation
+舞台设计	Stage Design
+精神病学	Psychiatry
+神经肌肉接头	Neuromuscular junction
+神经系统变性疾病	Neurodegenerative diseases
+抑郁状态	Depressive State
+行为潜能	Behavioral Potential
+老年期	Old Age
+理想化	Idealization
+认知焦虑	Cognitive Anxiety
+大脑活动	Brain activity
+分裂型人格障碍	Dissociative Identity Disorder
+脊髓后动脉	Posterior spinal artery
+情境因素	Situational Factors
+自我知觉	Self-Perception
+生理反应	Physiological Response
+大样本	Large Sample
+数据收集	Data Collection
+精神动力学	Psychodynamics
+个人特质	Personal Traits
+老年痴呆	Alzheimer's disease
+冲突	Conflict
+首因效应	Primacy Effect
+品牌偏好	Brand Preference
+价值体系	Value System
+心理机制	Psychological Mechanisms
+感觉障碍	Sensory Disorders
+社会行为	Social Behavior
+视错觉	Visual Illusion
+精神分析理论	Psychoanalytic Theory
+自我	Self
+米勒-莱尔错觉	Miller–Lyer Illusion
+人际关系	Interpersonal Relationships
+心理作用	Psychological Effect
+超感知觉	Extrasensory Perception
+情绪表现	Emotional Expression
+传播心理学	Communication Psychology
+心理学流派	Psychological Schools of Thought
+认知过程	Cognitive Process
+健康心理学	Health Psychology
+女性气质	feminine temperament
+需要层次理论	Maslow's Hierarchy of Needs
+方法论	Methodology
+罗森塔尔效应	Rosenthal Effect
+认知行为疗法	Cognitive Behavioral Therapy
+进食障碍	Eating Disorders
+心理疲劳	Psychological Fatigue
+客体关系理论	Object Relations Theory
+压力源	Stressors
+道德决策	Ethical Decision-Making
+科学心理学	Scientific Psychology
+心理防御机制	Defense Mechanisms
+神经心理学	Neuropsychology
+情绪症状	Emotional Symptoms
+反应时	Reaction Time
+知识的理解	Understanding Knowledge
+情感支持	Emotional Support
+蛋白体	Ribosome
+情绪记忆	Emotional Memory
+社会意识	Social Consciousness
+联想	Associative Memory
+前额叶	Prefrontal Cortex
+艺术心理学	Art Psychology
+普通心理学	General Psychology
+学习障碍	Learning Disability
+强化程式	Enhanced Programming
+知觉	Perception
+神经衰弱	Neurasthenia
+应激性溃疡	Stress ulcer
+特质	Trait
+脑机制	Brain Mechanisms
+大脑两半球	Brain Hemispheres
+视觉艺术	Visual Arts
+应用心理学	Applied Psychology
+精神科医生	Psychiatrist
+产品包装	Product Packaging
+视知觉	Visual Perception
+表演型人格障碍	Histrionic Personality Disorder
+生活事件	Life Events
+心理状态	Psychological State
+行为矫正	Behavior Modification
+自我认知	Self-awareness
+过度反应	Overreaction
+表情	Facial Expression
+超心理学	Parapsychology
+防御机制	Defense Mechanisms
+觉察	Awareness
+感觉记忆	Sensory Memory
+内分泌系统	Endocrine System
+奖赏	Reward
+组织形态学	Organizational Morphology
+糖尿病性神经病变	Diabetic neuropathy
+社会认可	Social Recognition
+兴奋	Excitement
+消极情绪	Negative Emotions
+社会助长	Social Facilitation
+心理活动	Mental Activity
+客观测验	Objective Test
+神经冲动	Neural impulse
+消极信息	Negative Information
+系列位置效应	Serial Position Effect
+行为控制	Behavior Control
+心理现象	Psychological Phenomena
+产前诊断	Prenatal Diagnosis
+神经回路	Neural Circuit
+感觉损伤	Sensory impairment
+冯特错觉	Feng–Tian Illusion
+生物医学	Biomedical Science
+自我决定理论	Self‑Determination Theory
+语境	Context
+消费者行为	Consumer Behavior
+积极心理学	Positive Psychology
+信息加工过程	Information Processing
+感觉运动	Sensory‑Motor Function
+人格理论	Personality Theory
+假想观众	Imaginary Audience
+外部影响	External Influences
+天赋	Innate Talent
+双盲	Double-Blind
+行为主义理论	Behaviorism Theory
+教育心理学	Educational Psychology
+好奇心	Curiosity
+延迟满足	Delayed Gratification
+精神病	Mental Illness
+定向反射	Specular Reflection
+天才	Genius
+控制组	Control Group
+精神病性症状	Psychotic Symptoms
+遗忘曲线	Forgetting Curve
+社会关系	Social Relations
+人格特征	Personality Traits
+认知方式	Cognitive Style
+认知策略	Cognitive Strategies
+负面情绪	Negative Emotions
+个性差异	Individual Differences
+平均预期寿命	Life expectancy
+本我	Id
+新行为主义	New Behaviorism
+帕金森病	Parkinson's disease
+进化心理学	Evolutionary Psychology
+人格结构	Personality Structure
+时间知觉	Time Perception
+社会态度	Social Attitudes
+人格心理学	Personality Psychology
+灵感	Inspiration
+神经性厌食	Neurogenic Anorexia
+心理诊断	Psychological Assessment
+约拿情结	Jonah Complex
+相关研究	Related Research
+运动迟缓	Bradykinesia
+左旋多巴	L‑DOPA
+团队精神	Team Spirit
+心理辅导	Psychological Counseling
+系统脱敏	System De-identification
+情绪反应	Emotional Response
+温觉	Thermal Sensation
+心理学史	History of Psychology
+才能	Talent
+创造艺术	Creative Arts
+心理健康教育	Mental Health Education
+遗传	Genetics
+社会赞许	Social Approval
+催眠	Hypnosis
+情绪表达	Emotion Expression
+回避	Avoidance
+视觉记忆	Visual Memory
+胆碱酯酶	Acetylcholinesterase
+内部表征	Internal Representation
+工作满意度	Job Satisfaction
+群体压力	Group Pressure
+购买动机	Purchase Motivation
+自尊	Self-Esteem
+额叶	Frontal lobe
+保健	Health Care
+稳定因素	Stabilizing Factors
+抑郁质	Depressive Temperament
+额叶皮质	Frontal cortex
+反社会性	Antisocial Behavior
+群体意识	Collective Consciousness
+痛性抽搐	Painful convulsion
+生理机制	Physiological Mechanisms
+协调性	Coordination
+正诱因	Positive Incentive
+无力感	Powerlessness
+归属感	Sense of Belonging
+心理特性	Psychological Traits
+汉密尔顿焦虑量表	Hamilton Anxiety Scale
+脊髓亚急性联合变性	Subacute Combined Degeneration of the Spinal Cord
+闪光灯记忆	Flash Memory
+思维过程	Thinking Process
+双重效应	Dual Effect
+遗传性	Hereditary
+内部感觉	Inner Sensation
+面神经管	Facial Nerve Canal
+特发性面神经麻痹	Idiopathic Facial Nerve Palsy
+直觉	Intuition
+下意识	Subconscious
+否认	Denial
+态度改变	Attitude Change
+身体发展	Physical Development
+社会支持	Social Support
+吗啡	Morphine
+近因效应	Proximate Cause Effect
+咽反射	Pharyngeal Reflex
+记忆储存	Memory Storage
+归因理论	Attribution Theory
+外展神经	Abducens Nerve
+解离症	Dissociative Disorder
+脑	Brain
+内疚	Guilt
+动觉	Kinesthesia
+条件反应	Conditioned response
+性别角色	Gender Roles
+脊髓疾病	Spinal Cord Disorders
+国际疾病分类	International Classification of Diseases
+丘脑出血	Thalamic Hemorrhage
+周围性面瘫	Peripheral facial palsy
+启动	Booting
+思维流畅性	Thinking Fluency
+发展心理学	Developmental Psychology
+人本心理学	Humanistic Psychology
+宣泄	Catharsis
+中枢性面瘫	Central Facial Palsy
+人际吸引	Interpersonal Attraction
+发展阶段	Developmental Stage
+刺激控制	Stimulus Control
+元认知	Metacognition
+动物本能	Animal Instincts
+十六种人格因素问卷	16PF Questionnaire
+驱力	Driving Force
+众数	Mode (statistic)
+皮肤电反应	Skin Conductance Response
+均值回归	Mean Reversion
+面部表情	Facial Expressions
+神经性贪食症	Anorexia Nervosa
+独创性	Originality
+概念形成	Concept Formation
+特质焦虑	Trait Anxiety
+知道感	Sense of Knowing
+实验设计	Experimental Design
+无意识	Unconscious Mind
+抑郁发作	Depressive episode
+定向反应	Directed Reaction
+异常行为	Anomalous Behavior
+语言习得装置	Language Acquisition Device
+微表情	Microexpressions
+恋母情结	Mother Complex
+眼电图	Electrooculogram (EOG)
+审判心理学	Forensic Psychology
+社会适应	Social Adaptation
+心理过程	Psychological Processes
+内容心理学	Content Psychology
+少年期	Adolescence
+脑干	Brainstem
+创伤	Trauma
+视觉焦点	Visual Focus
+自我参照效应	Self-Referencing Effect
+个人主义文化	Individualist Culture
+动机理论	Motivation Theory
+潜能开发	Potential Development
+学习心理学	Learning Psychology
+文化差异	Cultural Differences
+再认	Re-identification
+发展时期	Development Period
+乐音	Music
+药物成瘾	Drug Addiction
+背景音乐	Background Music
+社会刻板印象	Social Stereotypes
+功能性磁共振成像	Functional Magnetic Resonance Imaging (fMRI)
+自我欺骗	Self‑deception
+调节因素	Moderating Variable
+内向	Introversion
+性心理	Sexual Psychology
+心理维度	Psychological Dimension
+自我表露	Self-Disclosure
+幻觉	Illusion
+自我调节	Self-Regulation
+人际互动	Interpersonal Interaction
+流行文化	Popular Culture
+概念化	Conceptualization
+妄想	Delusion
+群体行为	Collective Behavior
+联想学习	Associative Learning
+脑死亡	Brain Death
+个体需要	Individual Needs
+社会交往	Social Interaction
+瞬时记忆	Instantaneous Memory
+强迫症	Obsessive-Compulsive Disorder
+视网膜血管	Retinal vasculature
+潜意识动机	Unconscious Motivation
+主观测验	Subjective Test
+归因	Attribution
+导向	Orientation
+神经症	Neurosis
+人格发展	Personality Development
+社交恐怖症	Social Anxiety Disorder
+心理疏导	Psychological Counseling
+犯罪心理画像	Criminal Profiling
+人际知觉	Interpersonal Perception
+心理倾向	Psychological Tendencies
+认知评价	Cognitive Evaluation
+操作条件反射	Operant Conditioning
+元认知策略	Metacognitive Strategies
+购买行为	Purchase Behavior
+侦查心理学	Forensic Psychology
+运动习惯	Exercise Habits
+集体主义文化	Collectivist Culture
+正增强	Positive Reinforcement
+重症肌无力	Myasthenia gravis
+面神经	Facial Nerve
+犯罪行为	Criminal Behavior
+心理幸福感	Psychological Well‑Being
+原生家庭	Family of Origin
+吸引	Attraction
+模仿学习	Imitation Learning
+腱鞘囊肿	Tendon sheath cyst
+方向错觉	Directional Illusion
+心理病态	Psychopathy
+自我分析	Self-Analysis
+学习过程	Learning Process
+幸福感	Happiness
+助听器	Hearing Aid
+追踪研究	Longitudinal Study
+从众	Conformity
+表征	Representation
+合理情绪疗法	Rational Emotive Therapy
+同化	Assimilation
+基本需求	Basic Needs
+寂寞	Loneliness
+B型人格	Type B Personality
+无助	Helplessness
+反社会行为	Antisocial behavior
