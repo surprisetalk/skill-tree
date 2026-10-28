@@ -1079,6 +1079,26 @@ Deno.test("readCoursePairs: an unknown timing or alternative flag throws with th
   }
 });
 
+Deno.test("readCoursePairs: a truncated gzip names the file to delete, because the downloader skips an existing file", async () => {
+  const err = await inCourseDir(
+    COURSE_HEAD + "d1,A,Algebra,\n",
+    EDGE_HEAD,
+    async (m) => {
+      Deno.writeFileSync(
+        "data/courses/courses.csv.gz",
+        new Uint8Array([31, 139, 8]),
+      );
+      try {
+        await m.readCoursePairs();
+      } catch (e) {
+        return (e as Error).message;
+      }
+      return "";
+    },
+  );
+  assert(err.includes("rm data/courses/courses.csv.gz;"), err);
+});
+
 // Embeddings: one orthogonal axis per group, so a group of rows shares a vector.
 Deno.test(
   "dedupe: a shared code:* tag across OpenSALT and Learning Commons, or an alignment edge, makes a candidate that the cosine test decides",

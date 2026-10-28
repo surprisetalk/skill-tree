@@ -706,7 +706,7 @@ export async function readCoursePairs(): Promise<{
       throw new Error(
         `${path}: expected a gzip file of RFC 4180 CSV with a constant field count, received ${
           (e as Error).message
-        }. Re-download it: deno run -A data/download.ts`,
+        }. Re-download it: rm ${path}; deno run -A data/download.ts`,
       );
     }
   };

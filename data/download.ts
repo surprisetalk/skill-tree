@@ -492,7 +492,8 @@ async function courses() {
     const gz = await new Response(
       new Blob([raw]).stream().pipeThrough(new CompressionStream("gzip")),
     ).arrayBuffer();
-    await Deno.writeFile(dest, new Uint8Array(gz));
+    await Deno.writeFile(dest + ".tmp", new Uint8Array(gz));
+    await Deno.rename(dest + ".tmp", dest);
   }
 }
 
