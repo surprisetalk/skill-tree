@@ -680,10 +680,10 @@ const TIMINGS = ["before", "concurrent", "before_or_concurrent"] as const;
 // one course only inside its dataset (institution and edition). The join gives
 // each code its title. Only timing "before" is a prerequisite. Each row of an
 // OR group is its own pair.
-// REVIEW: Treat each alternative of an OR group as a full prereq. Alternative:
+// Treat each alternative of an OR group as a full prereq. Alternative:
 // drop every is_alternative edge. It keeps only the mandatory edges and loses
 // a quarter of the edges, and every course whose prereq is an "or".
-// REVIEW: Key the pair on the two titles, so one pair stands for the many
+// Key the pair on the two titles, so one pair stands for the many
 // editions of a course. Alternative: keep one pair per edition. It counts a
 // course once per catalog year and gives the 11-edition university 11 votes.
 export async function readCoursePairs(): Promise<{
@@ -721,7 +721,7 @@ export async function readCoursePairs(): Promise<{
     iTitle = col(courses, "title", "data/courses/courses.csv.gz");
   // A code printed twice with different titles is a parse artifact in the
   // source: the pair has no sure title. An empty title is no title.
-  // REVIEW: A prereq code missing from `code` but present as `canonical_code`
+  // A prereq code missing from `code` but present as `canonical_code`
   // stays no-course. Alternative: index canonical_code too. It may join a
   // different course, because the dataset does not say canonical_code is an alias.
   const titles = new Map<string, Set<string>>();
@@ -1447,7 +1447,7 @@ export type ExpertPair = { pre: string; dep: string; positive: boolean };
 
 // An annotation row `A,B,1` means topic A is a prerequisite of topic B. Each
 // file lists every ordered pair of its topics, so a 0 is a real negative.
-// REVIEW: A row naming a topic id that its topic file lacks counts as
+// A row naming a topic id that its topic file lacks counts as
 // unresolved and is dropped, like a topic that matches no skill. LB1 has 829
 // such rows, 8 of them positive: it names ids 210 and 211 but its topic file
 // stops at 209. Alternative: throw. It blocks the whole eval on an upstream
@@ -1529,7 +1529,7 @@ export function readLectureBank(): { pairs: ExpertPair[]; unnamed: number } {
 
 // Pairs are skill ids. `graph` maps a skill to its direct prereqs. A pair is
 // annotated once, and positive when any set marks it so.
-// REVIEW: Precision counts only the graph edges whose pair an expert annotated,
+// Precision counts only the graph edges whose pair an expert annotated,
 // because an unannotated edge has no label. Alternative: divide by every edge
 // between matched topics. It reads a missing annotation as a wrong edge.
 export function expertScores(

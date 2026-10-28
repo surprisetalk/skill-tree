@@ -801,7 +801,7 @@ export function stageList() {
       raw.push(skill);
       lcNodes.set(skill, [c.id]);
     }
-    // REVIEW: A buildsTowards endpoint skips the long-title drop below, so its
+    // A buildsTowards endpoint skips the long-title drop below, so its
     // seed edge can resolve. Alternative: keep the drop and let stage enrich
     // summarize them. Only 14 of 757 edges resolve without this, and a summary
     // costs an Ollama run and loses the exact statement.
@@ -862,7 +862,7 @@ export function stageList() {
 
   // DigComp 3.0: one skill per LearningOutcome, tagged with area, competence,
   // and proficiency level. Stage difficulty reads the level tag.
-  // REVIEW: Read LearningOutcome nodes only. Alternative: also read the 362
+  // Read LearningOutcome nodes only. Alternative: also read the 362
   // CompetenceStatement nodes. Each repeats an outcome's sentence, so they
   // would add no skills and cost a join.
   {
@@ -928,11 +928,11 @@ export function stageList() {
 
   // Cert Atlas: one skill per exam objective. The description names the exam,
   // its certifying body, and the domain, so stage tag can match occupations.
-  // REVIEW: No tags. Stage tag matches occupations by embedding, as for every
+  // No tags. Stage tag matches occupations by embedding, as for every
   // other source. Alternative: a certatlas:exam:<id> tag per objective. It
   // keeps the exam, but a title that fifty exams repeat (Overview) would hit the
   // tag cap, and nothing reads the tag.
-  // REVIEW: A domain with no objectives yields no skill. Alternative: make the
+  // A domain with no objectives yields no skill. Alternative: make the
   // domain a skill. Its names are exam sections (Reading, Writing), not skills.
   {
     const path = "data/certatlas/exams.json.gz";
@@ -1231,7 +1231,7 @@ export function stageList() {
   }
 
   const out = [...byKey.values()];
-  // REVIEW: Stage list writes the node-to-skill map, because the tag cap (20)
+  // Stage list writes the node-to-skill map, because the tag cap (20)
   // would lose most of the ids of a statement that fifty states repeat.
   // Alternative: a lc:<id> tag per node. It needs no file but loses nodes past
   // the cap, and buildsTowards seed pairs then fail to resolve.

@@ -958,7 +958,7 @@ export function stageDedupe() {
   // the cosine test decides. A pair whose skills share a code:* tag with
   // OpenSALT needs 0.90, because the code is evidence. A pair that the graph
   // marks hasStandardAlignment needs the full DEDUPE_COSINE.
-  // REVIEW: A shared code is a candidate, not an automatic merge. Alternative:
+  // A shared code is a candidate, not an automatic merge. Alternative:
   // merge every LC x OpenSALT pair that shares a code. It is free, but the same
   // code means different standards in different states ("3.1.1"), and a wrong
   // merge fuses two skills and their prereqs.
@@ -1277,7 +1277,7 @@ export function stageDifficulty() {
     }
   }
 
-  // REVIEW: The 4 named DigComp levels take the job-zone anchor scale
+  // The 4 named DigComp levels take the job-zone anchor scale
   // (11.5 + 1.5 * zone, zones 1 to 4), because both rate adult skill. Alternative:
   // a separate scale. It needs a fourth anchor source and a calibration of its own.
   let digcompAnchored = 0;

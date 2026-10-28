@@ -81,7 +81,7 @@ const readDifficultyRaw = () =>
 const ANOMALOUS_HUB_RE =
   /retell-stories-related-to.*-day|^sced-|language-immersion-prior|understand-object-naming-and-naming-conventions|^(leadership|assisted-reading|corrective-reading|study-hall)$/;
 
-// REVIEW: Placeholders. The full-build entry in todo.md sets all three from the
+// Placeholders. The full-build entry in todo.md sets all three from the
 // first `deno task status` on a real build. Alternative: derive them from the
 // seed edges' own precision. It needs a build that held seeds out.
 const EXPERT_PRECISION_FLOOR = 0.05;
