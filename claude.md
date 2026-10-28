@@ -219,6 +219,22 @@ filtered extract that git tracks. One JSON object per line, `k` names the kind:
 
 The version sits in one constant, `LC_VERSION`, in `data/download.ts`.
 
+### data/lecturebank/ — LectureBank Expert Prerequisite Pairs (gitignored clone)
+
+From github.com/Yale-LILY/LectureBank. The repo states no licence, so git does
+not track the clone; `data/download.ts` clones it (depth 1). Stage `seed-edges`
+does not read it: the pairs are held out for `deno task status`. All files sit
+under `LB-Paper/`:
+
+- **208topics.csv** + **prerequisite_annotation.csv** (LB1),
+  **LectureBank2/data/322topics_final.tsv** + **final_new_annotation.csv**
+  (LB2), **LectureBankCD/data/{CV,BIO}.topics.tsv** +
+  **{CV,BIO}.annotation.csv**.
+- An annotation row `A,B,1` means topic A is a prerequisite of topic B. A file
+  lists every ordered pair of its topics, so a `0` is a real negative.
+- `readLectureBank` (`lib.ts`) reads the four sets. A row that names a topic id
+  with no name in its topic file is counted and dropped (LB1 ids 210 and 211).
+
 ### data/opensalt/ — OpenSALT Standards Frameworks (CASE JSON)
 
 K-12 standards frameworks from opensalt.net in 1EdTech CASE format. Includes
@@ -328,7 +344,13 @@ files).
   output, plus fixture runs of the other stages. Keep it under 10 s: start each
   fixture run at module load so the runs overlap.
 - `deno task status` — grades the last full build; exits 1 when any condition
-  scores below 1.0. snitch runs it hourly.
+  scores below 1.0. snitch runs it hourly. Three conditions grade the edges
+  against the LectureBank pairs: the matched-pair count, precision, and recall.
+  `status` resolves the topic names with `resolveConcept`, then
+  `embeddingFallback` (`lib.ts`, shared with stage `seed-edges`; it calls Ollama
+  for names with no exact skill, and the embedding cache keeps later runs
+  offline). Precision counts the `skills.tsv` edges whose pair an expert
+  annotated. Recall counts the positive pairs inside the transitive closure.
 
 ## Output Files
 

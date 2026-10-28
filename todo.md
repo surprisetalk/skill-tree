@@ -1,20 +1,5 @@
 ## Next
 
-- [ ] `deno task status` reports the precision and recall of the prereq edges
-      against held-out expert pairs. The pairs come from no source that stage
-      `seed-edges` reads.
-  1. `data/download.ts` clones `github.com/Yale-LILY/LectureBank` (depth 1) into
-     `data/lecturebank/`, and `.gitignore` covers it. The repo states no
-     licence, so git must not track a copy.
-  2. Resolve the topic names of LB1, LB2, and LectureBankCD (CV, BIO) to skill
-     ids with the stage `seed-edges` resolver.
-  3. Over the pairs whose two topics both resolve: precision = predicted edges
-     in the positive set ÷ predicted edges; recall = positive pairs in the
-     transitive closure of `skills.tsv` ÷ positive pairs.
-  4. Add both as status conditions, with the matched-pair count beside them,
-     because few matches make the score noise. The full-build entry sets the
-     floors.
-
 - [ ] Certification prerequisites order the Cert Atlas objectives in
       `skills.tsv`.
   1. `certAtlas()` in `data/download.ts` keeps `prerequisites` and
@@ -73,8 +58,14 @@
      Show both counts. Then decide: restore a seed-ordered raw, have stage
      `prereq` read `band`, or keep raw as is.
   10. Run `prereq`, `postproc`, and `finalize`.
-  11. Run `deno task status`. Set the floors of the expert-pair precision and
-      recall conditions. Write a todo entry for each condition below 1.0.
+  11. Run `deno task status`. The three LectureBank conditions use placeholder
+      floors (`EXPERT_PRECISION_FLOOR`, `EXPERT_RECALL_FLOOR`,
+      `EXPERT_MIN_POSITIVES` in pipeline.ts, marked `REVIEW`). Set them from the
+      run's precision, recall, and matched count (stderr line
+      `expert
+      pairs:`), then delete the `REVIEW` prefix. The first run
+      embeds about 500 topic names with Ollama. Write a todo entry for each
+      condition below 1.0.
   12. Seed conditions: if `seed_anchor_conflicts` is high, look for unanchored
       seed chains longer than 20. Stage `difficulty` drops every pair of such a
       chain, where dropping the fewest would do. If `seed_cycle_pairs` is high,

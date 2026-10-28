@@ -6,17 +6,13 @@ import {
   cleanDef,
   col,
   decodeEntities,
-  EMBED_DIM,
-  embedBatch,
+  embeddingFallback,
   h32,
   HAN_RE,
   isTranslation,
   LC_EXTRACT,
   LC_IDS,
-  loadRawEmbeddings,
   loadTsvCache,
-  normalize,
-  normalizedEmbeddingsForSkills,
   readCoursePairs,
   readCsv,
   readJson,
@@ -1972,61 +1968,11 @@ export async function stageSeedEdges() {
   );
 
   // Embedding fallback.
-  const FALLBACK = 0.90;
-  const sigTokens = (s: string): Set<string> => {
-    const out = new Set<string>();
-    for (
-      const t of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
-        .filter(Boolean)
-    ) {
-      if (t.length >= 3 && !STOPWORDS.has(t)) out.add(t);
-    }
-    return out;
-  };
-  const titleById = new Map(tagged.map((s) => [s.id, s.title]));
   const dropReason = new Map<string, string>();
   if (unresolved.size > 0) {
-    const { ids: embIds } = loadRawEmbeddings();
-    const matIds = embIds.filter((id) => idx.idSet.has(id));
-    const mat = normalizedEmbeddingsForSkills(matIds);
-    console.log(
-      `[seed-edges] active vectors: ${matIds.length}/${embIds.length}`,
-    );
-    const labels = [...unresolved];
-    const labelVecs = (await embedBatch(labels, "seed-edges")).map((v, i) =>
-      normalize(v, `seed label "${labels[i]}"`)
-    );
-    let matched = 0;
-    for (let li = 0; li < labels.length; li++) {
-      const lv = labelVecs[li];
-      let best = -1, bestScore = FALLBACK;
-      for (let si = 0; si < matIds.length; si++) {
-        const sv = mat.subarray(si * EMBED_DIM, (si + 1) * EMBED_DIM);
-        let dot = 0;
-        for (let k = 0; k < EMBED_DIM; k++) dot += lv[k] * sv[k];
-        if (dot > bestScore) {
-          bestScore = dot;
-          best = si;
-        }
-      }
-      if (best < 0) {
-        dropReason.set(labels[li], `below-cos-${FALLBACK}`);
-        continue;
-      }
-      const lt = sigTokens(labels[li]);
-      const tt = sigTokens(titleById.get(matIds[best]) || matIds[best]);
-      let overlap = 0;
-      for (const t of lt) if (tt.has(t)) overlap++;
-      if (overlap === 0 || lt.size === 0) {
-        dropReason.set(labels[li], "no-token-overlap");
-        continue;
-      }
-      labelToId.set(labels[li], matIds[best]);
-      matched++;
-    }
-    console.log(
-      `[seed-edges] fallback matched ${matched}/${labels.length} @ cos≥${FALLBACK}`,
-    );
+    const fb = await embeddingFallback([...unresolved], tagged, "seed-edges");
+    for (const [lbl, id] of fb.matched) labelToId.set(lbl, id);
+    for (const [lbl, why] of fb.dropped) dropReason.set(lbl, why);
   }
 
   // Emit, and quarantine the unresolved pairs.

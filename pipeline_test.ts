@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertGreater } from "@std/assert";
+import { expertScores } from "./lib.ts";
 
 // Stage list runs in seconds without Ollama. The other stages need Ollama or
 // minutes, so they answer to `deno task status`.
@@ -119,6 +120,32 @@ const gzip = async (text: string) =>
 const MOOC_GZ = await gzip(
   '{"c1":"函数","c2":"欧拉函数","ground_truth":1}\n{"c1":"集合","c2":"函数","ground_truth":0}\n',
 );
+// LectureBank files in the layout of the clone. Topics: 1 counting, 2 addition,
+// 3 calculus, 4 multiplication. Pair 1->2 is a graph edge, 2->3 sits two edges
+// apart, 1->4 likewise, and 1->3 is annotated 0 with no edge. Topic 9 has no
+// name, as ids 210 and 211 have none in LB1.
+const lbFixture = (
+  positives = ["1,2,1", "2,3,1", "1,4,1", "1,3,0", "9,1,1"],
+): Fixture => {
+  const names = ["counting", "addition", "calculus", "multiplication"];
+  const d = "data/lecturebank/LB-Paper";
+  const ann = positives.join("\n") + "\n";
+  const topics = (sep: string) =>
+    names.map((n, i) => `${i + 1}${sep}${n}`).join("\r\n") + "\r\n";
+  return {
+    [`${d}/208topics.csv`]:
+      names.map((n, i) =>
+        `${i + 1},${n}${i == 2 ? ",NULL,NULL" : ",http://x/y"}`
+      ).join("\n") + "\n",
+    [`${d}/prerequisite_annotation.csv`]: ann,
+    [`${d}/LectureBank2/data/322topics_final.tsv`]: topics("|"),
+    [`${d}/LectureBank2/data/final_new_annotation.csv`]: ann,
+    [`${d}/LectureBankCD/data/CV.topics.tsv`]: topics("\t"),
+    [`${d}/LectureBankCD/data/CV.annotation.csv`]: ann,
+    [`${d}/LectureBankCD/data/BIO.topics.tsv`]: topics("\t"),
+    [`${d}/LectureBankCD/data/BIO.annotation.csv`]: ann,
+  };
+};
 const goodBuild = (): Fixture => {
   const skills: [string, number, string, string, string][] = [
     ["counting", 1, "", "", ""],
@@ -168,6 +195,7 @@ const goodBuild = (): Fixture => {
     "data/mooccubex/cs.json.gz": MOOC_GZ,
     "data/mooccubex/math.json.gz": MOOC_GZ,
     "data/mooccubex/psy.json.gz": MOOC_GZ,
+    ...lbFixture(),
   };
 };
 
@@ -1507,3 +1535,65 @@ const [header, ...rows] = Deno.readTextFileSync("build/1_skills.tsv").split(
   "\n",
 )
   .filter((l) => l.length).map((l) => l.split("\t"));
+
+Deno.test("expertScores: precision counts annotated edges only, recall follows the closure", () => {
+  const graph = new Map([
+    ["a", []],
+    ["b", ["a"]],
+    ["c", ["b"]],
+    ["z", ["a"]],
+    ["q", ["b"]], // an edge with no annotation
+  ]);
+  const pair = (pre: string, dep: string, positive: boolean) => ({
+    pre,
+    dep,
+    positive,
+  });
+  const r = expertScores(graph, [
+    pair("a", "b", false), // a repeat: the positive one wins
+    pair("a", "b", true), // edge, hit
+    pair("a", "c", true), // two edges apart: recall only
+    pair("b", "c", true), // edge, hit
+    pair("a", "z", false), // edge, miss
+    pair("c", "a", true), // reversed: recall miss
+    pair("a", "a", true), // self pair: skipped
+  ]);
+  assertEquals(r, { positives: 4, predicted: 3, hits: 2, recovered: 3 });
+});
+
+Deno.test(
+  "status: expert pairs the graph misses score 0 on precision and recall",
+  early(async () => {
+    const build = {
+      ...goodBuild(),
+      ...lbFixture(["2,1,1", "3,2,1", "3,1,1", "1,2,0"]),
+    };
+    const { code, score } = await runIn("status", build);
+    assertEquals(code, 1);
+    for (
+      const name of [
+        "Expert prereq edges have precision above the floor.",
+        "Expert prereq pairs have recall above the floor.",
+      ]
+    ) assertEquals(score(name), 0, name);
+    assertEquals(
+      score("Enough expert prereq pairs resolve to skills to grade them."),
+      1,
+    );
+  }),
+);
+
+Deno.test(
+  "status: a missing LectureBank clone scores 0 and names the downloader",
+  early(async () => {
+    const build = goodBuild();
+    for (const k of Object.keys(lbFixture())) delete build[k];
+    const { code, score, stderr } = await runIn("status", build);
+    assertEquals(code, 1);
+    assertEquals(
+      score("Enough expert prereq pairs resolve to skills to grade them."),
+      0,
+    );
+    assert(stderr.includes("Run: deno run -A data/download.ts"), stderr);
+  }),
+);

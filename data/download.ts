@@ -11,10 +11,13 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function run(cmd: string[], cwd?: string) {
+async function run(cmd: string[], cwd?: string, timeoutMs?: number) {
   const p = new Deno.Command(cmd[0], {
     args: cmd.slice(1),
     cwd,
+    signal: timeoutMs === undefined
+      ? undefined
+      : AbortSignal.timeout(timeoutMs),
     stdout: "inherit",
     stderr: "inherit",
   });
@@ -416,6 +419,28 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
     fn: courses,
   },
   { label: "cert atlas exam objectives (1 MB gzipped)", fn: certAtlas },
+  {
+    label: "lecturebank expert prerequisite pairs (9 MB clone, eval only)",
+    fn: async () => {
+      const dir = DATA + "lecturebank";
+      if (await exists(dir + "/LB-Paper")) {
+        console.log("  skip: already cloned");
+        return;
+      }
+      // The repo states no licence, so .gitignore keeps the clone out of git.
+      await run(
+        [
+          "git",
+          "clone",
+          "--depth=1",
+          "https://github.com/Yale-LILY/LectureBank.git",
+          dir,
+        ],
+        undefined,
+        5 * 60_000,
+      );
+    },
+  },
 ];
 
 // University course prerequisites (Mendeley fs2hvkps7z v2, CC BY 4.0). The raw

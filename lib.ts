@@ -1366,3 +1366,201 @@ export function gradeToDifficulty(token: string): number | null {
   if (/AP|COLLEGE|UG|UNDERGRAD/.test(t)) return 15;
   return null;
 }
+
+// Labels with no exact skill, matched by embedding. A match needs cosine
+// >= 0.90 and one shared token. `dropped` maps a label to its reason.
+export async function embeddingFallback(
+  labels: string[],
+  skills: { id: string; title: string }[],
+  stage: string,
+): Promise<{ matched: Map<string, string>; dropped: Map<string, string> }> {
+  const FALLBACK = 0.90;
+  const sigTokens = (s: string): Set<string> => {
+    const out = new Set<string>();
+    for (
+      const t of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+        .filter(Boolean)
+    ) {
+      if (t.length >= 3 && !STOPWORDS.has(t)) out.add(t);
+    }
+    return out;
+  };
+  const idSet = new Set(skills.map((s) => s.id));
+  const titleById = new Map(skills.map((s) => [s.id, s.title]));
+  const matched = new Map<string, string>();
+  const dropped = new Map<string, string>();
+  const { ids: embIds } = loadRawEmbeddings();
+  const matIds = embIds.filter((id) => idSet.has(id));
+  const mat = normalizedEmbeddingsForSkills(matIds);
+  console.log(`[${stage}] active vectors: ${matIds.length}/${embIds.length}`);
+  const labelVecs = (await embedBatch(labels, stage)).map((v, i) =>
+    normalize(v, `label "${labels[i]}"`)
+  );
+  for (let li = 0; li < labels.length; li++) {
+    const lv = labelVecs[li];
+    let best = -1, bestScore = FALLBACK;
+    for (let si = 0; si < matIds.length; si++) {
+      const sv = mat.subarray(si * EMBED_DIM, (si + 1) * EMBED_DIM);
+      let dot = 0;
+      for (let k = 0; k < EMBED_DIM; k++) dot += lv[k] * sv[k];
+      if (dot > bestScore) {
+        bestScore = dot;
+        best = si;
+      }
+    }
+    if (best < 0) {
+      dropped.set(labels[li], `below-cos-${FALLBACK}`);
+      continue;
+    }
+    const lt = sigTokens(labels[li]);
+    const tt = sigTokens(titleById.get(matIds[best]) || matIds[best]);
+    let overlap = 0;
+    for (const t of lt) if (tt.has(t)) overlap++;
+    if (overlap === 0 || lt.size === 0) {
+      dropped.set(labels[li], "no-token-overlap");
+      continue;
+    }
+    matched.set(labels[li], matIds[best]);
+  }
+  console.log(
+    `[${stage}] fallback matched ${matched.size}/${labels.length} @ cos≥${FALLBACK}`,
+  );
+  return { matched, dropped };
+}
+
+// ---------- LectureBank expert prerequisite pairs ----------
+
+const LB = "data/lecturebank/LB-Paper";
+
+export type ExpertPair = { pre: string; dep: string; positive: boolean };
+
+// An annotation row `A,B,1` means topic A is a prerequisite of topic B. Each
+// file lists every ordered pair of its topics, so a 0 is a real negative.
+// REVIEW: A row naming a topic id that its topic file lacks counts as
+// unresolved and is dropped, like a topic that matches no skill. LB1 has 829
+// such rows, 8 of them positive: it names ids 210 and 211 but its topic file
+// stops at 209. Alternative: throw. It blocks the whole eval on an upstream
+// error that no code of ours can fix.
+export function readLectureBank(): { pairs: ExpertPair[]; unnamed: number } {
+  const sets: [string, RegExp, string, string][] = [
+    // LB1 topics are `id,name,url`; the url is `NULL` for some, and a name may hold commas.
+    [
+      "",
+      /^(\d+),(.+?)(?:,(?:NULL|https?:\/\/[^,]*))+$/,
+      "208topics.csv",
+      "prerequisite_annotation.csv",
+    ],
+    [
+      "LectureBank2/data/",
+      /^(\d+)\|(.+)$/,
+      "322topics_final.tsv",
+      "final_new_annotation.csv",
+    ],
+    [
+      "LectureBankCD/data/",
+      /^(\d+)\t(.+)$/,
+      "CV.topics.tsv",
+      "CV.annotation.csv",
+    ],
+    [
+      "LectureBankCD/data/",
+      /^(\d+)\t(.+)$/,
+      "BIO.topics.tsv",
+      "BIO.annotation.csv",
+    ],
+  ];
+  const lines = (path: string): [number, string][] => {
+    let text: string;
+    try {
+      text = Deno.readTextFileSync(path);
+    } catch (e) {
+      if (!(e instanceof Deno.errors.NotFound)) throw e;
+      throw new Deno.errors.NotFound(
+        `${path}: missing. Run: deno run -A data/download.ts`,
+      );
+    }
+    return text.split("\n").map((
+      l,
+      i,
+    ): [number, string] => [i + 1, l.replace(/\r$/, "")]).filter(([, l]) => l);
+  };
+  const pairs: ExpertPair[] = [];
+  let unnamed = 0;
+  for (const [dir, topicRe, topicsFile, annFile] of sets) {
+    const names = new Map<string, string>();
+    for (const [n, l] of lines(`${LB}/${dir}${topicsFile}`)) {
+      const m = l.match(topicRe);
+      if (!m || names.has(m[1])) {
+        throw new Error(
+          `${LB}/${dir}${topicsFile}:${n}: expected a topic line with a new id, received ${
+            JSON.stringify(l.slice(0, 80))
+          }. The LectureBank format changed: update readLectureBank in lib.ts.`,
+        );
+      }
+      names.set(m[1], m[2].trim());
+    }
+    for (const [n, l] of lines(`${LB}/${dir}${annFile}`)) {
+      const m = l.match(/^(\d+),(\d+),([01])$/);
+      if (!m) {
+        throw new Error(
+          `${LB}/${dir}${annFile}:${n}: expected "topic,topic,0|1", received ${
+            JSON.stringify(l.slice(0, 80))
+          }. The LectureBank format changed: update readLectureBank in lib.ts.`,
+        );
+      }
+      const pre = names.get(m[1]), dep = names.get(m[2]);
+      if (pre && dep) pairs.push({ pre, dep, positive: m[3] === "1" });
+      else unnamed++;
+    }
+  }
+  return { pairs, unnamed };
+}
+
+// Pairs are skill ids. `graph` maps a skill to its direct prereqs. A pair is
+// annotated once, and positive when any set marks it so.
+// REVIEW: Precision counts only the graph edges whose pair an expert annotated,
+// because an unannotated edge has no label. Alternative: divide by every edge
+// between matched topics. It reads a missing annotation as a wrong edge.
+export function expertScores(
+  graph: Map<string, string[]>,
+  pairs: ExpertPair[],
+): { positives: number; predicted: number; hits: number; recovered: number } {
+  const annotated = new Map<string, boolean>();
+  for (const p of pairs) {
+    if (p.pre === p.dep) continue;
+    const k = `${p.pre}\t${p.dep}`;
+    annotated.set(k, annotated.get(k) || p.positive);
+  }
+  let predicted = 0, hits = 0;
+  for (const [dep, pres] of graph) {
+    for (const pre of pres) {
+      const positive = annotated.get(`${pre}\t${dep}`);
+      if (positive === undefined) continue;
+      predicted++;
+      if (positive) hits++;
+    }
+  }
+  const ancestors = new Map<string, Set<string>>();
+  const above = (id: string): Set<string> => {
+    let seen = ancestors.get(id);
+    if (seen) return seen;
+    seen = new Set();
+    const stack = [...graph.get(id) ?? []];
+    while (stack.length) {
+      const u = stack.pop()!;
+      if (seen.has(u)) continue;
+      seen.add(u);
+      stack.push(...graph.get(u) ?? []);
+    }
+    ancestors.set(id, seen);
+    return seen;
+  };
+  let positives = 0, recovered = 0;
+  for (const [k, positive] of annotated) {
+    if (!positive) continue;
+    positives++;
+    const [pre, dep] = k.split("\t");
+    if (above(dep).has(pre)) recovered++;
+  }
+  return { positives, predicted, hits, recovered };
+}

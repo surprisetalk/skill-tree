@@ -4,6 +4,9 @@ data/mooccubex/*.json
 data/dbpedia/article_categories_en.ttl.bz2
 data/lcsh/*.nt
 
+# LectureBank states no licence: a local eval clone only
+data/lecturebank/
+
 # pipeline stage caches + final output
 build/*
 # keep LLM-generated outputs — paid to produce, stochastic, non-reproducible

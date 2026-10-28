@@ -6,6 +6,8 @@ import { stageDedupe, stageDifficulty, stageEmbed, stageTag } from "./graph.ts";
 import {
   BUILD,
   EMBED_DIM,
+  embeddingFallback,
+  expertScores,
   HAN_RE,
   isJunkTopic,
   isTranslation,
@@ -15,11 +17,14 @@ import {
   PREREQS,
   readDifficulty,
   readJson,
+  readLectureBank,
   readMoocPairs,
   readSeeds,
   readTable,
   rerun,
+  resolveConcept,
   SKILL_LIST,
+  skillIndex,
   SKILLS_OUT,
   topoOrder,
   TRANSLATE_CACHE,
@@ -52,6 +57,7 @@ function grade(value: number, pass: number, fail: number): number {
 
 type StatusSkill = {
   id: string;
+  title: string;
   band: number;
   prereqs: string[];
   occupations: string[];
@@ -61,6 +67,7 @@ type StatusSkill = {
 function readSkillsTsv(): StatusSkill[] {
   return readTable(SKILLS_OUT).map((r) => ({
     id: r.id,
+    title: r.title,
     band: r.difficulty,
     prereqs: r.prereqs,
     occupations: r.occupations,
@@ -73,6 +80,13 @@ const readDifficultyRaw = () =>
 
 const ANOMALOUS_HUB_RE =
   /retell-stories-related-to.*-day|^sced-|language-immersion-prior|understand-object-naming-and-naming-conventions|^(leadership|assisted-reading|corrective-reading|study-hall)$/;
+
+// REVIEW: Placeholders. The full-build entry in todo.md sets all three from the
+// first `deno task status` on a real build. Alternative: derive them from the
+// seed edges' own precision. It needs a build that held seeds out.
+const EXPERT_PRECISION_FLOOR = 0.05;
+const EXPERT_RECALL_FLOOR = 0.05;
+const EXPERT_MIN_POSITIVES = 3;
 
 async function stageStatus() {
   let cached: StatusSkill[] | undefined;
@@ -93,6 +107,38 @@ async function stageStatus() {
     }
     return v;
   };
+
+  // Expert pairs, as skill ids. A pair whose topic matches no skill drops out.
+  let expertP: Promise<ReturnType<typeof expertScores>> | undefined;
+  const expert = () =>
+    expertP ??= (async () => {
+      const { pairs, unnamed } = readLectureBank();
+      const labels = [...new Set(pairs.flatMap((p) => [p.pre, p.dep]))];
+      const idx = skillIndex(skills());
+      const ids = new Map(labels.map((l) => [l, resolveConcept(l, idx)]));
+      const misses = labels.filter((l) => !ids.get(l));
+      if (misses.length) {
+        const fb = await embeddingFallback(misses, skills(), "status");
+        for (const [l, id] of fb.matched) ids.set(l, id);
+      }
+      const matched = pairs.flatMap((p) => {
+        const pre = ids.get(p.pre), dep = ids.get(p.dep);
+        return pre && dep ? [{ pre, dep, positive: p.positive }] : [];
+      });
+      const r = expertScores(
+        new Map(skills().map((s) => [s.id, s.prereqs])),
+        matched,
+      );
+      console.error(
+        `expert pairs: ${matched.length}/${pairs.length} annotated pairs resolve, ${unnamed} more name no topic; ${r.positives} positive, ${r.predicted} predicted edges, ${r.hits} hits, ${r.recovered} recovered`,
+      );
+      if (!r.positives || !r.predicted) {
+        throw new Error(
+          `data/lecturebank: expected at least 1 positive pair and 1 predicted edge among resolved topics, received ${r.positives} positive and ${r.predicted} predicted. Too few topics resolve to skills.tsv: rerun the full build, or check the topic names.`,
+        );
+      }
+      return r;
+    })();
 
   const conditions: [string, () => number | Promise<number>][] = [
     ["The prereq graph is a DAG, and every prereq names another skill.", () => {
@@ -322,6 +368,24 @@ async function stageStatus() {
           ),
         ];
         return grade(checks.filter((c) => !c).length / checks.length, 0, 1);
+      },
+    ],
+    [
+      "Enough expert prereq pairs resolve to skills to grade them.",
+      async () => grade((await expert()).positives, EXPERT_MIN_POSITIVES, 0),
+    ],
+    [
+      "Expert prereq edges have precision above the floor.",
+      async () => {
+        const r = await expert();
+        return grade(r.hits / r.predicted, EXPERT_PRECISION_FLOOR, 0);
+      },
+    ],
+    [
+      "Expert prereq pairs have recall above the floor.",
+      async () => {
+        const r = await expert();
+        return grade(r.recovered / r.positives, EXPERT_RECALL_FLOOR, 0);
       },
     ],
     ["The build disk has at least 10 GB free.", async () => {
