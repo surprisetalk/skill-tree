@@ -152,6 +152,23 @@ is a JSON object:
   `build/1f_translate.tsv`. Stage `seed-edges` throws on a label with no
   translation.
 
+### data/courses/ — University Course Prerequisites (CSV, gzipped in git)
+
+From data.mendeley.com/datasets/fs2hvkps7z (CC BY 4.0): catalogs of 13
+universities, 32 editions. `data/download.ts` checks the SHA-256 of each file,
+then keeps the gzip only. Uncompressed .csv files are gitignored.
+
+- **courses.csv.gz** — one row per course per edition. Stage `seed-edges` reads
+  `dataset, code, title`.
+- **prereq_edges.csv.gz** —
+  `institution, dataset, edition, source_prereq, target_course, group_index, is_alternative, timing, min_grade`.
+  A code means one course only inside its `dataset`. `timing` is `before`,
+  `concurrent`, or `before_or_concurrent`; only `before` is a prereq. Rows of
+  one OR group (`is_alternative` 1) each make a pair.
+- `readCoursePairs` (`lib.ts`) joins codes to titles and dedupes by title pair.
+  A code with no course, two titles, or an empty title goes to
+  `1e_unresolved.tsv` with that reason.
+
 ### data/khanacademy/ — Khan Academy Math Prerequisite Graph (TSV)
 
 Community-mapped prerequisite graph of Khan Academy math exercises, from
@@ -257,14 +274,14 @@ A new build table gets a schema; a new id goes through `slugify`.
   `grade:*`, and `code:<statementCode>`. A `buildsTowards` endpoint also gets
   `learningcommons:coherence` and skips the long-title drop. Other sources keep
   `<…>` as text.
-- Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, OpenSALT
-  precedes, OpenSALT within-framework grade ordering, Learning Commons
-  `buildsTowards`. The last resolves through `build/1m_lc_ids.tsv` and
-  `3b_aliases.tsv`, not by label. A pair with an end that stage `list` dropped
-  goes to `build/1e_unresolved.tsv` with reason `no-skill`. Pairs resolve to
-  skill IDs by exact match, then by embedding (cosine ≥ 0.90 and a shared
-  token). Unresolved pairs go to `build/1e_unresolved.tsv` with a reason per
-  label.
+- Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, course
+  prerequisites, OpenSALT precedes, OpenSALT within-framework grade ordering,
+  Learning Commons `buildsTowards`. The last resolves through
+  `build/1m_lc_ids.tsv` and `3b_aliases.tsv`, not by label. A pair with an end
+  that stage `list` dropped goes to `build/1e_unresolved.tsv` with reason
+  `no-skill`. Pairs resolve to skill IDs by exact match, then by embedding
+  (cosine ≥ 0.90 and a shared token). Unresolved pairs go to
+  `build/1e_unresolved.tsv` with a reason per label.
 - Stage `trees`: LCSH (gunzip) and DBpedia (bzcat) SKOS broader chains, cached
   as `slug → ancestors[]`. The same pass picks each dump's 5000 most-used
   broader targets as the topic refs of stage `tag`.
@@ -341,7 +358,7 @@ Caches for per-stage resumption. Key files:
   `1e_opensalt_desc.tsv`, `1f_translate.tsv` — Ollama enrichment caches,
   `key<TAB>value`.
 - `1e_seed_edges.tsv` — resolved expert-labeled prereq pairs from
-  Khan/AL-CPL/Metacademy/MOOCCubeX/OpenSALT.
+  Khan/AL-CPL/Metacademy/MOOCCubeX/courses/OpenSALT.
 - `1e_unresolved.tsv` — seed pairs that failed to resolve, with a reason per
   label (below-cos / no-token-overlap / no-match).
 - `1j_lcsh_tree.tsv`, `1k_dbpedia_tree.tsv` — SKOS broader-chain caches:

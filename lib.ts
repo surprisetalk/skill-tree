@@ -672,6 +672,111 @@ export async function readMoocPairs(): Promise<MoocPair[]> {
   return pairs;
 }
 
+// ---------- University course prerequisites ----------
+
+const TIMINGS = ["before", "concurrent", "before_or_concurrent"] as const;
+
+// Mendeley fs2hvkps7z: a prerequisite edge names course codes, and a code means
+// one course only inside its dataset (institution and edition). The join gives
+// each code its title. Only timing "before" is a prerequisite. Each row of an
+// OR group is its own pair.
+// REVIEW: Treat each alternative of an OR group as a full prereq. Alternative:
+// drop every is_alternative edge. It keeps only the mandatory edges and loses
+// a quarter of the edges, and every course whose prereq is an "or".
+// REVIEW: Key the pair on the two titles, so one pair stands for the many
+// editions of a course. Alternative: keep one pair per edition. It counts a
+// course once per catalog year and gives the 11-edition university 11 votes.
+export async function readCoursePairs(): Promise<{
+  pairs: { src: string; dst: string; raw: string }[];
+  dropped: { from: string; to: string; raw: string; reason: string }[];
+  timingCounts: Record<(typeof TIMINGS)[number], number>;
+}> {
+  const read = async (name: string): Promise<string[][]> => {
+    const path = `data/courses/${name}.csv.gz`;
+    try {
+      const stream = new Blob([Deno.readFileSync(path)]).stream().pipeThrough(
+        new DecompressionStream("gzip"),
+      );
+      return headed(
+        path,
+        parseCsvText(await new Response(stream).text(), { fieldsPerRecord: 0 }),
+      );
+    } catch (e) {
+      if (e instanceof Deno.errors.NotFound) throw e;
+      throw new Error(
+        `${path}: expected a gzip file of RFC 4180 CSV with a constant field count, received ${
+          (e as Error).message
+        }. Re-download it: deno run -A data/download.ts`,
+      );
+    }
+  };
+  const clean = (t: string) => t.replace(/\s+/g, " ").trim();
+  const courses = await read("courses");
+  const iDs = col(courses, "dataset", "data/courses/courses.csv.gz"),
+    iCode = col(courses, "code", "data/courses/courses.csv.gz"),
+    iTitle = col(courses, "title", "data/courses/courses.csv.gz");
+  // A code printed twice with different titles is a parse artifact in the
+  // source: the pair has no sure title.
+  const titles = new Map<string, Set<string>>();
+  for (const c of courses.slice(1)) {
+    const k = `${c[iDs]}\t${c[iCode]}`;
+    if (!titles.has(k)) titles.set(k, new Set());
+    titles.get(k)!.add(clean(c[iTitle]));
+  }
+  const edgesPath = "data/courses/prereq_edges.csv.gz";
+  const edges = await read("prereq_edges");
+  const iD = col(edges, "dataset", edgesPath),
+    iS = col(edges, "source_prereq", edgesPath),
+    iT = col(edges, "target_course", edgesPath),
+    iAlt = col(edges, "is_alternative", edgesPath),
+    iTiming = col(edges, "timing", edgesPath);
+  const timingCounts = { before: 0, concurrent: 0, before_or_concurrent: 0 };
+  const pairs: { src: string; dst: string; raw: string }[] = [];
+  const dropped: { from: string; to: string; raw: string; reason: string }[] =
+    [];
+  const seen = new Set<string>();
+  for (const [i, e] of edges.slice(1).entries()) {
+    const timing = e[iTiming] as (typeof TIMINGS)[number];
+    if (!TIMINGS.includes(timing)) {
+      throw new Error(
+        `${edgesPath}:${
+          i + 2
+        }: expected timing as before, concurrent, or before_or_concurrent, received ${
+          JSON.stringify(e[iTiming])
+        }. The source schema changed: read its data_dictionary.csv.`,
+      );
+    }
+    if (e[iAlt] !== "0" && e[iAlt] !== "1") {
+      throw new Error(
+        `${edgesPath}:${i + 2}: expected is_alternative as 0 or 1, received ${
+          JSON.stringify(e[iAlt])
+        }. The source schema changed: read its data_dictionary.csv.`,
+      );
+    }
+    timingCounts[timing]++;
+    if (timing !== "before") continue;
+    const raw = `${e[iD]}:${e[iS]}->${e[iT]}`;
+    const title = (code: string): { t: string } | { reason: string } => {
+      const t = titles.get(`${e[iD]}\t${code}`);
+      if (!t) return { reason: "no-course" };
+      if (t.size > 1) return { reason: "ambiguous-code" };
+      const [only] = t;
+      return only ? { t: only } : { reason: "no-title" };
+    };
+    const src = title(e[iS]), dst = title(e[iT]);
+    if ("reason" in src || "reason" in dst) {
+      const reason = "reason" in src
+        ? src.reason
+        : (dst as { reason: string }).reason;
+      dropped.push({ from: e[iS], to: e[iT], raw, reason });
+    } else if (!seen.has(`${src.t}\t${dst.t}`)) {
+      seen.add(`${src.t}\t${dst.t}`);
+      pairs.push({ src: src.t, dst: dst.t, raw });
+    }
+  }
+  return { pairs, dropped, timingCounts };
+}
+
 // Unchecked: each caller validates the fields it reads.
 export function readJson<T = unknown>(path: string): T {
   const text = Deno.readTextFileSync(path);

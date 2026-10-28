@@ -17,6 +17,7 @@ import {
   loadTsvCache,
   normalize,
   normalizedEmbeddingsForSkills,
+  readCoursePairs,
   readCsv,
   readJson,
   readLearningCommons,
@@ -1678,6 +1679,13 @@ export async function stageSeedEdges() {
     }
   }
 
+  // University course prerequisites
+  const courses = await readCoursePairs();
+  for (const p of courses.pairs) addRaw(p.src, p.dst, "courses", p.raw);
+  console.log(
+    `[seed-edges] courses: ${courses.pairs.length} title pairs from ${courses.timingCounts.before} before-edges (${courses.timingCounts.concurrent} concurrent and ${courses.timingCounts.before_or_concurrent} before_or_concurrent edges skipped), ${courses.dropped.length} dropped`,
+  );
+
   // OpenSALT precedes
   {
     for (const f of readDirSorted("data/opensalt")) {
@@ -2023,6 +2031,14 @@ export async function stageSeedEdges() {
         `${d.from}\t${d.to}\tlearningcommons\t${d.raw}\t${d.reason}\t${d.reason}`,
       );
     }
+  }
+  // Course edges whose code has no sure title carry no label to resolve.
+  (perSource.courses ??= { total: 0, resolved: 0 }).total +=
+    courses.dropped.length;
+  for (const d of courses.dropped) {
+    quarantine.push(
+      `${d.from}\t${d.to}\tcourses\t${d.raw}\t${d.reason}\t${d.reason}`,
+    );
   }
   Deno.writeTextFileSync(
     `${BUILD}/1e_unresolved.tsv`,

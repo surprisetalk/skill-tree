@@ -897,6 +897,121 @@ Deno.test("lcSeedEdges: buildsTowards runs prereq to dependent through aliases; 
   }
 });
 
+const gz = async (text: string) =>
+  new Uint8Array(
+    await new Response(
+      new Blob([text]).stream().pipeThrough(new CompressionStream("gzip")),
+    ).arrayBuffer(),
+  );
+
+// Header columns are the ones the reader uses plus noise the real files carry.
+const COURSE_HEAD = "dataset,code,title,description\n";
+const EDGE_HEAD =
+  "institution,dataset,edition,source_prereq,target_course,group_index,is_alternative,timing,min_grade\n";
+const edgeRow = (
+  ds: string,
+  src: string,
+  dst: string,
+  group: number,
+  alt: number,
+  timing: string,
+) => `U,${ds},e,${src},${dst},${group},${alt},${timing},\n`;
+
+async function inCourseDir<T>(
+  courses: string,
+  edges: string,
+  f: (m: typeof import("./lib.ts")) => Promise<T>,
+): Promise<T> {
+  const m = await import("./lib.ts");
+  const dir = Deno.makeTempDirSync();
+  Deno.mkdirSync(`${dir}/data/courses`, { recursive: true });
+  Deno.writeFileSync(`${dir}/data/courses/courses.csv.gz`, await gz(courses));
+  Deno.writeFileSync(
+    `${dir}/data/courses/prereq_edges.csv.gz`,
+    await gz(edges),
+  );
+  const cwd = Deno.cwd();
+  Deno.chdir(dir);
+  try {
+    return await f(m);
+  } finally {
+    Deno.chdir(cwd);
+    Deno.removeSync(dir, { recursive: true });
+  }
+}
+
+Deno.test("readCoursePairs: joins codes to titles, keeps timing before, splits OR groups, quarantines the rest", async () => {
+  const courses = COURSE_HEAD + [
+    'd1,A100,Algebra,"a, b"',
+    "d1,B200,Calculus,",
+    "d1,C300,  Real   Analysis ,",
+    "d1,D400,Topology,",
+    "d1,X1,Software Engineering,",
+    "d1,X1,(continuation),",
+    "d1,E1,,",
+    "d2,A100,Algebra,",
+    "d2,D400,Topology,",
+  ].join("\n") + "\n";
+  const edges = EDGE_HEAD +
+    edgeRow("d1", "A100", "B200", 0, 0, "before") +
+    // One OR group: each alternative alone is a pair.
+    edgeRow("d1", "A100", "C300", 1, 1, "before") +
+    edgeRow("d1", "B200", "C300", 1, 1, "before") +
+    edgeRow("d1", "C300", "D400", 0, 0, "concurrent") +
+    edgeRow("d1", "B200", "D400", 0, 0, "before_or_concurrent") +
+    edgeRow("d1", "Z9", "D400", 0, 0, "before") +
+    edgeRow("d1", "X1", "D400", 0, 0, "before") +
+    edgeRow("d1", "E1", "D400", 0, 0, "before") +
+    // The same titles in another dataset make one pair.
+    edgeRow("d2", "A100", "D400", 0, 0, "before") +
+    edgeRow("d1", "A100", "D400", 0, 0, "before");
+  const r = await inCourseDir(courses, edges, (m) => m.readCoursePairs());
+  assertEquals(r.pairs.map((p) => [p.src, p.dst]), [
+    ["Algebra", "Calculus"],
+    ["Algebra", "Real Analysis"],
+    ["Calculus", "Real Analysis"],
+    ["Algebra", "Topology"],
+  ]);
+  assertEquals(r.pairs[0].raw, "d1:A100->B200");
+  assertEquals(r.dropped.map((d) => [d.raw, d.reason]), [
+    ["d1:Z9->D400", "no-course"],
+    ["d1:X1->D400", "ambiguous-code"],
+    ["d1:E1->D400", "no-title"],
+  ]);
+  assertEquals(r.timingCounts, {
+    before: 8,
+    concurrent: 1,
+    before_or_concurrent: 1,
+  });
+});
+
+Deno.test("readCoursePairs: an unknown timing or alternative flag throws with the line", async () => {
+  const courses = COURSE_HEAD + "d1,A,Algebra,\nd1,B,Calculus,\n";
+  for (
+    const [row, want] of [
+      [
+        edgeRow("d1", "A", "B", 0, 0, "after"),
+        "timing as before, concurrent, or before_or_concurrent",
+      ],
+      [edgeRow("d1", "A", "B", 0, 2, "before"), "is_alternative as 0 or 1"],
+    ]
+  ) {
+    const err = await inCourseDir(
+      courses,
+      EDGE_HEAD + row,
+      async (m) => {
+        try {
+          await m.readCoursePairs();
+        } catch (e) {
+          return (e as Error).message;
+        }
+        return "";
+      },
+    );
+    assert(err.includes("prereq_edges.csv.gz:2") && err.includes(want), err);
+  }
+});
+
 // Embeddings: one orthogonal axis per group, so a group of rows shares a vector.
 Deno.test(
   "dedupe: a shared code:* tag across OpenSALT and Learning Commons, or an alignment edge, makes a candidate that the cosine test decides",

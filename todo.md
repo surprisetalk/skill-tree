@@ -15,16 +15,6 @@
      because few matches make the score noise. The full-build entry sets the
      floors.
 
-- [ ] University course prerequisites seed skill edges. Source: the Mendeley
-      corpus `fs2hvkps7z` (CC BY 4.0, 13 universities).
-  1. `data/download.ts` fetches `prereq_edges.csv` and `courses.csv` from
-     `data.mendeley.com/public-files/datasets/fs2hvkps7z/files/…` (URLs in
-     `research.md`). Commit them gzipped like MOOCCubeX.
-  2. Stage `seed-edges`: join each edge to the course titles. Resolve each title
-     with the existing resolver. Unresolved titles go to `1e_unresolved.tsv`.
-  3. Keep only `timing = before`. Treat each OR group (`is_alternative`) as its
-     own pair, because each alternative alone meets the requirement.
-
 - [ ] Certification exam objectives appear in `skills.tsv`, tagged with the
       occupations they certify. Source: Cert Atlas.
   1. Read the terms of CompTIA, AWS, and Microsoft for reuse of exam objective

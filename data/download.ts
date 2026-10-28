@@ -411,7 +411,64 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
     fn: learningCommons,
   },
   { label: "digcomp 3.0 outcomes (452 KB)", fn: digcomp },
+  {
+    label: "university course prerequisites (Mendeley; 37 MB, 8 MB gzipped)",
+    fn: courses,
+  },
 ];
+
+// University course prerequisites (Mendeley fs2hvkps7z v2, CC BY 4.0). The raw
+// courses.csv is 34 MB, so git tracks only the gzip. The hashes come from the
+// dataset's public API; a mismatch means the authors published a new version.
+// REVIEW: Pin file ids and SHA-256 hashes of version 2. Alternative: follow the
+// latest version. It picks up fixes but changes the seed edges with no commit.
+const COURSES_URL =
+  "https://data.mendeley.com/public-files/datasets/fs2hvkps7z/files";
+const COURSES_FILES = [
+  {
+    name: "courses",
+    id: "0d6d311c-10fb-465f-8a6a-042cbc32c94d",
+    sha256: "92e5dff5b300adead72aa4a8f070318c047811ca6d187a2fdda19a72c3ca2126",
+  },
+  {
+    name: "prereq_edges",
+    id: "ae042552-52cb-4293-9187-244d2f657630",
+    sha256: "5881d8a74411f61acc3291835a40c44676eefcf6469ebba0dc3495c8feb4ece6",
+  },
+];
+const COURSES_TIMEOUT_MS = 5 * 60_000;
+
+async function courses() {
+  const dir = DATA + "courses";
+  await mkdir(dir);
+  for (const f of COURSES_FILES) {
+    const dest = `${dir}/${f.name}.csv.gz`;
+    if (await exists(dest)) {
+      console.log(`  skip: ${dest} exists`);
+      continue;
+    }
+    const url = `${COURSES_URL}/${f.id}/file_downloaded`;
+    console.log(`  GET ${url}`);
+    const r = await fetch(url, {
+      signal: AbortSignal.timeout(COURSES_TIMEOUT_MS),
+    });
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}: ${url}`);
+    const raw = new Uint8Array(await r.arrayBuffer());
+    const hex = Array.from(
+      new Uint8Array(await crypto.subtle.digest("SHA-256", raw)),
+      (b) => b.toString(16).padStart(2, "0"),
+    ).join("");
+    if (hex !== f.sha256) {
+      throw new Error(
+        `${url}: expected SHA-256 ${f.sha256}, received ${hex}. The authors may have published a new version: check data.mendeley.com/datasets/fs2hvkps7z, then update COURSES_FILES.`,
+      );
+    }
+    const gz = await new Response(
+      new Blob([raw]).stream().pipeThrough(new CompressionStream("gzip")),
+    ).arrayBuffer();
+    await Deno.writeFile(dest, new Uint8Array(gz));
+  }
+}
 
 console.log(`Downloading ${steps.length} datasets to ${DATA}\n`);
 

@@ -27,3 +27,6 @@ skills.tsv.tmp
 
 # agent worktrees
 .claude/worktrees/
+
+# course prerequisites: git tracks the gzip only
+data/courses/*.csv
