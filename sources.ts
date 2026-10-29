@@ -2133,6 +2133,42 @@ export async function stageSeedEdges() {
     if (!prev || (prev.fallback && !e.fallback)) seen.set(k, e);
   }
   const uniq = [...seen.values()];
+  // REVIEW: Each floor is 90% of the resolved share on the first full build
+  // (29 Oct), so a lost source stops the stage, and embedding jitter does not.
+  // Alternative: a status condition. It lets a quarantined source ship.
+  const SEED_FLOORS: Record<string, number> = {
+    khan: 0.535,
+    alcpl_data_mining: 0.172,
+    alcpl_geometry: 0.029,
+    alcpl_physics: 0.044,
+    alcpl_precalculus: 0.072,
+    metacademy: 0.04,
+    metacademy_raw: 0.0137,
+    moocx_cs: 0.0037,
+    moocx_math: 0.0023,
+    moocx_psy: 0.079,
+    courses: 0.0243,
+    opensalt_precedes: 0.0106,
+    opensalt_grade: 0.201,
+    foundation: 0.9,
+    learningcommons: 0.71,
+  };
+  const short = Object.entries(perSource).flatMap(([src, s]) => {
+    const floor = SEED_FLOORS[src];
+    if (floor === undefined) {
+      return [`${src}: no floor in SEED_FLOORS (sources.ts)`];
+    }
+    return s.resolved < floor * s.total
+      ? [`${src}: ${s.resolved}/${s.total} resolved, floor ${floor}`]
+      : [];
+  });
+  if (short.length) {
+    throw new Error(
+      `[seed-edges] expected each source to resolve at or above its floor, received:\n  ${
+        short.join("\n  ")
+      }\nSource: perSource counts in stage seed-edges. Read the reasons in build/1e_unresolved.tsv for that source. If the drop is intended, lower its floor in SEED_FLOORS.`,
+    );
+  }
   writeTable(
     SEEDS,
     uniq.map((e) => [

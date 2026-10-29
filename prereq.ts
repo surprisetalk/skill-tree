@@ -152,8 +152,6 @@ function computePrereqCandidates(): Map<string, number[]> {
   }
   const pathological = new Set(readTable(PATHOLOGICAL).map((r) => r.id));
   const K = 15;
-  // At 0.3, 23% of picks had reversed difficulty.
-  const MIN_DIFF = 1.5;
   const ANCESTOR_K = 5;
   const GLOBAL_K = 5;
   // Shorter tokens ("prepar") link prepare-medication to prepare-pasta.
@@ -194,7 +192,12 @@ function computePrereqCandidates(): Map<string, number[]> {
     const lj = slugLangs[j];
     if (lj && slugLangs[i] && lj !== slugLangs[i]) return false; // R6
     if (gradeGapReject(i, j)) return false; // R2
-    return raw[j] < raw[i] - MIN_DIFF; // DR1 hard guard
+    // REVIEW: A candidate only needs a lower raw than its target. Expert seed
+    // pairs sit close in difficulty: a 1.5 gap admitted 22% of them, fewer than
+    // the 38% of random pairs it admitted, and a 0 gap admits 60%. Alternative:
+    // read the seed-ordered band (51%), or restore the old seed raw, which set
+    // a prereq 1.0 below its dependent and so still failed the 1.5 gap.
+    return raw[j] < raw[i]; // DR1 hard guard
   };
 
   const out = new Map<string, number[]>();
@@ -248,7 +251,7 @@ function computePrereqCandidates(): Map<string, number[]> {
 
     // Ancestor candidates — foundations within same topic (or expanded for advanced skills)
     const ancestorSet = new Set<number>();
-    // R9/R10: top-quintile OR specialized-tool skills get relaxed ancestor MIN_DIFF (0.1 vs 1.5)
+    // R9/R10: top-quintile OR specialized-tool skills get relaxed ancestor gap (0.1 vs 2)
     const isSpecialized = skills[i].sources.includes("lightcast") &&
       /specialized-skill|-package$|-framework$|-library$|-middleware$|-software$/
         .test(skills[i].id + "|" + skills[i].tags);
