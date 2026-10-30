@@ -25,11 +25,17 @@
       resolve: moocx_cs 3/725, moocx_math 2/761, metacademy 138/3101, courses
       531/19675, alcpl_geometry 17/524. 23,588 unresolved labels fail only the
       cosine 0.90 gate (`build/1e_unresolved.tsv`, reason `below-cos-0.9`).
-  1. Sample 50 `below-cos-0.9` labels per source with their nearest skill and
+      Until then, `SEED_FLOORS` only catches a drop: courses at 3% pass.
+  1. Courses: 8,192 distinct titles fail the gate. They name courses, not
+     skills: "Calculus I for Engineering", "Aerospace Structures II", "CEN 271".
+     Strip numbering (I, II, 101) and audience suffixes ("for Engineering")
+     before the resolver. Count the titles that still name no skill; drop the
+     courses source if most do. 2,547 more fail `no-course`.
+  2. Sample 50 `below-cos-0.9` labels per source with their nearest skill and
      cosine. Judge each match by hand or with gpt-oss.
-  2. Set the gate where matches stay right 9 times in 10. Record it as a
+  3. Set the gate where matches stay right 9 times in 10. Record it as a
      `REVIEW:` note.
-  3. Rerun `seed-edges`, then raise each `SEED_FLOORS` entry (sources.ts) to 90%
+  4. Rerun `seed-edges`, then raise each `SEED_FLOORS` entry (sources.ts) to 90%
      of its new share.
 
 - [ ] Brazil's national curriculum (BNCC) appears in `skills.tsv`, with grade
