@@ -3,46 +3,34 @@
 ## Blocked on you
 
 - [ ] You get a fresh `skills.tsv` that includes the fixes from audit passes
-      9–16, and `deno task status` passes. Blocker: the LLM run takes days.
-      Translation ran at 0.5 answers/s (957 in 32 min, 4 workers). At that rate,
-      `enrich` (~60k targets) takes ~33 h and `prereq` (~95k skills, 600-token
-      answers) longer. Decision: regenerate every LLM cache. Deleting
-      `5_prereqs.tsv` applies the R1–R10 and DR1 candidate fixes to every skill.
-      Deleting the Haiku enrichment caches removes the ~10% wrong descriptions
-      (E2) and applies the ENR1–4 prompts.
-  1. `git rm build/1b_infill.tsv build/1c_summarize.tsv build/1d_onet_desc.tsv build/5_prereqs.tsv`.
-  2. Run `deno run -A pipeline.ts enrich`. Stage `list` drops 25k long titles
-     today, because the summarize cache has only 3.4k rows and the OpenSALT
-     description cache is empty.
-  3. Run `list`, `trees`, `embed`, `tag`, `dedupe`, `seed-edges`, and
-     `difficulty`, one `deno run -A pipeline.ts <stage>` each. They need only
-     `nomic-embed-text`. Stage `seed-edges` runs after `dedupe` for the first
-     time; watch its foundation-wiring count and quarantine.
-  4. Stage `seed-edges` logs `cap dropped N pairs` when the 50000 OpenSALT
-     grade-pair cap cuts. If it cuts, decide: raise the cap or throw.
-  5. Stage `seed-edges` quarantines a whole source without a word. Set a floor
-     per source from this run's resolved/total counts, the course-prereq source
-     included. Make the stage throw when a source resolves under its floor.
-  6. Before stage `prereq`: `difficulty_raw` no longer holds the seed order, and
-     stage `prereq` picks candidates by raw (`raw[j] < raw[i] - MIN_DIFF`,
-     prereq.ts). Count the seed pairs whose prereq raw sits at or above its
-     dependent's raw. Count the skills whose candidate pool would gain such a
-     prereq if its raw sat 1.0 below its dependent, as the old seed pass set it.
-     Show both counts. Then decide: restore a seed-ordered raw, have stage
-     `prereq` read `band`, or keep raw as is.
-  7. Run `prereq`, `postproc`, and `finalize`.
-  8. Run `deno task status`. The three LectureBank conditions use placeholder
-     floors (`EXPERT_PRECISION_FLOOR`, `EXPERT_RECALL_FLOOR`,
-     `EXPERT_MIN_POSITIVES` in pipeline.ts, marked `REVIEW`). Set them from the
-     run's precision, recall, and matched count (stderr line
-     `expert
-      pairs:`), then delete the `REVIEW` prefix. The first run
-     embeds about 500 topic names with Ollama. Write a todo entry for each
-     condition below 1.0.
-  9. Seed conditions: if `seed_anchor_conflicts` is high, look for unanchored
-     seed chains longer than 20. Stage `difficulty` drops every pair of such a
-     chain, where dropping the fewest would do. If `seed_cycle_pairs` is high,
-     check the OpenSALT grade-order pairs across frameworks.
+      9–16, and `deno task status` passes. Blocker: stage `prereq` runs for days
+      on the Mac (started 29 Oct; log in the session scratchpad,
+      `chain/prereq.log`).
+  1. When `prereq`, `postproc`, and `finalize` finish, commit
+     `build/5_prereqs.tsv`.
+  2. Run `deno task status`. Set the three LectureBank floors
+     (`EXPERT_PRECISION_FLOOR`, `EXPERT_RECALL_FLOOR`, `EXPERT_MIN_POSITIVES`,
+     pipeline.ts) from the run's `expert pairs:` stderr line. The first run
+     embeds about 500 topic names. Write a todo entry for each condition below
+     1.0.
+  3. `4_stats.json` shows `seed_anchor_conflicts` 1311 of 2805 seed pairs and
+     `seed_cycle_pairs` 40. Look for unanchored seed chains longer than 20:
+     stage `difficulty` drops every pair of such a chain, where dropping the
+     fewest would do. Check the OpenSALT grade-order pairs across frameworks for
+     the cycles.
+  4. Read the transitive-reduction visit count in the `postproc` log against the
+     2e9 cap (prereq.ts).
+
+- [ ] More expert seed pairs resolve to skills. Today 4,014 of 35,430 pairs
+      resolve: moocx_cs 3/725, moocx_math 2/761, metacademy 138/3101, courses
+      531/19675, alcpl_geometry 17/524. 23,588 unresolved labels fail only the
+      cosine 0.90 gate (`build/1e_unresolved.tsv`, reason `below-cos-0.9`).
+  1. Sample 50 `below-cos-0.9` labels per source with their nearest skill and
+     cosine. Judge each match by hand or with gpt-oss.
+  2. Set the gate where matches stay right 9 times in 10. Record it as a
+     `REVIEW:` note.
+  3. Rerun `seed-edges`, then raise each `SEED_FLOORS` entry (sources.ts) to 90%
+     of its new share.
 
 - [ ] Brazil's national curriculum (BNCC) appears in `skills.tsv`, with grade
       anchors from 4-year-olds to grade 12. Blocker: the Portuguese labels need
