@@ -3,9 +3,15 @@
 ## Blocked on you
 
 - [ ] You get a fresh `skills.tsv` that includes the fixes from audit passes
-      9–16, and `deno task status` passes. Blocker: stage `prereq` runs for days
-      on the Mac (started 29 Oct; log in the session scratchpad,
-      `chain/prereq.log`).
+      9–16, and `deno task status` passes. Today 18 conditions score 0 because
+      `skills.tsv` does not exist (31 Oct: "skills.tsv: missing. Run: deno run
+      -A pipeline.ts finalize"). The 7 conditions that read only `build/` stages
+      pass. Blocker: stage `prereq` runs for days on the Mac (started 29 Oct;
+      log in the session scratchpad, `chain/prereq.log`). 0. No `pipeline.ts`
+      process runs on the Mac now (31 Oct). `5_prereqs.tsv` last wrote 30 Oct
+      07:51, and `1_skills.tsv` 07:56, newer than `2_embeddings.bin` and
+      `4_difficulty.tsv` (29 Oct). Check the `prereq` log for a crash. Rerun the
+      stages from `embed` to `finalize` in the background, with a timeout.
   1. When `prereq`, `postproc`, and `finalize` finish, commit
      `build/5_prereqs.tsv`.
   2. Run `deno task status`. Set the three LectureBank floors
