@@ -5,7 +5,7 @@ Aggregates open datasets into a unified skill prerequisite graph.
 ## Setup
 
 ```sh
-git config core.hooksPath .githooks  # pre-commit runs check + test
+git config core.hooksPath .githooks  # pre-commit runs audit + check + test
 ```
 
 ## Run

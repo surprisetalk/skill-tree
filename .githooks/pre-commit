@@ -1,4 +1,6 @@
 #!/bin/sh
 set -e
+# REVIEW: deno audit needs the network, and a new advisory blocks unrelated commits. Alternative: a status condition. It allows offline commits but lets a vulnerable dependency ship.
+timeout 30 deno audit
 deno task check
 deno task test
