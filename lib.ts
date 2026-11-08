@@ -269,6 +269,7 @@ const BATCH_SIZE = 2_000;
 // The API expires a batch after 24 hours.
 const BATCH_WAIT_MS = 25 * 3600_000;
 const BATCH_POLL_MS = 30_000;
+const RESULT_IDLE_MS = 5 * 60_000;
 export const CACHE_PATH = `${BUILD}/2_cache.bin`;
 const CACHE_RECORD_BYTES = 32 + EMBED_DIM * 4;
 
@@ -418,15 +419,31 @@ export async function resumableClaude<T extends { id: string }>(
       }
       await new Promise((r) => setTimeout(r, BATCH_POLL_MS));
     }
+    // A rerun reads a batch that a crashed run read in part; readTable throws
+    // on a second row for one key.
+    const cached = loadTsvCache(cachePath);
     const fh = Deno.openSync(cachePath, { create: true, append: true });
     const enc = new TextEncoder();
+    // The SDK timeout ends when the headers arrive, so a stalled body hangs
+    // forever. Abort a results stream that sends nothing for RESULT_IDLE_MS.
+    const idle = new AbortController();
+    let timer = setTimeout(() => idle.abort(), RESULT_IDLE_MS);
+    let n = 0;
     try {
-      for await (const r of await client.messages.batches.results(batchId)) {
+      for await (
+        const r of await client.messages.batches.results(batchId, {}, {
+          signal: idle.signal,
+        })
+      ) {
+        clearTimeout(timer);
+        timer = setTimeout(() => idle.abort(), RESULT_IDLE_MS);
+        n++;
         const items = byHash.get(r.custom_id);
         if (!items) {
           stale++;
           continue;
         }
+        if (items.every((t) => cached.has(t.id))) continue;
         if (r.result.type !== "succeeded") {
           if (
             r.result.type === "errored" &&
@@ -450,6 +467,7 @@ export async function resumableClaude<T extends { id: string }>(
           ).replace(/[\t\n\r]/g, " ").trim()
           : "";
         for (const item of items) {
+          if (cached.has(item.id)) continue;
           done++;
           const cleaned = raw && cleanFn(raw, item);
           if (cleaned) fh.writeSync(enc.encode(`${item.id}\t${cleaned}\n`));
@@ -459,7 +477,15 @@ export async function resumableClaude<T extends { id: string }>(
           }
         }
       }
+    } catch (e) {
+      if (!idle.signal.aborted) throw e;
+      throw new Error(
+        `[${label}] expected the results of batch ${batchId} to keep arriving, received nothing for ${
+          RESULT_IDLE_MS / 60_000
+        } min after ${n} results. Rerun: ${statePath} keeps its id, and the cache keeps every answer so far.`,
+      );
     } finally {
+      clearTimeout(timer);
       fh.close();
     }
     // Write, then rename: a crash mid-write must not lose the other ids.
@@ -478,8 +504,10 @@ export async function resumableClaude<T extends { id: string }>(
   };
   // Every in-flight batch finishes and leaves the state file before a throw.
   const collectAll = async () => {
-    const errs = (await Promise.allSettled(readState().map(collect)))
-      .flatMap((r) => r.status === "rejected" ? [r.reason] : []);
+    // One batch at a time: 37 result streams at once stalled for 20 min with
+    // 8,549 of 74,000 results read.
+    const errs: unknown[] = [];
+    for (const id of readState()) await collect(id).catch((e) => errs.push(e));
     if (errs.length) throw errs[0];
     if (invalid.length) {
       throw new Error(
