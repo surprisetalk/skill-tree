@@ -6,6 +6,7 @@ ml-computer-programming	computer-programming
 ibm-websphere	ibm-websphere-mq
 ca-datacom-db	datacom-db
 structure-information	information-structure
+use-it-tools	use-tools
 operation-and-control	control-operation
 prepare-budgets-for-personnel-operations	prepare-and-follow-budgets-for-personnel-operations
 prepare-and-maintain-records-and-reports	prepare-reports-and-maintain-records
@@ -480,7 +481,6 @@ mathematics-grade-6	mathematics-grade-k
 mathematics-grade-7	mathematics-grade-k
 mathematics-grade-8	mathematics-grade-k
 explain-applicable-mathematical-problems-using-a-mathematical-model	explain-mathematically-applicable-problems-using-a-mathematical-model
-graph-rational-functions-and-identify-key-characteristics	graph-rational-functions-identifying-key-characteristics
 use-vocabulary-from-across-content-areas	use-vocabulary-across-content-areas
 b-use-nouns-to-identify-and-name-people-places-and-things	use-nouns-to-identify-and-name-people-places-and-things
 identify-a-topic-and-generate-questions-that-explore-the-topic	identify-a-topic-and-generate-questions-to-explore-the-topic
@@ -718,7 +718,6 @@ apply-grade-8-reading-standards-to-literature	apply-grade-5-reading-standards-to
 apply-grade-8-reading-standards-to-literary-nonfiction	apply-grade-6-reading-standards-to-literary-nonfiction
 measure-the-length-of-objects-and-solve-problems-involving-length	measure-the-length-of-objects-and-solve-problems-involving-measurement
 evaluate-positive-rational-numbers-with-natural-number-exponents	evaluate-positive-rational-numbers-and-integers-with-natural-number-exponents
-graph-the-solution-set-of-a-system-of-two-variable-inequalities	graph-the-solution-set-of-a-system-of-two-variable-linear-inequalities
 verify-by-composition-if-one-function-is-the-inverse-of-another	verify-by-composition-that-one-function-is-the-inverse-of-another
 describe-examples-of-databases-from-everyday-life	identify-and-describe-examples-of-databases-from-everyday-life
 relate-the-number-of-significant-figures-to-precision-of-measuring-instrument	relate-number-of-significant-figures-to-precision-of-measuring-instrument
@@ -754,9 +753,7 @@ use-concrete-materials-to-represent-two-step-linear-equations-in-one-variable	us
 given-the-number-of-tens-and-or-ones-write-a-two-digit-number	given-the-number-of-tens-and-ones-write-a-two-digit-number
 relate-an-addition-strategy-to-a-written-method	relate-a-given-addition-strategy-to-a-written-method
 determine-the-surface-area-of-right-prisms-with-quadrilateral-bases-in-68319b	determine-the-surface-area-of-right-prisms-with-quadrilateral-bases-in-3eba2d
-graph-equations-in-two-variables-on-a-coordinate-plane-and-label-the-axes-ee94be	graph-linear-equations-in-two-variables-on-a-coordinate-plane-and-label-5fb945
 identify-the-effect-on-the-graph-of-a-linear-function-of-replacing-f-x-by-f-x-k	identify-the-effect-on-the-graph-of-a-linear-function-of-replacing-f-x-by-kf-x
-graphing-exponential-functions-with-key-features	graphing-exponential-functions-and-interpreting-key-features
 converting-larger-to-smaller-units-within-same-system	converting-smaller-to-larger-units-within-same-system
 given-a-number-from-1-20-count-out-that-many-objects	given-a-number-from-0-to-20-count-out-that-many-objects
 verify-experimentally-the-properties-of-rotations	verify-experimentally-properties-of-rotations
@@ -768,7 +765,6 @@ convert-a-measurement-from-a-larger-unit-to-a-smaller-unit-within-a-adacaa	conve
 estimate-to-determine-solutions-to-mathematical-problems-involving-1d5a30	estimate-to-determine-solutions-to-real-world-problems-involving-addition-698a6f
 generate-equivalent-forms-of-numbers-by-moving-between-fractions-and-8828b6	generate-equivalent-forms-of-numbers-by-moving-between-fractions-percents-313fd7
 quotient-of-polynomial-division	determining-quotient-of-polynomial-division
-graph-a-linear-relationship-from-a-mathematical-context-presented-with-an-6c2087	graph-a-linear-relationship-from-a-real-world-context-presented-with-an-33d4ee
 use-decimal-notation-for-fractions-with-a-denominator-of-4	use-decimal-notation-for-fractions-with-a-denominator-of-2
 represent-the-relationship-between-values-and-expressions-that-are-equal-f0a0c3	represent-the-relationship-between-values-and-expressions-that-are-not-b76715
 identify-the-effect-on-the-graph-of-an-inverse-variation-function-when-fefc79-2	identify-the-effect-on-the-graph-of-an-inverse-variation-function-when-dd3f31
@@ -780,7 +776,6 @@ determine-the-area-of-a-right-triangle-with-whole-number-side-lengths-5713bb	est
 solving-one-step-problems-with-bar-graphs	solving-one-step-bar-graph-problems
 solving-two-step-addition-subtraction-problems	solving-two-step-subtraction-word-problems
 solve-one-variable-one-step-equations-that-represent-problems-including-0773fe	model-and-solve-one-variable-one-step-equations-that-represent-problems-c082ed
-graph-quadratic-functions-from-mathematical-contexts-showing-intercepts-8f3863	graph-quadratic-functions-from-real-world-contexts-showing-intercepts-and-f67350
 convert-a-value-from-decimal-notation-to-scientific-notation	convert-a-value-from-scientific-notation-to-decimal-notation
 identify-and-determine-the-validity-of-the-contrapositive-of-a-23ac58	identify-and-determine-the-validity-of-a-contrapositive-of-a-conditional-260839
 identify-the-effect-on-the-graph-of-a-function-when-replacing-f-x-with-f-x-k	identify-the-effect-on-the-graph-of-a-function-when-replacing-f-x-with-kf-x
@@ -790,7 +785,6 @@ solving-two-step-word-problems-with-addition-and-subtraction-within-100	solving-
 solve-two-step-real-world-subtraction-problems-involving-money-using-1fa36f	solve-two-step-real-world-addition-problems-involving-money-using-decimal-cf15ea
 generate-a-numerical-pattern-when-given-a-graph-of-a-rule-in-the-form-y-x-a	generate-a-numerical-pattern-when-given-a-graph-of-a-rule-in-the-form-y-ax
 graph-polynomial-functions-of-degree-3-or-higher-showing-end-behavior	graph-polynomial-functions-of-degree-3-or-higher-showing-end-behavior-and-zeros
-graph-the-solution-set-to-a-two-variable-quadratic-inequality-from-a-8d1d8f	graph-the-solution-set-to-a-two-variable-quadratic-inequality-from-a-real-269765
 count-backwards-by-ones-from-20-to-0	count-backwards-by-ones-from-20
 label-attributes-of-a-set-of-objects-that-has-been-sorted	label-attributes-of-a-set-of-objects-that-has-been-sorted-based-on-up-to-4fdfe4
 determining-rectangular-prism-volume-with-unit-cubes	determining-volume-of-rectangular-prism-using-unit-cubes
@@ -824,7 +818,6 @@ identify-the-effect-on-the-graph-of-a-linear-function-of-replacing-f-x-by-f-x-2	
 explain-arithmetic-patterns-using-properties-of-operations	identifying-and-explaining-arithmetic-patterns
 identify-the-x-axis-in-the-coordinate-plane	identify-the-y-axis-in-the-coordinate-plane
 generate-equivalent-forms-of-numbers-by-moving-between-fractions-and-dd7cb0	generate-equivalent-forms-of-numbers-by-moving-between-fractions-percents-313fd7
-use-a-graph-to-find-or-approximate-the-solution-to-a-system-of-linear-52ded7	use-a-graph-to-find-or-approximate-the-solution-to-a-system-of-linear-6d816b
 measure-angles-according-to-size-using-various-tools	measure-and-compare-angles-according-to-size-using-various-tools
 convert-a-time-measurement-from-a-smaller-unit-to-a-larger-unit	convert-a-time-measurement-from-a-larger-unit-to-a-smaller-unit
 solve-real-world-problems-that-involve-extending-an-increasing-pattern-880e31	solve-real-world-problems-that-involve-extending-a-decreasing-pattern-d52326
@@ -848,7 +841,6 @@ select-an-appropriate-tool-to-measure-the-length-in-standard-units-of-an-object	
 identify-the-effect-on-the-graph-of-a-cubic-function-when-replacing-f-x-f90c91-2	identify-the-effect-on-the-graph-of-a-cubic-function-when-replacing-f-x-405ebc
 interpret-multiplication-as-scaling-resizing	interpret-multiplication-as-scaling-resizing-by
 identify-the-y-coordinate-of-an-ordered-pair	identify-the-x-coordinate-of-an-ordered-pair
-graph-ordered-pairs-consisting-of-corresponding-terms-from-two-patterns-45a257	form-ordered-pairs-consisting-of-corresponding-terms-from-two-patterns-0ebdc4
 apply-perimeter-and-circumference-formulas-to-solve-real-world-problems-28dc2e	apply-perimeter-circumference-and-area-formulas-to-solve-real-world-129776
 solve-mathematical-problems-involving-area-including-concepts-of-e5b885	solve-real-world-problems-involving-area-including-concepts-of-population-62b44f
 solve-problems-by-converting-a-us-customary-mass-measurement-from-ounces-6eb114	solve-problems-by-converting-a-us-customary-mass-measurement-from-pounds-1afb49
@@ -865,7 +857,6 @@ convert-a-measurement-from-a-smaller-unit-to-a-larger-unit-within-a-6ee2d7	conve
 generate-a-numerical-pattern-when-given-a-rule-in-the-form-y-x-a	generate-a-numerical-pattern-when-given-a-rule-in-the-form-y-ax
 solve-one-step-real-world-addition-problems-involving-money-using-decimal-c62cbd	solve-two-step-real-world-addition-problems-involving-money-using-decimal-cf15ea
 choosing-estimate-vs-exact-answer	choosing-estimate-or-exact-answer
-graph-exponential-functions-with-asymptotes	graph-exponential-functions-with-intercepts-and-asymptotes
 represent-division-of-a-whole-number-by-a-unit-fraction-using-area-models	represent-division-of-a-unit-fraction-by-a-non-zero-whole-number-using-77f3dc
 multiplying-one-step-word-problems	multiplying-one-step-metric-word-problems
 evaluate-numerical-expressions-using-order-of-operations	interpret-and-evaluate-numerical-expressions-using-order-of-operations
@@ -876,7 +867,6 @@ solving-single-step-real-world-problems	solving-single-step-real-world-problems-
 solving-subtraction-within-10-000	solving-addition-and-subtraction-within-10-000
 identify-the-effect-on-the-graph-of-a-logarithmic-function-when-replacing-9ce650	identify-the-effect-on-the-graph-of-a-logarithmic-function-when-replacing-42d805
 solve-mathematical-problems-using-nets-to-find-the-surface-area-of-three-7fa904	solve-real-world-problems-using-nets-to-find-the-surface-area-of-three-c7d2af
-graph-mathematical-problems-that-can-be-modeled-with-absolute-value-functions	graph-real-world-problems-that-can-be-modeled-with-absolute-value-functions
 estimate-lengths-in-customary-units-to-the-half-inch	estimate-lengths-in-customary-units-to-the-quarter-inch-and-half-inch
 determine-the-surface-area-of-three-dimensional-cylinders-in-mathematical-f1cb24	determine-the-surface-area-of-three-dimensional-cylinders-in-real-world-problems
 writing-equations-in-the-form-px-q	writing-equations-in-x-p-q-form
@@ -921,7 +911,6 @@ determine-the-product-of-two-numbers-using-strategies-and-algorithms-6945ad	esti
 duplicate-simple-patterns-using-concrete-objects	duplicate-extend-and-create-simple-patterns-using-concrete-objects
 determine-relationships-between-a-normally-distributed-data-set-and-its-7e2975	represent-relationships-between-a-normally-distributed-data-set-and-its-f83283
 compare-properties-of-two-functions-each-represented-in-a-different-way	compare-characteristics-of-two-functions-each-represented-in-a-different-way
-solve-and-graph-mathematical-problems-that-can-be-modeled-with-rational-8f6f9c	solve-and-graph-real-world-problems-that-can-be-modeled-with-rational-functions
 describe-simple-patterns-using-concrete-objects	create-simple-patterns-using-concrete-objects
 order-a-set-of-up-to-three-whole-numbers-each-less-than-1-000-represented-7d74c1	order-a-set-of-up-to-three-whole-numbers-each-less-than-1-000-represented-4790f5
 represent-solutions-for-one-variable-one-step-inequalities-on-a-number-line	represent-solutions-for-one-variable-two-step-inequalities-on-number-lines
@@ -948,7 +937,6 @@ identify-the-effect-on-the-graph-of-a-simple-rational-function-when-edef93	ident
 identify-the-effect-on-the-graph-of-an-absolute-value-function-when-d454e4	identify-the-effect-on-the-graph-of-an-absolute-value-function-when-304cae
 convert-a-given-complex-number-in-polar-form-to-rectangular-form	convert-a-given-complex-number-in-rectangular-form-to-polar-form
 verify-experimentally-that-in-a-triangle-sides-opposite-larger-angles-are-longer	verify-experimentally-that-in-a-triangle-angles-opposite-longer-sides-are-larger
-solve-and-graph-mathematical-problems-that-are-modeled-with-absolute-565c72	graph-real-world-problems-that-can-be-modeled-with-absolute-value-functions
 write-an-equation-of-a-line-perpendicular-to-the-x-axis-and-parallel-to-e43189	write-an-equation-of-a-line-parallel-to-the-x-axis-and-perpendicular-to-a0a702
 use-concrete-and-pictorial-models-to-represent-fractions-with-a-5b2b69	use-concrete-and-pictorial-models-to-represent-fractions-with-a-1f29cf
 solve-mathematical-problems-by-solving-equations-in-the-form-x-p-q-for-393c3d	solve-real-world-problems-by-solving-equations-in-the-form-px-q-for-cases-f0be9f
@@ -1662,7 +1650,6 @@ interpret-whole-number-quotients-of-whole-numbers	interpret-whole-number-quotien
 express-themselves-through-drawing-and-emergent-writing	begin-to-express-themselves-through-drawing-and-emergent-writing
 begins-in-grade-3	begins-in-grade-2
 science-investigations-can-begin-with-a-question	science-investigations-begin-with-a-question
-patterns-graphs-and-charts-can-be-used-to-identify-patterns-in-data	graphs-and-charts-can-be-used-to-identify-patterns-in-data
 analyze-how-particular-elements-of-a-story-or-drama-influence-one-another	analyze-how-particular-elements-of-a-story-or-drama-interact
 distinguish-long-from-short-vowel-sounds-in-single-syllable-words	distinguish-long-from-short-vowel-sounds-in-spoken-single-syllable-words
 see-ccss-w-3-1-w-3-2-w-3-3-w-3-7	see-ccss-w-4-1-w-4-2-w-4-3-w-4-7
@@ -1727,7 +1714,6 @@ impact-of-people-on-physical-systems-intentionally-blank	impact-of-physical-syst
 speak-audibly-and-express-thoughts-feelings-and-ideas	speak-audibly-and-express-thoughts-feelings-and-ideas-clearly
 solve-addition-and-subtraction-word-problems-and-add-and-subtract-within-10	solving-addition-and-subtraction-word-problems
 explain-the-author-s-purpose	explain-author-s-purpose
-evaluate-and-use-artifacts-to-share-information-on-social-studies-topics	create-and-use-artifacts-to-share-information-on-social-studies-topics
 form-and-use-progressive-verb-tenses	form-and-use-the-progressive-verb-tenses
 read-and-comprehend-literary-texts-appropriately-complex-for-grade-6	read-and-comprehend-literary-texts-appropriately-complex-for-grade-4
 measure-the-length-of-an-object-by-selecting-and-using-standard-tools	measure-the-length-of-an-object-by-selecting-and-using-appropriate-tools
@@ -1750,7 +1736,6 @@ use-and-explain-how-specific-images-contribute-to-and-clarify-a-text	explain-how
 identify-common-types-of-texts	recognize-common-types-of-texts
 summarize-numerical-data-sets-in-relation-to-their-real-world-context	summarize-numerical-data-sets-in-relation-to-their-context
 examine-the-causes-course-and-consequences-of-the-vietnam-war	analyze-causes-course-and-consequences-of-the-vietnam-war
-use-graph-coloring-techniques-to-solve-problems	apply-graph-coloring-techniques-to-solve-problems
 use-cost-benefit-analysis-and-or-marginal-analysis-to-evaluate-an-economic-issue	use-cost-benefit-analysis-and-marginal-analysis-to-evaluate-an-economic-issue
 english-language-arts-and-reading-grade-7-adopted-2017	english-language-arts-and-reading-grade-8-adopted-2017
 dictate-or-compose-literary-texts-including-personal-narratives	dictate-or-compose-literary-texts-including-personal-narratives-and-poetry
@@ -1771,7 +1756,7 @@ distinguish-among-fact-opinion-bias-and-reasoned-judgment-in-a-text	distinguish-
 retell-the-events-in-a-story-in-a-logical-sequence	retell-story-events-in-a-logical-sequence
 create-readable-documents-with-legible-handwriting-manuscript-and-cursive	create-readable-documents-through-legible-handwriting-cursive
 organize-represent-and-interpret-data-with-up-to-three-categories-by	organize-represent-and-interpret-data-with-up-to-three-categories
-use-artifacts-to-share-information-on-social-studies-topics	create-and-use-artifacts-to-share-information-on-social-studies-topics
+use-artifacts-to-share-information-on-social-studies-topics	select-and-use-artifacts-to-share-information-on-social-studies-topics
 compare-two-numbers-between-one-and-ten-presented-as-written-numerals	compare-two-numbers-between-1-and-10-presented-as-written-numerals
 order-and-find-absolute-value-of-rational-numbers	understand-ordering-and-absolute-value-of-rational-numbers
 analyze-the-nuances-in-the-meaning-of-words-with-similar-denotations	analyze-nuances-in-the-meaning-of-words-with-similar-denotations
@@ -1787,7 +1772,6 @@ standards-for-mathematical-practice-grade-3	standards-for-mathematical-practice-
 c-k-7-begins-in-grade-3	begins-in-grade-2
 distinguish-between-scientific-hypotheses-theories-and-laws	distinguish-among-scientific-hypotheses-theories-and-laws
 form-and-use-simple-verb-tenses	form-and-use-the-simple-verb-tenses
-show-that-every-connected-graph-has-a-minimal-spanning-tree	prove-that-every-connected-graph-has-a-minimal-spanning-tree
 edit-writing-to-include-k-1-language-conventions-for-publishing	edit-writing-to-include-k-3-language-conventions-for-publishing
 identify-ways-insurance-may-minimize-personal-financial-risk	identify-ways-insurance-can-minimize-personal-financial-risk
 describe-the-measurable-attributes-of-an-object	describing-measurable-attributes-of-objects
@@ -1904,7 +1888,6 @@ apply-the-properties-of-operations-to-multiply-and-divide	apply-properties-of-op
 explain-ways-that-firms-engage-in-price-and-nonprice-competition	explain-ways-firms-engage-in-price-and-nonprice-competition
 patterns-patterns-in-the-natural-and-human-designed-world-can-be-observed	patterns-in-the-natural-and-human-designed-world-can-be-observed
 recount-or-summarize-the-key-ideas-from-the-text	recount-or-summarize-key-ideas-from-the-text
-select-and-use-artifacts-to-share-information-on-social-studies-topics	create-and-use-artifacts-to-share-information-on-social-studies-topics
 describe-the-components-of-culture	describe-components-of-culture
 grade-6	grade-4
 read-and-comprehend-informational-texts-appropriately-complex-for-grade-5	read-and-comprehend-informational-texts-appropriately-complex-for-grade-2
@@ -1950,7 +1933,6 @@ demonstrate-fluency-with-addition-and-subtraction-within-100-by	demonstrate-flue
 explain-how-specific-images-and-details-contribute-to-and-clarify-a-text	explain-how-specific-images-contribute-to-and-clarify-a-text
 identifying-the-front-cover-back-cover-and-title-page-of-a-book	identify-the-front-cover-back-cover-and-title-page-of-a-book
 answer-a-question-individually-and-collaboratively-using-data-from-a-simulation	individually-and-collaboratively-use-data-from-a-simulation-to-answer-a-question
-analyze-and-use-artifacts-to-share-information-on-social-studies-topics	create-and-use-artifacts-to-share-information-on-social-studies-topics
 k-8-standards	hs-standards
 write-read-and-evaluate-expressions-in-which-variables-stand-for-numbers	write-read-and-evaluate-expressions-in-which-letters-stand-for-numbers
 engaging-in-an-argument-from-evidence	engaging-in-argument-from-evidence
@@ -2017,7 +1999,6 @@ read-and-comprehend-informational-texts-appropriately-complex-for-grade-8	read-a
 count-up-to-1000-skip-count-by-5s-10s-and-100s	count-within-1000-skip-count-by-5s-10s-and-100s
 developing-and-using-models-develop-models-to-describe-phenomena	developing-and-using-models-develop-and-use-a-model-to-describe-phenomena
 explain-how-needs-wants-and-the-availability-of-resources-affect-decision-making	explain-how-needs-wants-and-availability-of-resources-affect-decision-making
-identify-and-use-artifacts-to-share-information-on-social-studies-topics	create-and-use-artifacts-to-share-information-on-social-studies-topics
 determine-a-fact-or-opinion-based-on-information-provided-by-the-author	identify-a-fact-or-opinion-based-on-information-provided-by-the-author
 understand-a-fraction-as-a-number-on-the-number-line-by	understand-a-fraction-as-a-number-on-the-number-line
 describe-examples-of-where-copyright-applies-and-does-not-apply-in-d4eb2a	identify-examples-of-where-copyright-applies-and-does-not-apply-in-8c6f3c
@@ -2040,3 +2021,5 @@ ui-configuration	configuration
 ui-policies	policies
 personas-and-roles	personas-roles
 core-applications-and-plugins	core-plugins-and-applications
+represent-fractions-with-number-line	represent-fractions-on-a-number-line
+plan-and-execute-a-sample-survey	plan-and-execute-sample-survey
