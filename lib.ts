@@ -263,8 +263,9 @@ export const isJunkTopic = (t: string): boolean =>
 const GEN_MODEL = "claude-haiku-5-5";
 // Thinking counts against max_tokens; a reply that hits the cap is rejected.
 const THINK_TOKENS = 2000;
-// A batch takes up to 100,000 requests; smaller batches lose less to a crash.
-const BATCH_SIZE = 10_000;
+// A batch takes up to 100,000 requests. In one run, a batch of 7,813 ended in
+// 8 min, but two batches of 10,000 sat at 0 done for 7.5 h.
+const BATCH_SIZE = 2_000;
 // The API expires a batch after 24 hours.
 const BATCH_WAIT_MS = 25 * 3600_000;
 const BATCH_POLL_MS = 30_000;
@@ -395,7 +396,7 @@ export async function resumableClaude<T extends { id: string }>(
   // One retry on a transient error (429, 5xx, network); the SDK does the retry.
   // REVIEW: A crash between batches.create and the state append orphans that
   // batch, and the rerun pays for its prompts again (at most BATCH_SIZE, about
-  // $0.30). Alternative: adopt unlisted batches from batches.list at startup.
+  // $0.06). Alternative: adopt unlisted batches from batches.list at startup.
   // It costs a scan of every batch on the account, other projects included.
   const client = new Anthropic({ maxRetries: 1, timeout: 600_000 });
   const t0 = performance.now();
