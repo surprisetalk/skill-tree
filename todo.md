@@ -23,10 +23,14 @@
 
 - [ ] Every Lightcast skill has a description. Stage `enrich` holds 27,953
       Lightcast skills with no description or a placeholder, about 1.5 days of
-      gpt-oss. Blocker: the run length, and the GPU that the full build uses.
-  1. After the full build, run `deno run -A pipeline.ts enrich` in the
-     background under `caffeinate -i`. It resumes from `build/1b_infill.tsv`.
-  2. Commit `build/1b_infill.tsv`, then rerun the stages from `list`.
+      gpt-oss. Blocker: the run length. `build/chain/after.sh` waits for the
+      full build, runs `enrich` to the end (`build/chain/enrich-infill.log`),
+      then reruns the chain from `list`; it notes each step in
+      `build/chain/chain.log`.
+  1. When `chain.log` shows a second `chain done`, commit `build/1b_infill.tsv`
+     and `build/5_prereqs.tsv` by path.
+  2. If `after:` notes a failure, fix it, then run
+     `nohup caffeinate -i sh build/chain/after.sh &`.
 
 - [ ] `deno task status` also scores prereq edges against Junyi crowd labels.
       Blocker: a PSLC DataShop login. You make the account.
