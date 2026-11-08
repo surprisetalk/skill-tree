@@ -330,7 +330,9 @@ A new build table gets a schema; a new id goes through `slugify`.
   `no-skill`. Pairs resolve to skill IDs by exact match, then by embedding
   (cosine ≥ 0.90 and a shared token). Unresolved pairs go to
   `build/1e_unresolved.tsv` with a reason per label. A source that gives both A
-  → B and B → A loses both, as `contested-order`.
+  → B and B → A loses both, as does a course pair inside a seed cycle
+  (`contested-order`): expert sources outrank course catalogs. Each Khan
+  exercise resolves through the `khan:<slug>` tag of its OpenSALT item.
 - Stage `trees`: LCSH (gunzip) and DBpedia (bzcat) SKOS broader chains, cached
   as `slug → ancestors[]`. The same pass picks each dump's 5000 most-used
   broader targets as the topic refs of stage `tag`.

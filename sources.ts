@@ -28,6 +28,7 @@ import {
   skillIndex,
   slugify,
   STOPWORDS,
+  stronglyConnected,
   TAGGED_DEDUPED,
   TOPIC_REFS,
   TRANSLATE_CACHE,
@@ -906,6 +907,11 @@ export function stageList() {
           if (t) tags.push(t);
         }
         if (it.CFItemType) tags.push(`opensalt:${slugify(it.CFItemType)}`);
+        // khandata.tsv names an exercise by this slug, and its display name
+        // can differ from the title here ("Subtract decimals like 0.9-0.7" vs
+        // "Subtract tenths like 0.9-0.7"). Stage seed-edges resolves by it.
+        const khan = (it.notes || "").match(/khanacademy\.org\/e\/([\w.-]+)/);
+        if (khan) tags.push(`khan:${khan[1]}`);
 
         raw.push({ id: "", title, description, sources: ["opensalt"], tags });
         n++;
@@ -1886,15 +1892,25 @@ export async function stageSeedEdges() {
         nameToDisplay.set(c[iName].trim(), c[iDisp].trim());
       }
     }
+    // An exercise slug that a khan:<slug> tag names resolves to that skill
+    // id; resolveConcept matches ids directly.
+    const bySlug = new Map<string, string>();
+    for (const s of tagged) {
+      for (const t of s.tags.split(",")) {
+        if (t.startsWith("khan:") && !bySlug.has(t.slice(5))) {
+          bySlug.set(t.slice(5), s.id);
+        }
+      }
+    }
+    const label = (name: string) =>
+      bySlug.get(name) ?? nameToDisplay.get(name) ?? name;
     for (const c of rows.slice(1)) {
       const target = (c[iName] || "").trim();
       const pre = (c[iPre] || "").trim();
       if (!target || !pre || pre === "root") continue;
-      const dstLabel = nameToDisplay.get(target) || target;
       for (const p of pre.split(";").map((x) => x.trim()).filter(Boolean)) {
         const pName = codeToName.get(p) || p;
-        const srcLabel = nameToDisplay.get(pName) || pName;
-        addRaw(srcLabel, dstLabel, "khan", `${pName}->${target}`);
+        addRaw(label(pName), label(target), "khan", `${pName}->${target}`);
       }
     }
   }
@@ -2318,13 +2334,31 @@ export async function stageSeedEdges() {
   // A source that names both A → B and B → A gives no order, and the pair
   // is a seed cycle. Both go; the floors still count them as resolved.
   const contested = (e: Edge) => seen.has(`${e.dst}\t${e.src}\t${e.source}`);
-  const uniq = [...seen.values()].filter((e) => {
-    if (!contested(e)) return true;
+  const drop = (e: Edge) => {
     quarantine.push(
       `${e.src}\t${e.dst}\t${e.source}\t${e.src}->${e.dst}\tcontested-order\tcontested-order`,
     );
     return false;
-  });
+  };
+  const kept = [...seen.values()].filter((e) => !contested(e) || drop(e));
+  // REVIEW: Expert sources outrank course catalogs. A course edge inside a
+  // seed cycle drops as contested-order: catalogs closed loops such as
+  // linear algebra → … → "Mathematics" → algebra. Alternative: let stage
+  // postproc break the cycle by rank. It keeps the cycle in the seeds that
+  // stage difficulty reads. One pass suffices: dropping edges only splits
+  // a cycle, so no kept course edge enters one.
+  // Stage difficulty reads the non-holdout seeds only. stronglyConnected
+  // leaves out a node in no cycle, so comp.has guards the comparison.
+  const succ = new Map<string, string[]>();
+  for (const e of kept.filter((e) => !e.holdout)) {
+    (succ.get(e.src) ?? succ.set(e.src, []).get(e.src)!).push(e.dst);
+  }
+  const comp = new Map<string, number>();
+  stronglyConnected(succ).forEach((c, i) => c.forEach((n) => comp.set(n, i)));
+  const uniq = kept.filter((e) =>
+    e.source !== "courses" || e.holdout || !comp.has(e.src) ||
+    comp.get(e.src) !== comp.get(e.dst) || drop(e)
+  );
   Deno.writeTextFileSync(
     `${BUILD}/1e_unresolved.tsv`,
     quarantine.join("\n") + "\n",
@@ -2338,7 +2372,7 @@ export async function stageSeedEdges() {
   // it, so a lost source stops the stage, and embedding jitter does not.
   // Alternative: a status condition. It lets a quarantined source ship.
   const SEED_FLOORS: Record<string, number> = {
-    khan: 0.535,
+    khan: 0.675,
     alcpl_data_mining: 0.172,
     alcpl_geometry: 0.029,
     alcpl_physics: 0.044,
@@ -2348,7 +2382,7 @@ export async function stageSeedEdges() {
     moocx_cs: 0.0037,
     moocx_math: 0.0023,
     moocx_psy: 0.079,
-    courses: 0.0705,
+    courses: 0.065,
     opensalt_precedes: 0.0106,
     opensalt_grade: 0.201,
     foundation: 0.9,

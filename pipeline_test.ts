@@ -860,6 +860,16 @@ Deno.test("list: DigComp outcomes carry the source, area, competence, and level 
   );
 });
 
+Deno.test("list: an OpenSALT Khan item carries the exercise slug that khandata.tsv names", () => {
+  const row = rows.find((c) => c[1] === "Subtract tenths like 0.9-0.7");
+  assert(
+    row?.[4].split(",").includes(
+      "khan:subtracting-decimals-without-the-standard-algorithm-1",
+    ),
+    `tags: ${row?.[4]}`,
+  );
+});
+
 Deno.test("list: BNCC objectives carry the source, subject, and the grades of their code", () => {
   const bncc = rows.filter((c) => c[3].includes("bncc"));
   // 1,580 objectives; dedupe may merge a few.
