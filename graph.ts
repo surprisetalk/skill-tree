@@ -1614,34 +1614,57 @@ export function stageDifficulty() {
   const acyclic = allSeeds.filter(([si, di]) =>
     !cycleOf.has(si) || cycleOf.get(si) !== cycleOf.get(di)
   );
-  const bounds = (pairs: number[][]) => {
-    const prereqs = skills.map(() => [] as number[]);
-    const dependents = skills.map(() => [] as number[]);
-    for (const [si, di] of pairs) {
+  // REVIEW: Keep each acyclic seed pair, in file order, while every skill
+  // still fits a band 1–20 and every anchor keeps its band. A 22-skill chain
+  // then drops 1 pair, not all 21. Alternative: an exact minimum drop set. It
+  // needs an ILP solver, a new dependency.
+  // lo and hi bound each band through the kept pairs. Each step moves a bound
+  // one band, so a propagation is at most 20 deep.
+  const lo = new Int32Array(skills.length).fill(1);
+  const hi = new Int32Array(skills.length).fill(20);
+  for (let i = 0; i < skills.length; i++) {
+    if (!Number.isNaN(anchor[i])) lo[i] = hi[i] = band[i];
+  }
+  const prereqs = skills.map(() => [] as number[]);
+  const dependents = skills.map(() => [] as number[]);
+  const undo: [Int32Array, number, number][] = [];
+  const raise = (i: number, v: number): boolean => {
+    if (v <= lo[i]) return true;
+    if (v > hi[i]) return false;
+    undo.push([lo, i, lo[i]]);
+    lo[i] = v;
+    return dependents[i].every((d) => raise(d, v + 1));
+  };
+  const lower = (i: number, v: number): boolean => {
+    if (v >= hi[i]) return true;
+    if (v < lo[i]) return false;
+    undo.push([hi, i, hi[i]]);
+    hi[i] = v;
+    return prereqs[i].every((p) => lower(p, v - 1));
+  };
+  // The pairs are acyclic, so the dependents of di and the prereqs of si are
+  // disjoint, and raise and lower cannot undo each other.
+  // Two anchors in one band tie: integer bands cannot order them, and neither
+  // anchor contradicts the pair. Stage postproc keeps the edge either way.
+  let seedAnchorTies = 0;
+  const seeds = acyclic.filter(([si, di]) => {
+    undo.length = 0;
+    if (raise(di, lo[si] + 1) && lower(si, hi[di] - 1)) {
       prereqs[di].push(si);
       dependents[si].push(di);
+      return true;
     }
-    const order = topoOrder(
-      prereqs.map((ps, i) => ({ id: `${i}`, prereqs: ps.map(String) })),
-    ).map(Number);
-    const lo = new Int32Array(skills.length).fill(1);
-    const hi = new Int32Array(skills.length).fill(20);
-    for (const i of order) {
-      if (Number.isNaN(anchor[i])) {
-        for (const p of prereqs[i]) lo[i] = Math.max(lo[i], lo[p] + 1);
-      } else lo[i] = hi[i] = band[i];
-    }
-    for (const i of order.toReversed()) {
-      if (Number.isNaN(anchor[i])) {
-        for (const d of dependents[i]) hi[i] = Math.min(hi[i], hi[d] - 1);
-      }
-    }
-    return { order, prereqs, lo, hi };
-  };
-  const fit = bounds(acyclic);
-  const seeds = acyclic.filter(([si, di]) => fit.lo[si] + 1 <= fit.hi[di]);
-  const seedAnchorConflicts = acyclic.length - seeds.length;
-  const { order, prereqs, lo, hi } = bounds(seeds);
+    for (const [arr, i, v] of undo.toReversed()) arr[i] = v;
+    if (
+      !Number.isNaN(anchor[si]) && !Number.isNaN(anchor[di]) &&
+      band[si] === band[di]
+    ) seedAnchorTies++;
+    return false;
+  });
+  const seedAnchorConflicts = acyclic.length - seeds.length - seedAnchorTies;
+  const order = topoOrder(
+    prereqs.map((ps, i) => ({ id: `${i}`, prereqs: ps.map(String) })),
+  ).map(Number);
   for (const i of order) {
     if (!Number.isNaN(anchor[i])) continue;
     band[i] = Math.max(
@@ -1736,6 +1759,7 @@ export function stageDifficulty() {
     seed_pairs: allSeeds.length,
     seed_cycle_pairs: allSeeds.length - acyclic.length,
     seed_anchor_conflicts: seedAnchorConflicts,
+    seed_anchor_ties: seedAnchorTies,
     grade_band_inversion_samples: invSamples,
     total_seconds: (performance.now() - t0) / 1000,
   });

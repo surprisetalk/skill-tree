@@ -66,6 +66,7 @@ Deno.test("list stats: all four sources contribute, and dedupe merged rows", () 
       "opensalt",
       "digcomp",
       "certatlas",
+      "bncc",
     ]
   ) {
     assertGreater(s.per_source[src], 0, `${src} has 0 rows`);
@@ -308,7 +309,7 @@ Deno.test(
     assertEquals(cycles.code, 1);
     assertEquals(
       conflicts.score(
-        "Under 1% of seed pairs contradict the grade anchors of both skills.",
+        "Under 1% of seed pairs fail to fit bands 1–20 around the anchors.",
       ),
       (0.5 - 1) / (0.01 - 1),
     );
@@ -859,6 +860,21 @@ Deno.test("list: DigComp outcomes carry the source, area, competence, and level 
   );
 });
 
+Deno.test("list: BNCC objectives carry the source, subject, and the grades of their code", () => {
+  const bncc = rows.filter((c) => c[3].includes("bncc"));
+  // 1,580 objectives; dedupe may merge a few.
+  assertGreater(bncc.length, 1400, "too few BNCC rows");
+  const grades = (code: string) => {
+    const t = rows.find((c) => c[4].split(",").includes(`code:${code}`))?.[4]
+      .split(",") ?? [];
+    assert(t.some((x) => x.startsWith("bncc:subject:")), `${code}: no subject`);
+    return t.filter((x) => x.startsWith("grade:")).sort();
+  };
+  assertEquals(grades("EF67LP08"), ["grade:6", "grade:7"]);
+  assertEquals(grades("EI01CG01"), ["grade:PK"]);
+  assertEquals(grades("EM13MAT101"), ["grade:10", "grade:11", "grade:12"]);
+});
+
 Deno.test("list: Cert Atlas objectives carry the source and the exam; dropped vendors stay out", () => {
   const ca = rows.filter((c) => c[3].includes("certatlas"));
   assertGreater(ca.length, 4000, "too few Cert Atlas rows");
@@ -1024,6 +1040,11 @@ Deno.test("readCoursePairs: joins codes to titles, keeps timing before, splits O
     "d1,X1,Software Engineering,",
     "d1,X1,(continuation),",
     "d1,E1,,",
+    "d1,F1,Calculus III for Engineers,",
+    "d1,G1,Introduction to Topology Lab II,",
+    "d1,H1,CEN 271,",
+    "d1,J1,Ethics in Islam,",
+    "d1,K1,ETHICS IN ISLAM,",
     "d2,A100,Algebra,",
     "d2,D400,Topology,",
   ].join("\n") + "\n";
@@ -1039,25 +1060,54 @@ Deno.test("readCoursePairs: joins codes to titles, keeps timing before, splits O
     edgeRow("d1", "E1", "D400", 0, 0, "before") +
     // The same titles in another dataset make one pair.
     edgeRow("d2", "A100", "D400", 0, 0, "before") +
-    edgeRow("d1", "A100", "D400", 0, 0, "before");
+    edgeRow("d1", "A100", "D400", 0, 0, "before") +
+    // Course wrapping goes, so these name Calculus and Topology.
+    edgeRow("d1", "F1", "G1", 0, 0, "before") +
+    edgeRow("d1", "B200", "F1", 0, 0, "before") +
+    edgeRow("d1", "H1", "D400", 0, 0, "before") +
+    edgeRow("d1", "A100", "J1", 0, 0, "before") +
+    // A case variant of a kept pair makes no second pair.
+    edgeRow("d1", "A100", "K1", 0, 0, "before");
   const r = await inCourseDir(courses, edges, (m) => m.readCoursePairs());
   assertEquals(r.pairs.map((p) => [p.src, p.dst]), [
     ["Algebra", "Calculus"],
     ["Algebra", "Real Analysis"],
     ["Calculus", "Real Analysis"],
     ["Algebra", "Topology"],
+    ["Calculus", "Topology"],
+    ["Algebra", "Ethics in Islam"],
   ]);
   assertEquals(r.pairs[0].raw, "d1:A100->B200");
   assertEquals(r.dropped.map((d) => [d.raw, d.reason]), [
     ["d1:Z9->D400", "no-course"],
     ["d1:X1->D400", "ambiguous-code"],
     ["d1:E1->D400", "no-title"],
+    ["d1:B200->F1", "same-topic"],
+    ["d1:H1->D400", "code-title"],
   ]);
   assertEquals(r.timingCounts, {
-    before: 8,
+    before: 13,
     concurrent: 1,
     before_or_concurrent: 1,
   });
+});
+
+Deno.test("courseTopic: a strip never leaves a dangling connector or cuts a year", async () => {
+  const { courseTopic } = await import("./lib.ts");
+  assertEquals(
+    [
+      "Soil Mechanics and Laboratory",
+      "History of Europe from 1350 to 1618",
+      "Advanced Topics in Digital Fabrication II",
+      "Introduction to Programming in C",
+    ].map(courseTopic),
+    [
+      "Soil Mechanics and Laboratory",
+      "History of Europe from 1350 to 1618",
+      "Digital Fabrication",
+      "Programming in C",
+    ],
+  );
 });
 
 Deno.test("readCoursePairs: an unknown timing or alternative flag throws with the line", async () => {
@@ -1228,6 +1278,10 @@ const difficultyBuild = (): Fixture => {
     ["b", "B", ""],
     ["c", "C", ""],
     ["dig", "Dig", "digcomp:level:advanced"],
+    ...Array.from(
+      { length: 22 },
+      (_, i): [string, string, string] => [`chain-${i}`, `Chain ${i}`, ""],
+    ),
   ];
   const emb = new Float32Array(skills.length * 768);
   skills.forEach((_, i) => emb[i * 768 + i] = 1);
@@ -1335,6 +1389,44 @@ Deno.test(
 );
 
 Deno.test(
+  "difficulty: an unanchored seed chain of 22 skills drops one pair, not all",
+  early(async () => {
+    const ids = Array.from({ length: 22 }, (_, i) => `chain-${i}`);
+    const { code, stderr, files } = await runIn(
+      "difficulty",
+      withSeeds(ids.slice(1).map((d, i) => [ids[i], d])),
+      ["build/4_difficulty.tsv", "build/4_stats.json"],
+    );
+    assertEquals(code, 0, stderr);
+    assertEquals(
+      JSON.parse(files["build/4_stats.json"]).seed_anchor_conflicts,
+      1,
+    );
+    const band = difficultyCol(files, 1);
+    const inverted = ids.slice(1).filter((d, i) =>
+      i !== 19 && band.get(ids[i])! >= band.get(d)!
+    );
+    assertEquals(inverted, []);
+  }),
+);
+
+Deno.test(
+  "difficulty: a seed pair of two anchors in one band is a tie, not a conflict",
+  early(async () => {
+    const build = withSeeds([["grade-low", "a"]]);
+    build["build/3b_tagged_deduped.tsv"] =
+      (build["build/3b_tagged_deduped.tsv"] as string)
+        .replace("a\tA\t\ttest\t\t", "a\tA\t\ttest\tgrade:1\t");
+    const { code, stderr, files } = await runIn("difficulty", build, [
+      "build/4_stats.json",
+    ]);
+    assertEquals(code, 0, stderr);
+    const s = JSON.parse(files["build/4_stats.json"]);
+    assertEquals([s.seed_anchor_ties, s.seed_anchor_conflicts], [1, 0]);
+  }),
+);
+
+Deno.test(
   "difficulty: a seed dependent anchored at the lowest band drops the pair",
   early(async () => {
     const build = withSeeds([["pre", "dep"]]);
@@ -1400,10 +1492,11 @@ Deno.test(
       difficultyCol(none.files, 2).get("a"),
       "a seed moved a raw value",
     );
+    // The first pair fits, so only the second pair drops.
     assertEquals(chain.code, 0, chain.stderr);
     assertEquals(
       JSON.parse(chain.files["build/4_stats.json"]).seed_anchor_conflicts,
-      2,
+      1,
     );
     assertEquals(cycle.code, 0, cycle.stderr);
     const stats = (r: typeof cycle) =>
@@ -1428,6 +1521,16 @@ Deno.test(
   }),
 );
 
+// Stage list throws without the BNCC translations. A copy, not a link to
+// build/, so the temp run cannot overwrite the real build/1_skills.tsv.
+const withBnccCache = (dir: string) => {
+  Deno.mkdirSync(`${dir}/build`);
+  Deno.copyFileSync(
+    "build/1g_bncc_translate.tsv",
+    `${dir}/build/1g_bncc_translate.tsv`,
+  );
+};
+
 // Stage list over a temp data dir whose OpenSALT folder holds only `items`.
 const listOpensalt = async (items: Record<string, string>[]) => {
   const dir = Deno.makeTempDirSync();
@@ -1441,6 +1544,7 @@ const listOpensalt = async (items: Record<string, string>[]) => {
     `${dir}/data/opensalt/a.json`,
     JSON.stringify({ CFDocument: { title: "T" }, CFItems: items }),
   );
+  withBnccCache(dir);
   const out = await run(["list"], dir, LIST_BOUND_MS);
   const stdout = new TextDecoder().decode(out.stdout);
   const stderr = new TextDecoder().decode(out.stderr);
@@ -1470,6 +1574,7 @@ const listWithData = async (
   for (const [f, bytes] of Object.entries(files)) {
     Deno.writeFileSync(`${dir}/data/${name}/${f}`, bytes);
   }
+  withBnccCache(dir);
   const out = await run(["list"], dir, LIST_BOUND_MS);
   Deno.removeSync(dir, { recursive: true });
   return {
@@ -1672,8 +1777,9 @@ Deno.test(
     // Shared embeddings make kNN smoothing pull grade-low and grade-high together.
     const same = (pairs: string[][]) => {
       const build = withSeeds(pairs);
-      const emb = new Float32Array(768 * 12);
-      for (let i = 0; i < 12; i++) emb[i * 768 + (i === 1 ? 0 : i)] = 1;
+      const n = (build["build/2_ids.tsv"] as string).trim().split("\n").length;
+      const emb = new Float32Array(768 * n);
+      for (let i = 0; i < n; i++) emb[i * 768 + (i === 1 ? 0 : i)] = 1;
       build["build/2_embeddings.bin"] = new Uint8Array(emb.buffer);
       return build;
     };

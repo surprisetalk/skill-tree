@@ -687,6 +687,32 @@ export async function readMoocPairs(): Promise<MoocPair[]> {
 
 const TIMINGS = ["before", "concurrent", "before_or_concurrent"] as const;
 
+// A course title wraps its topic: "Introduction to Topology", "Calculus III
+// for Engineers", "Microprocessors Lab". The resolver matches skills, so the
+// wrapping goes. "in X" stays ("Ethics in Islam"), and "for X" goes only for
+// an audience ("Analytics for Accounting" stays).
+const COURSE_LEAD =
+  /^(?:(?:an?|the)\s+)?(?:introduction to|introductory|intro to|fundamentals of|principles of|foundations of|elements of|basics of|basic|survey of|topics in|special topics in|selected topics in|seminar in|seminar on|advanced topics in|advanced|elementary|intermediate|general|essentials of|honou?rs)\s+(?:the\s+)?/i;
+const COURSE_TAIL =
+  /(?:\s*[-–:,(]\s*|\s+)(?:i{1,3}|iv|vi{0,3}|ix|x|\d{1,3}[a-z]?|[a-d]|part \w+|level \w+|lab(?:oratory)?|practicum|workshop|seminar|studio|tutorial|clinical|lecture|capstone|honou?rs|for [\w ,&'/-]*?(?:engineer(?:s|ing)|students|majors|teachers|educators|nurses|translators|planners|managers|scientists|professionals|beginners|architects|designers|technologists))\)?$/i;
+// "CEN 271": a title that is only a code names no topic.
+const CODE_TITLE = /^[A-Z]{2,5}\s?\d{3,4}[A-Z]?$/;
+// Four passes strip "Advanced Topics in X Lab II"; a fifth would find nothing.
+export const courseTopic = (title: string): string => {
+  let s = title.replace(/^[\s–-]+/, "");
+  for (let k = 0; k < 4; k++) {
+    const lead = s.replace(COURSE_LEAD, "") || s;
+    const tail = lead.replace(COURSE_TAIL, "").replace(/[\s,:&-]+$/, "");
+    // "Soil Mechanics and Laboratory": the tail was part of the topic.
+    const n = tail && !/\b(?:and|of|to|in|for|from|the|with|or)$/i.test(tail)
+      ? tail
+      : lead;
+    if (n === s) break;
+    s = n;
+  }
+  return s;
+};
+
 // Mendeley fs2hvkps7z: a prerequisite edge names course codes, and a code means
 // one course only inside its dataset (institution and edition). The join gives
 // each code its title. Only timing "before" is a prerequisite. Each row of an
@@ -780,7 +806,9 @@ export async function readCoursePairs(): Promise<{
       if (!t) return { reason: "no-course" };
       if (t.size > 1) return { reason: "ambiguous-code" };
       const [only] = t;
-      return only ? { t: only } : { reason: "no-title" };
+      if (!only) return { reason: "no-title" };
+      if (CODE_TITLE.test(only)) return { reason: "code-title" };
+      return { t: courseTopic(only) };
     };
     const src = title(e[iS]), dst = title(e[iT]);
     if ("reason" in src || "reason" in dst) {
@@ -788,9 +816,15 @@ export async function readCoursePairs(): Promise<{
         ? src.reason
         : (dst as { reason: string }).reason;
       dropped.push({ from: e[iS], to: e[iT], raw, reason });
-    } else if (!seen.has(`${src.t}\t${dst.t}`)) {
-      seen.add(`${src.t}\t${dst.t}`);
-      pairs.push({ src: src.t, dst: dst.t, raw });
+    } else {
+      const key = `${src.t}\t${dst.t}`.toLowerCase();
+      if (src.t.toLowerCase() === dst.t.toLowerCase()) {
+        // "Calculus I" before "Calculus II": a sequence, not a topic prereq.
+        dropped.push({ from: e[iS], to: e[iT], raw, reason: "same-topic" });
+      } else if (!seen.has(key)) {
+        seen.add(key);
+        pairs.push({ src: src.t, dst: dst.t, raw });
+      }
     }
   }
   return { pairs, dropped, timingCounts };
@@ -1396,6 +1430,11 @@ export async function embeddingFallback(
   skills: { id: string; title: string }[],
   stage: string,
 ): Promise<{ matched: Map<string, string>; dropped: Map<string, string> }> {
+  // REVIEW: Gate 0.90, the lowest that stays right 9 times in 10. A gpt-oss
+  // judge, then a hand check of its "no"s, put 141 matches at >= 0.90 at about
+  // 96% and 67 labels at 0.85-0.90 at about 85%. The errors are siblings:
+  // like vs unlike denominators, fractions to decimals vs decimals to
+  // fractions. Alternative: 0.85. It adds about 1 wrong seed per 7.
   const FALLBACK = 0.90;
   const sigTokens = (s: string): Set<string> => {
     const out = new Set<string>();

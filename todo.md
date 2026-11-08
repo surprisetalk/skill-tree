@@ -2,86 +2,48 @@
 
 ## Blocked on you
 
-- [ ] You get a fresh `skills.tsv` that includes the fixes from audit passes
-      9–16, and `deno task status` passes. Today 18 conditions score 0 because
-      `skills.tsv` does not exist (31 Oct: "skills.tsv: missing. Run: deno run
-      -A pipeline.ts finalize"). The 7 conditions that read only `build/` stages
-      pass. Blocker: stage `prereq` runs for days on the Mac (started 29 Oct;
-      log in the session scratchpad, `chain/prereq.log`). 0. No `pipeline.ts`
-      process runs on the Mac now (31 Oct). `5_prereqs.tsv` last wrote 30 Oct
-      07:51, and `1_skills.tsv` 07:56, newer than `2_embeddings.bin` and
-      `4_difficulty.tsv` (29 Oct). Check the `prereq` log for a crash. Rerun the
-      stages from `embed` to `finalize` in the background, with a timeout.
-  1. When `prereq`, `postproc`, and `finalize` finish, commit
-     `build/5_prereqs.tsv`.
-  2. Run `deno task status`. Set the three LectureBank floors
-     (`EXPERT_PRECISION_FLOOR`, `EXPERT_RECALL_FLOOR`, `EXPERT_MIN_POSITIVES`,
-     pipeline.ts) from the run's `expert pairs:` stderr line. The first run
-     embeds about 500 topic names. Write a todo entry for each condition below
-     1.0.
-  3. `4_stats.json` shows `seed_anchor_conflicts` 1311 of 2805 seed pairs and
-     `seed_cycle_pairs` 40. Look for unanchored seed chains longer than 20:
-     stage `difficulty` drops every pair of such a chain, where dropping the
-     fewest would do. Check the OpenSALT grade-order pairs across frameworks for
-     the cycles.
-  4. Read the transitive-reduction visit count in the `postproc` log against the
-     2e9 cap (prereq.ts).
+- [ ] You get a fresh `skills.tsv` from a full build, BNCC included, and
+      `deno task status` passes. Today `skills.tsv` does not exist, so 18
+      conditions score 0. Blocker: the build runs about 4 days on the Mac.
+      `build/chain/chain.sh` started it on 7 Nov; it logs each stage to
+      `build/chain/<stage>.log`. It runs `enrich` until infill starts (that
+      writes the BNCC title summaries), then `list` through `status`, skipping
+      `trees`.
+  1. Check `build/chain/status.log`. If a stage failed, fix it and rerun the
+     chain from that stage; every stage resumes from its cache.
+  2. When `prereq`, `postproc`, and `finalize` finish, commit
+     `build/5_prereqs.tsv` and `build/1c_summarize.tsv` by path:
+     `jj ci -m "…" <paths>`.
+  3. Set the three LectureBank floors (`EXPERT_PRECISION_FLOOR`,
+     `EXPERT_RECALL_FLOOR`, `EXPERT_MIN_POSITIVES`, pipeline.ts) from the
+     `expert pairs:` stderr line in `build/chain/status.log`. Write a todo entry
+     for each condition below 1.0.
+  4. Read the transitive-reduction visit count in `build/chain/postproc.log`
+     against the 2e9 cap (prereq.ts).
 
-- [ ] More expert seed pairs resolve to skills. Today 4,014 of 35,430 pairs
-      resolve: moocx_cs 3/725, moocx_math 2/761, metacademy 138/3101, courses
-      531/19675, alcpl_geometry 17/524. 23,588 unresolved labels fail only the
-      cosine 0.90 gate (`build/1e_unresolved.tsv`, reason `below-cos-0.9`).
-      Until then, `SEED_FLOORS` only catches a drop: courses at 3% pass.
-  1. Courses: 8,192 distinct titles fail the gate. They name courses, not
-     skills: "Calculus I for Engineering", "Aerospace Structures II", "CEN 271".
-     Strip numbering (I, II, 101) and audience suffixes ("for Engineering")
-     before the resolver. Count the titles that still name no skill; drop the
-     courses source if most do. 2,547 more fail `no-course`.
-  2. Sample 50 `below-cos-0.9` labels per source with their nearest skill and
-     cosine. Judge each match by hand or with gpt-oss.
-  3. Set the gate where matches stay right 9 times in 10. Record it as a
-     `REVIEW:` note.
-  4. Rerun `seed-edges`, then raise each `SEED_FLOORS` entry (sources.ts) to 90%
-     of its new share.
-
-- [ ] Brazil's national curriculum (BNCC) appears in `skills.tsv`, with grade
-      anchors from 4-year-olds to grade 12. Blocker: the Portuguese labels need
-      a `gpt-oss:20b` translation run, as the full-build entry needs.
-  1. Clone `github.com/bncc-dev/bncc-dados` (data CC BY 4.0). Commit
-     `dados/bncc-2018/*.json`.
-  2. Stage `enrich` translates the Portuguese labels into a new cache, as it
-     does for MOOCCubeX.
-  3. Stage `list`: parse the grade and subject from each code (`EF67LP08` =
-     grades 6–7, Portuguese). Map early-childhood age bands to grade -1.
+- [ ] Every Lightcast skill has a description. Stage `enrich` holds 27,953
+      Lightcast skills with no description or a placeholder, about 1.5 days of
+      gpt-oss. Blocker: the run length, and the GPU that the full build uses.
+  1. After the full build, run `deno run -A pipeline.ts enrich` in the
+     background under `caffeinate -i`. It resumes from `build/1b_infill.tsv`.
+  2. Commit `build/1b_infill.tsv`, then rerun the stages from `list`.
 
 - [ ] `deno task status` also scores prereq edges against Junyi crowd labels.
-      Blocker: a PSLC DataShop login. You make the account (28 Oct).
+      Blocker: a PSLC DataShop login. You make the account.
   1. Fetch dataset 1198 `relationship_annotation_training.csv` (1,131 pairs). It
      is non-commercial, so use it for eval only.
   2. Score it with the LectureBank precision and recall code.
 
 - [ ] Skills from every US state standard set appear in `skills.tsv`, merged
-      with OpenSALT where they repeat. Decision: approved design. Common
+      with OpenSALT where they repeat. Decision: approved design, Common
       Standards Project (CSP) and ASN, everything they give, with no row bound.
-      Blocker: the full CSP download runs for hours, and its size decides
-      whether `data/csp/` is committed like `data/opensalt/` (107 MB) or
-      gitignored. ASN bulk access needs your email request. Count (28 Oct,
-      Learning Commons v1.16.0): Learning Commons holds 209 jurisdiction ×
-      subject pairs in current frameworks: 52 jurisdictions (50 states,
-      Washington D.C., Multi-State) × 4 core subjects (ELA, math, science,
-      social studies), plus Multi-State durable skills. OpenSALT's 95 frameworks
-      name no jurisdiction or subject; by title, its 26 core-subject pairs all
-      sit in Learning Commons, and it adds about 10 pairs outside them (computer
-      science: Alabama and Massachusetts; CTE: North Carolina and North Dakota;
-      world languages: Florida and Colorado; Ontario and Western Canada math;
-      Kentucky early childhood; AP CS Principles). CSP lists 786 jurisdictions:
-      51 US states and D.C., 13 Canadian province entries, Common Core, 342
-      organizations, 375 schools or districts. Its subjects are finer than
-      Learning Commons': Texas alone has 48 subject titles, 33 of them not
-      deprecated. So CSP adds Canada, organizations, schools, and the non-core
-      subjects of each state (Texas: 29 beyond the core four). The full pair
-      count needs one GET per jurisdiction (786); this count used two. Decide
-      whether non-core subjects, Canada, and schools justify the crawl.
+      Blocker: the full CSP crawl runs for hours, and the Mac disk is 97% full
+      (34 GB free, 7 Nov). Its size decides whether `data/csp/` is committed
+      like `data/opensalt/` (107 MB) or gitignored. ASN bulk access needs your
+      email request. CSP lists 786 jurisdictions: 52 US states and D.C., 13
+      Canadian entries, Common Core, 342 organizations, 375 schools or
+      districts. It adds Canada, organizations, schools, and each state's
+      non-core subjects (Texas: 29 beyond the core four) to Learning Commons.
   1. `data/download.ts` fetches each CSP jurisdiction from
      `api.commonstandardsproject.com/api/v1` (no key), then each standard set,
      into `data/csp/{setId}.json`. It skips files that exist, uses a 30 s
@@ -108,7 +70,7 @@
 
 - [ ] England's school curriculum (Oak National Academy, KS1–KS4, 17 subjects)
       appears in `skills.tsv`, with unit order as seed edges. Blocker: a free
-      API key through Oak's HubSpot form. You request it (28 Oct).
+      API key through Oak's HubSpot form. You request it.
   1. Fetch the bulk JSON per subject and phase. Before you parse it, check one
      file for quiz fields: the schema has none, but the bulk page lists them.
   2. Each unit becomes a skill. Consecutive units within one `thread` become
@@ -121,7 +83,7 @@
       2–7) appear in `skills.tsv`, tagged by occupation. Blocker: a free API
       key, granted at Skills England's discretion. The licence requires the
       Skills England logo and attribution on every derived product. Decision:
-      sponge carries the logo (you, 28 Oct). You request the key.
+      sponge carries the logo. You request the key.
   1. `GET /api/v1/Occupations` with header `X-API-KEY`, then each
      `/Occupations/{stdCode}`.
   2. Each `knowledges`, `skills`, and `behaviours` item becomes a skill. Its

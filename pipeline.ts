@@ -266,8 +266,12 @@ async function stageStatus() {
           1,
         ),
     ],
+    // REVIEW: Two anchors in one band count as a tie (seed_anchor_ties), not a
+    // conflict. Alternative: count ties too. Then a grade-3 standard that
+    // builds towards another grade-3 standard fails the condition, and only
+    // half-grade bands could pass it.
     [
-      "Under 1% of seed pairs contradict the grade anchors of both skills.",
+      "Under 1% of seed pairs fail to fit bands 1–20 around the anchors.",
       () => grade(stat("seed_anchor_conflicts") / stat("seed_pairs"), 0.01, 1),
     ],
     [

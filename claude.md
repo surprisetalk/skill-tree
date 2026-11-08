@@ -165,9 +165,11 @@ then keeps the gzip only. Uncompressed .csv files are gitignored.
   A code means one course only inside its `dataset`. `timing` is `before`,
   `concurrent`, or `before_or_concurrent`; only `before` is a prereq. Rows of
   one OR group (`is_alternative` 1) each make a pair.
-- `readCoursePairs` (`lib.ts`) joins codes to titles and dedupes by title pair.
-  A code with no course, two titles, or an empty title goes to
-  `1e_unresolved.tsv` with that reason.
+- `readCoursePairs` (`lib.ts`) joins codes to titles, strips course wrapping
+  with `courseTopic` ("Calculus III for Engineers" → "Calculus"), and dedupes by
+  topic pair. A code with no course, two titles, an empty title, or a code-only
+  title ("CEN 271"), and a pair of one topic ("Calculus I" → "Calculus II"), go
+  to `1e_unresolved.tsv` with that reason.
 
 ### data/khanacademy/ — Khan Academy Math Prerequisite Graph (TSV)
 
@@ -235,6 +237,21 @@ under `LB-Paper/`:
 - `readLectureBank` (`lib.ts`) reads the four sets. A row that names a topic id
   with no name in its topic file is counted and dropped (LB1 ids 210 and 211).
 
+### data/bncc/ — Brazil's National Curriculum (BNCC, gzipped JSON)
+
+From github.com/bncc-dev/bncc-dados at the commit pinned in `data/download.ts`.
+Data CC BY 4.0: credit "bncc.dev (maintained by Profy)" with a link to the repo.
+Git tracks the gzips, because jj refuses a new file over 1 MiB.
+
+- **educacao-infantil.json.gz** — `objetivos[]`: `codigo, texto, grupo_etario`.
+- **ensino-fundamental.json.gz** — `habilidades[]`: `codigo, texto, anos[]`.
+- **ensino-medio.json.gz** — `habilidades[]`: `codigo, texto, area`.
+- The code holds grade and subject: `EF67LP08` is grades 6–7, Portuguese.
+  `EI01`–`EI03` are age bands to 5 years (grade PK). `EM13` is grades 10–12.
+- Stage `enrich` translates each `texto` with Ollama into
+  `build/1g_bncc_translate.tsv`, keyed by code. Stage `list` throws on a code
+  with no translation.
+
 ### data/opensalt/ — OpenSALT Standards Frameworks (CASE JSON)
 
 K-12 standards frameworks from opensalt.net in 1EdTech CASE format. Includes
@@ -286,8 +303,10 @@ A new build table gets a schema; a new id goes through `slugify`.
 **Parsers**:
 
 - Stage `list`: ESCO, O\*NET (Skills/Knowledge/Abilities/Tasks/DWAs/Tech),
-  Lightcast, OpenSALT, Learning Commons, DigComp, Cert Atlas, and the hubs in
-  `data/_foundations.json`. Each Cert Atlas objective is one skill with source
+  Lightcast, OpenSALT, Learning Commons, DigComp, Cert Atlas, BNCC, and the hubs
+  in `data/_foundations.json`. Each BNCC objective is one skill with source
+  `bncc`, tags `bncc:objective`, `bncc:subject:*`, `grade:*`, and
+  `code:<codigo>`. Each Cert Atlas objective is one skill with source
   `certatlas`, no tags, and a description of exam, certifying body, domain, and
   sub-objectives; a title with no Latin letter is dropped and counted. Each
   DigComp LearningOutcome is one skill with tags `digcomp:outcome`,
@@ -315,8 +334,9 @@ A new build table gets a schema; a new id goes through `slugify`.
 
 **LLM enrichment** (stage `enrich`): fill missing Lightcast descriptions;
 summarize long OpenSALT/O\*NET-task titles into 3-7 word names; expand short
-O\*NET task statements and OpenSALT standards; translate MOOCCubeX labels.
-Resumable via the `1b`–`1f` caches. Stage `list` applies them on its next run.
+O\*NET task statements and OpenSALT standards; translate MOOCCubeX labels and
+BNCC objectives (first, since stage `list` needs them). Resumable via the
+`1b`–`1g` caches. Stage `list` applies them on its next run.
 
 **Prereq inference** (stage `prereq`): per-skill top-K candidates by cosine
 similarity (within-topic + ancestor + cross-topic pools), then the LLM picks
@@ -370,8 +390,10 @@ Columns:
   `educationLevel` + Khan V-Position) DigComp levels, and O\*NET job zones via
   kNN smoothing and isotonic PAV calibration. One pass then puts each expert
   seed prereq at least one band below its dependent. An anchored skill never
-  moves; a seed pair that cannot fit, or sits in a cycle, is dropped and counted
-  in `4_stats.json`.
+  moves. Pairs join in file order while every skill still fits a band; a pair
+  that cannot fit, or sits in a cycle, is dropped and counted in `4_stats.json`
+  (`seed_anchor_ties` when two anchors share a band, else
+  `seed_anchor_conflicts`). Stage `postproc` keeps every seed edge either way.
 - `prereqs` — comma-separated prereq IDs. Strict DAG, no self-loops, all IDs
   resolve within the file.
 - `occupations` / `topics` — comma-separated slugs from embedding match +
@@ -388,8 +410,8 @@ Caches for per-stage resumption. Key files:
 - `1m_lc_ids.tsv` — Learning Commons node id to skill id (`node_id, skill_id`),
   written by stage `list`.
 - `1b_infill.tsv`, `1c_summarize.tsv`, `1d_onet_desc.tsv`,
-  `1e_opensalt_desc.tsv`, `1f_translate.tsv` — Ollama enrichment caches,
-  `key<TAB>value`.
+  `1e_opensalt_desc.tsv`, `1f_translate.tsv`, `1g_bncc_translate.tsv` — Ollama
+  enrichment caches, `key<TAB>value`.
 - `1e_seed_edges.tsv` — resolved expert-labeled prereq pairs from
   Khan/AL-CPL/Metacademy/MOOCCubeX/courses/OpenSALT.
 - `1e_unresolved.tsv` — seed pairs that failed to resolve, with a reason per

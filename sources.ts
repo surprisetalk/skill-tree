@@ -130,6 +130,142 @@ const SUMMARIZE_CACHE = `${BUILD}/1c_summarize.tsv`;
 const ONET_DESC_CACHE = `${BUILD}/1d_onet_desc.tsv`;
 const OPENSALT_DESC_CACHE = `${BUILD}/1e_opensalt_desc.tsv`;
 
+// ---------- BNCC (Brazil's national curriculum) ----------
+
+const BNCC_TRANSLATE_CACHE = `${BUILD}/1g_bncc_translate.tsv`;
+// A Portuguese function word means the model echoed or half-translated.
+const PORTUGUESE_RE = /\b(?:não|para|uma|pelos?|pelas?|dos|das)\b|ções\b/i;
+const isBnccTranslation = (t: string | undefined): t is string =>
+  !!t?.trim() && !PORTUGUESE_RE.test(t) && !/[\t\r\n]/.test(t);
+
+const BNCC_SUBJECTS: Record<string, string> = {
+  AR: "Art",
+  CI: "Science",
+  EF: "Physical education",
+  ER: "Religious education",
+  GE: "Geography",
+  HI: "History",
+  LI: "English language",
+  LP: "Portuguese language",
+  MA: "Mathematics",
+  LGG: "Languages",
+  MAT: "Mathematics",
+  CNT: "Natural sciences",
+  CHS: "Human and social sciences",
+};
+// Early-childhood fields of experience: EI01CG01 is field CG.
+const BNCC_FIELDS: Record<string, string> = {
+  CG: "Body, gestures, and movement",
+  EO: "The self, the other, and us",
+  TS: "Traces, sounds, colors, and shapes",
+  EF: "Listening, speaking, thinking, and imagination",
+  ET: "Spaces, times, quantities, relations, and transformations",
+};
+
+type BnccRow = {
+  code: string;
+  text: string;
+  grades: string[];
+  subject: string;
+};
+
+// The code carries grade and subject: EF67LP08 is grades 6–7, Portuguese.
+// EI01–EI03 are age bands from babies to 5-year-olds; all three map to PK.
+// EM13 spans the three upper-secondary years, grades 10–12.
+function readBncc(): BnccRow[] {
+  const rows: BnccRow[] = [];
+  const seen = new Map<string, string>();
+  const fix = "Re-download it: rm -r data/bncc; deno run -A data/download.ts";
+  for (
+    const [file, key] of [
+      ["educacao-infantil", "objetivos"],
+      ["ensino-fundamental", "habilidades"],
+      ["ensino-medio", "habilidades"],
+    ]
+  ) {
+    const path = `data/bncc/${file}.json.gz`;
+    const out = new Deno.Command("gzip", {
+      args: ["-dc", path],
+      stdout: "piped",
+      stderr: "piped",
+    }).outputSync();
+    let doc: Record<string, unknown>;
+    try {
+      if (out.code !== 0) throw new Error(`gzip exit ${out.code}`);
+      doc = JSON.parse(new TextDecoder().decode(out.stdout));
+    } catch (e) {
+      throw new Error(
+        `${path}: expected gzipped JSON, received ${(e as Error).message}: ${
+          new TextDecoder().decode(out.stderr).trim()
+        }. ${fix}`,
+      );
+    }
+    const list = doc[key];
+    if (!Array.isArray(list) || !list.length) {
+      throw new Error(
+        `${path}: expected a non-empty "${key}" array, received ${
+          JSON.stringify(list)?.slice(0, 80)
+        }. ${fix}`,
+      );
+    }
+    for (const r of list as Record<string, unknown>[]) {
+      const where = `${path} ${JSON.stringify(r.codigo)}`;
+      const code = String(r.codigo);
+      const text = typeof r.texto === "string" ? r.texto.trim() : "";
+      const status = (r.vigencia as { status?: unknown } | undefined)?.status;
+      if (!text || status !== "vigente") {
+        throw new Error(
+          `${where}: expected a non-empty texto and vigencia.status "vigente", received ${
+            JSON.stringify([r.texto, status]).slice(0, 120)
+          }. A revoked row needs a filter here. ${fix}`,
+        );
+      }
+      const ei = code.match(/^EI0([1-3])(CG|EO|TS|EF|ET)\d{2}$/);
+      const ef = code.match(/^EF(\d)(\d)(AR|CI|EF|ER|GE|HI|LI|LP|MA)\d{2}$/);
+      // Areas number with 3 digits (EM13MAT101), Portuguese with 2 (EM13LP01).
+      const em = code.match(/^EM13(?:(LGG|MAT|CNT|CHS)\d{3}|(LP)\d{2})$/);
+      let row: BnccRow | undefined;
+      if (ei && r.grupo_etario === `ei-grupo-0${ei[1]}`) {
+        row = { code, text, grades: ["PK"], subject: BNCC_FIELDS[ei[2]] };
+      } else if (ef) {
+        const [lo, hi] = ef[1] === "0" ? [+ef[2], +ef[2]] : [+ef[1], +ef[2]];
+        const anos = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+        if (JSON.stringify(anos) === JSON.stringify(r.anos)) {
+          row = {
+            code,
+            text,
+            grades: anos.map(String),
+            subject: BNCC_SUBJECTS[ef[3]],
+          };
+        }
+      } else if (em) {
+        row = {
+          code,
+          text,
+          grades: ["10", "11", "12"],
+          subject: BNCC_SUBJECTS[em[1] ?? em[2]],
+        };
+      }
+      if (!row) {
+        throw new Error(
+          `${where}: expected a code EI0[1-3]<field>NN with its age group, EF<years><subject>NN with matching anos, EM13<area>NNN, or EM13LPNN, received ${
+            JSON.stringify([code, r.grupo_etario ?? r.anos])
+          }. ${fix}`,
+        );
+      }
+      const first = seen.get(code);
+      if (first) {
+        throw new Error(
+          `${where}: expected a unique code, received a second "${code}" (first in ${first}). ${fix}`,
+        );
+      }
+      seen.set(code, path);
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
 const SHORT_TECH_WHITELIST = new Set([
   "r",
   "go",
@@ -1043,6 +1179,39 @@ export function stageList() {
     );
   }
 
+  // BNCC: one skill per learning objective, titled by its English translation.
+  // REVIEW: BNCC skips the long-title drop; stage enrich names each title over
+  // 120 characters in 3-7 words, and the full statement becomes the
+  // description. Alternative: drop long titles as for OpenSALT. Most BNCC
+  // objectives are long, so the source would lose most of its rows.
+  {
+    const english = loadTsvCache(BNCC_TRANSLATE_CACHE);
+    const rows = readBncc();
+    for (const r of rows) {
+      const t = english.get(r.code);
+      if (!isBnccTranslation(t)) {
+        throw new Error(
+          `BNCC ${r.code}: expected an English translation in ${BNCC_TRANSLATE_CACHE}, received ${
+            JSON.stringify(t)
+          }. Delete that row if present, then run: deno run -A pipeline.ts enrich`,
+        );
+      }
+      raw.push({
+        id: "",
+        title: t,
+        description: "",
+        sources: ["bncc"],
+        tags: [
+          "bncc:objective",
+          `bncc:subject:${slugify(r.subject)}`,
+          ...r.grades.map((g) => `grade:${g}`),
+          `code:${r.code}`,
+        ],
+      });
+    }
+    console.log(`  bncc: ${rows.length} objectives`);
+  }
+
   // Normalize + denoise
   let normalized = 0, denoised = 0;
   for (const s of raw) {
@@ -1259,6 +1428,7 @@ export function stageList() {
       "learningcommons",
       "digcomp",
       "certatlas",
+      "bncc",
     ]
       .map((
         src,
@@ -1327,6 +1497,22 @@ export function stageList() {
 // ---------- stage enrich: Ollama infill + summarize + onet-desc ----------
 
 export async function stageEnrich() {
+  // First, because stage list throws without these and the rest reads its output.
+  await resumableOllama(
+    "enrich:bncc",
+    BNCC_TRANSLATE_CACHE,
+    readBncc().map((r) => ({ id: r.code, text: r.text, subject: r.subject })),
+    (t) =>
+      `Translate this learning objective from Brazil's national curriculum (subject: ${t.subject}) from Portuguese into plain English. Keep every idea and add none. Output only the translation.\n\nObjective: ${t.text}\n\nEnglish:`,
+    {
+      // The longest objective is 1,500 characters, about 400 tokens in English.
+      numPredict: 700,
+      clean: (raw) => {
+        const c = raw.replace(/^["“]|["”]$/g, "").trim();
+        return isBnccTranslation(c) ? c : "";
+      },
+    },
+  );
   const SUM_MAX = 120;
   const infillTargets: { id: string; title: string }[] = [];
   const sumTargets: { id: string; title: string }[] = [];
@@ -1361,6 +1547,17 @@ export async function stageEnrich() {
     `[enrich] infill=${infillTargets.length} (opaque=${opaqueSkipped}), summarize=${sumTargets.length}, onet-desc=${onetTargets.length}, opensalt-desc=${opensaltTargets.length}`,
   );
 
+  // Summaries rename skills, so they run before the slow infill (about 28k
+  // Lightcast descriptions); stop the stage there and the titles hold.
+  await resumableOllama(
+    "enrich:summarize",
+    SUMMARIZE_CACHE,
+    sumTargets,
+    (t) =>
+      `Extract the core skill as a concise 3-7 word noun phrase. Extract only concepts present in the input; do not add or assume. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n\nStandard: ${t.title}\n\nName:`,
+    { numPredict: 60 },
+  );
+
   // Without context, the model reads "Protege" as mentorship, not the ontology editor.
   const LIGHTCAST_CONTEXT =
     "You are describing entries in a professional labor-market skills taxonomy (Lightcast). When a name is ambiguous between generic English and a specific technical tool/product/standard, assume the technical interpretation. Do not invent organization names, certifications, or statistics.";
@@ -1373,15 +1570,6 @@ export async function stageEnrich() {
       `${LIGHTCAST_CONTEXT}\n\nWrite a single factual sentence (≤100 chars) defining the skill without marketing language, jargon, or elaboration. Do not begin with the skill name. If unclear, output: SKIP\n\nSkill: ${t.title}\n\nDefinition:`,
     // Under 200 tokens, answers stop mid-word.
     { numPredict: 200 },
-  );
-
-  await resumableOllama(
-    "enrich:summarize",
-    SUMMARIZE_CACHE,
-    sumTargets,
-    (t) =>
-      `Extract the core skill as a concise 3-7 word noun phrase. Extract only concepts present in the input; do not add or assume. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n\nStandard: ${t.title}\n\nName:`,
-    { numPredict: 60 },
   );
 
   await resumableOllama(
@@ -1807,6 +1995,10 @@ export async function stageSeedEdges() {
   }
 
   // University course prerequisites
+  // REVIEW: Keep courses although about 85% of its distinct topics name no
+  // skill (7 Nov: 6,275 below the gate, 1,552 edges resolve). The unresolved
+  // ones go to quarantine and cost nothing. Alternative: drop the source, as
+  // todo.md planned when most titles fail. It loses a third of the seed edges.
   const courses = await readCoursePairs();
   for (const p of courses.pairs) addRaw(p.src, p.dst, "courses", p.raw);
   console.log(
@@ -2133,8 +2325,8 @@ export async function stageSeedEdges() {
     if (!prev || (prev.fallback && !e.fallback)) seen.set(k, e);
   }
   const uniq = [...seen.values()];
-  // REVIEW: Each floor is 90% of the resolved share on the first full build
-  // (29 Oct), so a lost source stops the stage, and embedding jitter does not.
+  // REVIEW: Each floor is 90% of the resolved share on the last run that set
+  // it, so a lost source stops the stage, and embedding jitter does not.
   // Alternative: a status condition. It lets a quarantined source ship.
   const SEED_FLOORS: Record<string, number> = {
     khan: 0.535,
@@ -2147,7 +2339,7 @@ export async function stageSeedEdges() {
     moocx_cs: 0.0037,
     moocx_math: 0.0023,
     moocx_psy: 0.079,
-    courses: 0.0243,
+    courses: 0.0705,
     opensalt_precedes: 0.0106,
     opensalt_grade: 0.201,
     foundation: 0.9,

@@ -15,6 +15,7 @@ build/*
 !build/1d_onet_desc.tsv
 !build/1e_opensalt_desc.tsv
 !build/1f_translate.tsv
+!build/1g_bncc_translate.tsv
 !build/3b_aliases.tsv
 !build/5_prereqs.tsv
 skills.tsv

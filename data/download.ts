@@ -439,6 +439,7 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
     fn: courses,
   },
   { label: "cert atlas exam objectives (1 MB gzipped)", fn: certAtlas },
+  { label: "bncc brazil national curriculum (2 MB)", fn: bncc },
   {
     label: "lecturebank expert prerequisite pairs (9 MB clone, eval only)",
     fn: async () => {
@@ -462,6 +463,47 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
     },
   },
 ];
+
+// BNCC (bncc.dev, maintained by Profy), data CC BY 4.0. Git tracks the files.
+// REVIEW: Pin commit 9c26897 (data release dados-2026.07). Alternative: follow
+// main. It picks up corrections but changes the skills with no commit here.
+const BNCC_COMMIT = "9c268978efa2aa250834c6a9edb6074432752838";
+const BNCC_FILES = [
+  "dados/bncc-2018/educacao-infantil.json",
+  "dados/bncc-2018/ensino-fundamental.json",
+  "dados/bncc-2018/ensino-medio.json",
+  "dados/LICENSE.md",
+];
+
+// jj refuses new files over 1 MiB, so git tracks each JSON file as a gzip.
+async function bncc() {
+  const dir = DATA + "bncc";
+  await mkdir(dir);
+  for (const path of BNCC_FILES) {
+    const name = path.split("/").pop()!;
+    const json = name.endsWith(".json");
+    const dest = `${dir}/${name}${json ? ".gz" : ""}`;
+    if (await exists(dest)) {
+      console.log(`  skip: ${dest} exists`);
+      continue;
+    }
+    const url =
+      `https://raw.githubusercontent.com/bncc-dev/bncc-dados/${BNCC_COMMIT}/${path}`;
+    console.log(`  GET ${url}`);
+    const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+    if (!r.ok) {
+      throw new Error(
+        `${url}: expected HTTP 200, received ${r.status}. Check that commit ${BNCC_COMMIT} still exists on github.com/bncc-dev/bncc-dados.`,
+      );
+    }
+    const body = new Uint8Array(await r.arrayBuffer());
+    if (json) await writeGzip(dest, body);
+    else {
+      await Deno.writeFile(dest + ".tmp", body);
+      await Deno.rename(dest + ".tmp", dest);
+    }
+  }
+}
 
 // University course prerequisites (Mendeley fs2hvkps7z v2, CC BY 4.0). The raw
 // courses.csv is 34 MB, so git tracks only the gzip. The hashes come from the
