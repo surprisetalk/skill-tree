@@ -1,5 +1,18 @@
 ## Next
 
+- [ ] Under 1% of seed pairs sit inside a cycle (the status condition). The 7
+      Nov build has 180 of 3,644. Courses add 126: universities order "Linear
+      algebra", "Calculus", and "Mathematics" differently, and they form one
+      component. Metacademy's regression family adds 25.
+  1. Wait for the full build (below) to finish; this changes seeds, so it
+     restarts the stages from `seed-edges`.
+  2. In `readCoursePairs`, count each topic pair per direction across datasets.
+     Keep the direction with more datasets; drop a tie with reason
+     `contested-order`.
+  3. Rerun `seed-edges` and `difficulty`, then read `seed_cycle_pairs` in
+     `build/4_stats.json`. If it stays over 1%, list each strongly connected
+     component of the `readSeeds()` pairs with its sources, and fix the largest.
+
 ## Blocked on you
 
 - [ ] You get a fresh `skills.tsv` from a full build, BNCC included, and
