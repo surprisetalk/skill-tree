@@ -2,35 +2,27 @@
 
 ## Blocked on you
 
-- [ ] You get a fresh `skills.tsv` from a full build, BNCC included, and
-      `deno task status` passes. Today `skills.tsv` does not exist, so 18
-      conditions score 0. Blocker: the build runs about 4 days on the Mac.
-      `build/chain/chain.sh` started it on 7 Nov; it logs each stage to
-      `build/chain/<stage>.log`. It runs `enrich` until infill starts (that
-      writes the BNCC title summaries), then `list` through `status`, skipping
-      `trees`.
-  1. Check `build/chain/status.log`. If a stage failed, fix it and rerun the
-     chain from that stage; every stage resumes from its cache.
-  2. When `prereq`, `postproc`, and `finalize` finish, commit
-     `build/5_prereqs.tsv` and `build/1c_summarize.tsv` by path:
-     `jj ci -m "…" <paths>`.
-  3. Set the three LectureBank floors (`EXPERT_PRECISION_FLOOR`,
+- [ ] You get a fresh `skills.tsv` from a full build, BNCC included, with every
+      Lightcast skill described, and `deno task status` passes. Today
+      `skills.tsv` does not exist, so 18 conditions score 0. Blocker: your
+      `ANTHROPIC_API_KEY`. Stages `enrich` and `prereq` now send prompts to
+      Claude Haiku 5.5 through the Batches API (about $3–6 for the run).
+      `build/5_prereqs.tsv` is empty, so every skill gets Claude picks; the
+      gpt-oss picks sit in commit "build: 19,400 gpt-oss prereq picks".
+  1. Put the key in `.env` (gitignored), then run
+     `set -a; . ./.env; set +a; nohup caffeinate -i sh build/chain/chain.sh &`.
+     Each stage logs to `build/chain/<stage>.log`; `build/chain/chain.log` has
+     the steps.
+  2. If a stage fails, fix it and run `sh build/chain/chain.sh <stage>`. A rerun
+     collects in-flight batches from `build/*.batches` instead of paying again.
+  3. When `chain done` shows, commit `build/1b_infill.tsv` and
+     `build/5_prereqs.tsv` by path: `jj ci -m "…" <paths>`.
+  4. Set the three LectureBank floors (`EXPERT_PRECISION_FLOOR`,
      `EXPERT_RECALL_FLOOR`, `EXPERT_MIN_POSITIVES`, pipeline.ts) from the
      `expert pairs:` stderr line in `build/chain/status.log`. Write a todo entry
      for each condition below 1.0.
-  4. Read the transitive-reduction visit count in `build/chain/postproc.log`
+  5. Read the transitive-reduction visit count in `build/chain/postproc.log`
      against the 2e9 cap (prereq.ts).
-
-- [ ] Every Lightcast skill has a description. Stage `enrich` holds 27,953
-      Lightcast skills with no description or a placeholder, about 1.5 days of
-      gpt-oss. Blocker: the run length. `build/chain/after.sh` waits for the
-      full build, runs `enrich` to the end (`build/chain/enrich-infill.log`),
-      then reruns the chain from `list`; it notes each step in
-      `build/chain/chain.log`.
-  1. When `chain.log` shows a second `chain done`, commit `build/1b_infill.tsv`
-     and `build/5_prereqs.tsv` by path.
-  2. If `after:` notes a failure, fix it, then run
-     `nohup caffeinate -i sh build/chain/after.sh &`.
 
 - [ ] `deno task status` also scores prereq edges against Junyi crowd labels.
       Blocker: a PSLC DataShop login. You make the account.

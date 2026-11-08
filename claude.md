@@ -148,7 +148,7 @@ is a JSON object:
 - `c1` → `c2` prerequisite direction; `ground_truth`: 1 = confirmed prerequisite
 - **cs.json.gz**, **math.json.gz**, **psy.json.gz**
 - Uncompressed .json files are gitignored
-- Stage `enrich` translates the Chinese labels with Ollama into
+- Stage `enrich` translates the Chinese labels with Claude into
   `build/1f_translate.tsv`. Stage `seed-edges` throws on a label with no
   translation.
 
@@ -250,7 +250,7 @@ Git tracks the gzips, because jj refuses a new file over 1 MiB.
 - **ensino-medio.json.gz** — `habilidades[]`: `codigo, texto, area`.
 - The code holds grade and subject: `EF67LP08` is grades 6–7, Portuguese.
   `EI01`–`EI03` are age bands to 5 years (grade PK). `EM13` is grades 10–12.
-- Stage `enrich` translates each `texto` with Ollama into
+- Stage `enrich` translates each `texto` with Claude into
   `build/1g_bncc_translate.tsv`, keyed by code. Stage `list` throws on a code
   with no translation.
 
@@ -281,20 +281,23 @@ Florida, etc.), plus specialty frameworks (CASEL, 21st Century Skills, AP CS).
 | File          | Holds                                                                  |
 | ------------- | ---------------------------------------------------------------------- |
 | `pipeline.ts` | Entry point: stage dispatch and stage `status`.                        |
-| `lib.ts`      | Names that two files share: text cleanup, TSV/CSV, Ollama, embeddings. |
+| `lib.ts`      | Names that two files share: text cleanup, TSV/CSV, Claude, embeddings. |
 | `sources.ts`  | Stages `list`, `enrich`, `trees`, `seed-edges`.                        |
 | `graph.ts`    | Stages `embed`, `tag`, `dedupe`, `difficulty`.                         |
 | `prereq.ts`   | Stages `prereq`, `postproc`, `finalize`.                               |
 
 Parses datasets into a unified schema, embeds via Ollama `nomic-embed-text`,
 assigns occupations/topics, dedupes, infers difficulty (isotonic PAV + kNN
-smoothing), ranks prerequisites via Ollama `gpt-oss:20b`, breaks cycles, and
-emits `skills.tsv`. Ollama runs at `localhost:11434`. Stage outputs live in
-`build/`.
+smoothing), ranks prerequisites via Claude Haiku 5.5, breaks cycles, and emits
+`skills.tsv`. Ollama runs at `localhost:11434` for embeddings. Stages `enrich`
+and `prereq` send prompts through the Claude Batches API (`resumableClaude`,
+`lib.ts`) and need `ANTHROPIC_API_KEY`. Each in-flight batch id sits in
+`<cache>.batches`, so a rerun collects it instead of paying again. Stage outputs
+live in `build/`.
 
 **Errors**: a missing build file names the stage that writes it. A missing cache
-reads as empty. Any other read error, a ragged TSV or CSV row, or an Ollama call
-that fails twice stops the stage.
+reads as empty. Any other read error, a ragged TSV or CSV row, or an Ollama or
+Claude call that fails twice stops the stage.
 
 **Build tables**: each TSV that one stage writes and a later stage reads has one
 schema in `lib.ts`. `readTable` and `writeTable` check every cell, the header,
@@ -415,7 +418,7 @@ Caches for per-stage resumption. Key files:
 - `1m_lc_ids.tsv` — Learning Commons node id to skill id (`node_id, skill_id`),
   written by stage `list`.
 - `1b_infill.tsv`, `1c_summarize.tsv`, `1d_onet_desc.tsv`,
-  `1e_opensalt_desc.tsv`, `1f_translate.tsv`, `1g_bncc_translate.tsv` — Ollama
+  `1e_opensalt_desc.tsv`, `1f_translate.tsv`, `1g_bncc_translate.tsv` — LLM
   enrichment caches, `key<TAB>value`.
 - `1e_seed_edges.tsv` — resolved expert-labeled prereq pairs from
   Khan/AL-CPL/Metacademy/MOOCCubeX/courses/OpenSALT.

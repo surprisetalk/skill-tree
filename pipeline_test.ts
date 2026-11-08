@@ -1932,3 +1932,22 @@ Deno.test(
     assert(stderr.includes("Run: deno run -A data/download.ts"), stderr);
   }),
 );
+
+Deno.test("resumableClaude: a cached target sends nothing; an uncached one needs the key", async () => {
+  const { resumableClaude } = await import("./lib.ts");
+  const dir = Deno.makeTempDirSync();
+  const cache = `${dir}/c.tsv`;
+  Deno.writeTextFileSync(cache, "a\tanswer\n");
+  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  Deno.env.delete("ANTHROPIC_API_KEY");
+  try {
+    await resumableClaude("t", cache, [{ id: "a" }], (t) => t.id);
+    assertEquals(Deno.readTextFileSync(cache), "a\tanswer\n");
+    const err = await resumableClaude("t", cache, [{ id: "a" }, { id: "b" }], (
+      t,
+    ) => t.id).then(() => undefined, (e: Error) => e.message);
+    assert(err?.includes("expected ANTHROPIC_API_KEY"), err);
+  } finally {
+    if (key) Deno.env.set("ANTHROPIC_API_KEY", key);
+  }
+});

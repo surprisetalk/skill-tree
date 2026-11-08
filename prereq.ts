@@ -16,7 +16,7 @@ import {
   readTable,
   readTree,
   rerun,
-  resumableOllama,
+  resumableClaude,
   SEEDS,
   SIG_STOP,
   SKILLS_OUT,
@@ -450,7 +450,7 @@ export async function stagePrereq() {
     const cands = candidates.get(s.id);
     return cands?.length ? [{ ...s, cands }] : [];
   });
-  await resumableOllama(
+  await resumableClaude(
     "prereq",
     PREREQ_CACHE,
     jobs,

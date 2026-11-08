@@ -28,8 +28,9 @@ Final output: `skills.tsv`
 Per-stage caches live in `build/`.
 
 Requires a local Ollama at `localhost:11434` with `nomic-embed-text`
-(embeddings) and `gpt-oss:20b` (generation). `SKIP_LLM=1` makes stage `prereq`
-reuse `build/5_prereqs.tsv` as is.
+(embeddings), and `ANTHROPIC_API_KEY` for stages `enrich` and `prereq`, which
+generate text with Claude Haiku 5.5 through the Batches API. `SKIP_LLM=1` makes
+stage `prereq` reuse `build/5_prereqs.tsv` as is.
 
 See `claude.md` for the full dataset catalog and schemas.
 

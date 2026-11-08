@@ -21,7 +21,7 @@ import {
   readTable,
   readTsv,
   resolveConcept,
-  resumableOllama,
+  resumableClaude,
   SEEDS,
   Skill,
   SKILL_LIST,
@@ -1504,7 +1504,7 @@ export function stageList() {
 
 export async function stageEnrich() {
   // First, because stage list throws without these and the rest reads its output.
-  await resumableOllama(
+  await resumableClaude(
     "enrich:bncc",
     BNCC_TRANSLATE_CACHE,
     readBncc().map((r) => ({ id: r.code, text: r.text, subject: r.subject })),
@@ -1555,7 +1555,7 @@ export async function stageEnrich() {
 
   // Summaries rename skills, so they run before the slow infill (about 28k
   // Lightcast descriptions); stop the stage there and the titles hold.
-  await resumableOllama(
+  await resumableClaude(
     "enrich:summarize",
     SUMMARIZE_CACHE,
     sumTargets,
@@ -1568,7 +1568,7 @@ export async function stageEnrich() {
   const LIGHTCAST_CONTEXT =
     "You are describing entries in a professional labor-market skills taxonomy (Lightcast). When a name is ambiguous between generic English and a specific technical tool/product/standard, assume the technical interpretation. Do not invent organization names, certifications, or statistics.";
 
-  await resumableOllama(
+  await resumableClaude(
     "enrich:infill",
     INFILL_CACHE,
     infillTargets,
@@ -1578,7 +1578,7 @@ export async function stageEnrich() {
     { numPredict: 200 },
   );
 
-  await resumableOllama(
+  await resumableClaude(
     "enrich:onet-desc",
     ONET_DESC_CACHE,
     onetTargets,
@@ -1587,7 +1587,7 @@ export async function stageEnrich() {
     { numPredict: 120 },
   );
 
-  await resumableOllama(
+  await resumableClaude(
     "enrich:opensalt-desc",
     OPENSALT_DESC_CACHE,
     opensaltTargets,
@@ -1602,7 +1602,7 @@ export async function stageEnrich() {
       HAN_RE.test(l)
     ),
   );
-  await resumableOllama(
+  await resumableClaude(
     "enrich:translate",
     TRANSLATE_CACHE,
     [...hanLabels].map((id) => ({ id })),

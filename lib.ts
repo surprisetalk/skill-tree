@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { parse as parseCsvText } from "@std/csv/parse";
 import { unescape } from "@std/html/entities";
 import entityList from "@std/html/named-entity-list.json" with {
@@ -255,10 +256,18 @@ export const YEAR_RE = /(^|-)(19|20)\d\d(-|$)|^\d+$/;
 export const isJunkTopic = (t: string): boolean =>
   FRAMEWORK_RE.test(t) || WIKI_CAT_RE.test(t) || YEAR_RE.test(t);
 
-const GEN_MODEL = "gpt-oss:20b";
-// REVIEW: 4x the ~45 thinking tokens measured at think "low". Alternative: no
-// cap on thinking. A runaway thought then holds a worker until the timeout.
-const THINK_TOKENS = 200;
+// REVIEW: Claude Haiku 5.5 through the Batches API, adaptive thinking at effort
+// "low". About $2 for a full prereq run, and the laptop stays cool.
+// Alternative: gpt-oss:20b on Ollama. It costs nothing but runs about 3 days
+// at full load on the Mac.
+const GEN_MODEL = "claude-haiku-5-5";
+// Thinking counts against max_tokens; a reply that hits the cap is rejected.
+const THINK_TOKENS = 2000;
+// A batch takes up to 100,000 requests; smaller batches lose less to a crash.
+const BATCH_SIZE = 10_000;
+// The API expires a batch after 24 hours.
+const BATCH_WAIT_MS = 25 * 3600_000;
+const BATCH_POLL_MS = 30_000;
 export const CACHE_PATH = `${BUILD}/2_cache.bin`;
 const CACHE_RECORD_BYTES = 32 + EMBED_DIM * 4;
 
@@ -329,7 +338,12 @@ export function cleanDef(raw: string): string {
   return (lastSpace > 200 ? head.slice(0, lastSpace) : head).trim() + "…";
 }
 
-export async function resumableOllama<T extends { id: string }>(
+// Runs each uncached target through Claude in batches and appends
+// `id<TAB>answer` to cachePath. In-flight batch ids sit in cachePath.batches,
+// so a rerun after a crash collects them instead of paying again. A request's
+// custom_id is the hash of its prompt: an answer to a prompt that has since
+// changed matches no target and is dropped.
+export async function resumableClaude<T extends { id: string }>(
   label: string,
   cachePath: string,
   targets: T[],
@@ -339,85 +353,184 @@ export async function resumableOllama<T extends { id: string }>(
     clean?: (raw: string, item: T) => string;
   } = {},
 ): Promise<void> {
-  const cache = loadTsvCache(cachePath);
-  const todo = targets.filter((t) => !cache.has(t.id));
-  console.log(
-    `[${label}] targets=${targets.length} cached=${cache.size} todo=${todo.length} → ${cachePath}`,
-  );
-  if (!todo.length) return;
-
-  const queue = [...todo];
-  const fh = Deno.openSync(cachePath, { create: true, append: true });
-  const enc = new TextEncoder();
   const cleanFn = opts.clean ?? cleanDef;
-  const t0 = performance.now();
-  let done = 0, rejected = 0, firstRejected = "";
-  let failure: Error | undefined;
-  const worker = async () => {
-    while (queue.length && !failure) {
-      const item = queue.shift()!;
-      try {
-        const { response } = await ollama("/api/generate", {
-          model: GEN_MODEL,
-          prompt: promptFn(item),
-          stream: false,
-          // gpt-oss thinks before it answers, and the thinking counts against
-          // num_predict: at "low" it took ~45 tokens on a standard summary, so
-          // a 60-token limit returned an empty response. The allowance keeps
-          // numPredict an answer budget.
-          think: "low",
-          options: {
-            temperature: 0.1,
-            num_predict: (opts.numPredict ?? 120) + THINK_TOKENS,
-          },
-        });
-        if (typeof response !== "string") {
-          throw new Error(
-            `ollama ${GEN_MODEL}: expected a string response, received ${typeof response}`,
-          );
-        }
-        const raw = response.replace(/[\t\n\r]/g, " ").trim();
-        const cleaned = cleanFn(raw, item);
-        if (cleaned) fh.writeSync(enc.encode(`${item.id}\t${cleaned}\n`));
-        else {
-          rejected++;
-          firstRejected ||= raw;
-        }
-      } catch (e) {
-        // Stop every worker; in-flight successes still reach the cache.
-        failure ??= new Error(
-          `[${label}] Ollama failed on "${item.id}" after ${done} items: ${
-            (e as Error).message
-          }. Rerun once it is fixed; the cache keeps finished items.`,
-          { cause: e },
-        );
-        return;
-      }
-      done++;
-      // A healthy model answers most prompts; mostly rejects means it is broken.
-      if (done >= 200 && rejected / done > 0.5) {
-        failure ??= new Error(
-          `[${label}] expected under 50% rejected answers, received ${rejected}/${done}. First rejected answer: "${
-            firstRejected.slice(0, 200)
-          }". Check the prompt and ${GEN_MODEL}, then rerun.`,
-        );
-        return;
-      }
-      if (done % 200 === 0) {
-        const rate = done / ((performance.now() - t0) / 1000);
-        console.log(
-          `  ${done}/${queue.length + done} (${rate.toFixed(1)}/s, eta ${
-            (queue.length / rate / 60).toFixed(1)
-          }min, rejected=${rejected})`,
-        );
-      }
+  const statePath = `${cachePath}.batches`;
+  const readState = (): string[] => {
+    try {
+      return Deno.readTextFileSync(statePath).split("\n").filter(Boolean);
+    } catch (e) {
+      if (e instanceof Deno.errors.NotFound) return [];
+      throw e;
     }
   };
-  await Promise.all(Array.from({ length: 4 }, () => worker()));
-  fh.close();
-  if (failure) throw failure;
+  // Two targets can share a prompt; one answer serves both.
+  const byHash = new Map<string, T[]>();
+  const prompts = new Map<string, string>();
+  for (const t of targets) {
+    const p = promptFn(t);
+    const h = hex(
+      new Uint8Array(
+        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(p)),
+      ),
+    ).slice(0, 32);
+    (byHash.get(h) ?? byHash.set(h, []).get(h)!).push(t);
+    prompts.set(h, p);
+  }
+  const todo = () => {
+    const cache = loadTsvCache(cachePath);
+    return [...byHash].filter(([, ts]) => ts.some((t) => !cache.has(t.id)))
+      .map(([h]) => h);
+  };
+  const first = todo();
   console.log(
-    `[${label}] done ${done} (rejected=${rejected}) in ${
+    `[${label}] targets=${targets.length} todo=${first.length} prompts, in-flight batches=${readState().length} → ${cachePath}`,
+  );
+  if (!first.length && !readState().length) return;
+
+  if (!Deno.env.get("ANTHROPIC_API_KEY")) {
+    throw new Error(
+      `[${label}] expected ANTHROPIC_API_KEY in the environment, received none. ${first.length} prompts wait for ${GEN_MODEL}. Export the key (for example from .env: set -a; . ./.env; set +a), then rerun.`,
+    );
+  }
+  // One retry on a transient error (429, 5xx, network); the SDK does the retry.
+  // REVIEW: A crash between batches.create and the state append orphans that
+  // batch, and the rerun pays for its prompts again (at most BATCH_SIZE, about
+  // $0.30). Alternative: adopt unlisted batches from batches.list at startup.
+  // It costs a scan of every batch on the account, other projects included.
+  const client = new Anthropic({ maxRetries: 1, timeout: 600_000 });
+  const t0 = performance.now();
+  let done = 0, rejected = 0, stale = 0, inTok = 0, outTok = 0;
+  let firstRejected = "", firstInvalid = "";
+  const failed: string[] = [];
+  const invalid: string[] = [];
+
+  const collect = async (batchId: string) => {
+    for (let polls = 0;; polls++) {
+      const b = await client.messages.batches.retrieve(batchId);
+      if (b.processing_status === "ended") break;
+      if (polls * BATCH_POLL_MS > BATCH_WAIT_MS) {
+        throw new Error(
+          `[${label}] expected batch ${batchId} to end within ${
+            BATCH_WAIT_MS / 3600_000
+          }h, received status ${b.processing_status} after ${polls} polls. Check it in the Console, then rerun; ${statePath} keeps its id.`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, BATCH_POLL_MS));
+    }
+    const fh = Deno.openSync(cachePath, { create: true, append: true });
+    const enc = new TextEncoder();
+    try {
+      for await (const r of await client.messages.batches.results(batchId)) {
+        const items = byHash.get(r.custom_id);
+        if (!items) {
+          stale++;
+          continue;
+        }
+        if (r.result.type !== "succeeded") {
+          if (
+            r.result.type === "errored" &&
+            r.result.error.error.type === "invalid_request_error"
+          ) {
+            invalid.push(r.custom_id);
+            firstInvalid ||= `"${
+              items[0].id
+            }": ${r.result.error.error.message}`;
+          } else failed.push(r.custom_id);
+          continue;
+        }
+        const m = r.result.message;
+        inTok += m.usage.input_tokens;
+        outTok += m.usage.output_tokens;
+        // A refusal or a reply cut at max_tokens is not an answer. A rejected
+        // prompt stays uncached, so the next run sends it again.
+        const raw = m.stop_reason === "end_turn"
+          ? m.content.flatMap((c) => c.type === "text" ? [c.text] : []).join(
+            " ",
+          ).replace(/[\t\n\r]/g, " ").trim()
+          : "";
+        for (const item of items) {
+          done++;
+          const cleaned = raw && cleanFn(raw, item);
+          if (cleaned) fh.writeSync(enc.encode(`${item.id}\t${cleaned}\n`));
+          else {
+            rejected++;
+            firstRejected ||= `${m.stop_reason}: ${raw}`;
+          }
+        }
+      }
+    } finally {
+      fh.close();
+    }
+    // Write, then rename: a crash mid-write must not lose the other ids.
+    Deno.writeTextFileSync(
+      `${statePath}.tmp`,
+      readState().filter((id) => id !== batchId).map((id) => `${id}\n`).join(
+        "",
+      ),
+    );
+    Deno.renameSync(`${statePath}.tmp`, statePath);
+    console.log(
+      `  batch ${batchId} done: ${done} answers, rejected=${rejected}, ${inTok} in / ${outTok} out tokens, ${
+        ((performance.now() - t0) / 60_000).toFixed(1)
+      }min`,
+    );
+  };
+  // Every in-flight batch finishes and leaves the state file before a throw.
+  const collectAll = async () => {
+    const errs = (await Promise.allSettled(readState().map(collect)))
+      .flatMap((r) => r.status === "rejected" ? [r.reason] : []);
+    if (errs.length) throw errs[0];
+    if (invalid.length) {
+      throw new Error(
+        `[${label}] expected ${GEN_MODEL} to accept every prompt, received invalid_request_error on ${invalid.length}. First: ${firstInvalid}. Fix the request in resumableClaude (lib.ts), then rerun; the cache keeps every answer.`,
+      );
+    }
+    // A healthy model answers most prompts; mostly rejects means it is broken.
+    if (done >= 200 && rejected / done > 0.5) {
+      throw new Error(
+        `[${label}] expected under 50% rejected answers, received ${rejected}/${done}. First rejected answer: "${
+          firstRejected.slice(0, 200)
+        }". Check the prompt and ${GEN_MODEL}, then rerun.`,
+      );
+    }
+  };
+
+  // Round 1 sends every uncached prompt; round 2 resends the ones that errored
+  // or expired, once.
+  for (let round = 1; round <= 2; round++) {
+    await collectAll();
+    // Round 1's todo already holds what a crashed run's batches failed.
+    const send = round === 1 ? (failed.length = 0, todo()) : failed.splice(0);
+    if (!send.length) break;
+    for (let i = 0; i < send.length; i += BATCH_SIZE) {
+      const b = await client.messages.batches.create({
+        requests: send.slice(i, i + BATCH_SIZE).map((h) => ({
+          custom_id: h,
+          params: {
+            model: GEN_MODEL,
+            max_tokens: (opts.numPredict ?? 120) + THINK_TOKENS,
+            thinking: { type: "adaptive" },
+            output_config: { effort: "low" },
+            messages: [{ role: "user", content: prompts.get(h)! }],
+          },
+        })),
+      });
+      Deno.writeTextFileSync(statePath, `${b.id}\n`, { append: true });
+      console.log(
+        `  round ${round}: sent batch ${b.id} (${
+          Math.min(BATCH_SIZE, send.length - i)
+        } prompts)`,
+      );
+    }
+  }
+  await collectAll();
+  if (failed.length) {
+    throw new Error(
+      `[${label}] expected every request to finish, received ${failed.length} errored or expired twice. Rerun to send them again; the cache keeps ${done} answers.`,
+    );
+  }
+  console.log(
+    `[${label}] done ${done} (rejected=${rejected}, stale=${stale}) ${inTok} in / ${outTok} out tokens in ${
       ((performance.now() - t0) / 1000).toFixed(0)
     }s`,
   );
