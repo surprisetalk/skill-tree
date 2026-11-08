@@ -697,6 +697,10 @@ const COURSE_TAIL =
   /(?:\s*[-–:,(]\s*|\s+)(?:i{1,3}|iv|vi{0,3}|ix|x|\d{1,3}[a-z]?|[a-d]|part \w+|level \w+|lab(?:oratory)?|practicum|workshop|seminar|studio|tutorial|clinical|lecture|capstone|honou?rs|for [\w ,&'/-]*?(?:engineer(?:s|ing)|students|majors|teachers|educators|nurses|translators|planners|managers|scientists|professionals|beginners|architects|designers|technologists))\)?$/i;
 // "CEN 271": a title that is only a code names no topic.
 const CODE_TITLE = /^[A-Z]{2,5}\s?\d{3,4}[A-Z]?$/;
+// "Practicum II" strips to "Practicum": a course format, and a hub that
+// closes seed cycles between unrelated topics.
+const WRAPPER_ONLY =
+  /^(?:lab(?:oratory)?|practicum|workshop|seminar|studio|tutorial|clinical|lecture|capstone|honou?rs|internship|project|thesis|research|elective|introduction|special topics)$/i;
 // Four passes strip "Advanced Topics in X Lab II"; a fifth would find nothing.
 export const courseTopic = (title: string): string => {
   let s = title.replace(/^[\s–-]+/, "");
@@ -771,6 +775,7 @@ export async function readCoursePairs(): Promise<{
   const edgesPath = "data/courses/prereq_edges.csv.gz";
   const edges = await read("prereq_edges");
   const iD = col(edges, "dataset", edgesPath),
+    iInst = col(edges, "institution", edgesPath),
     iS = col(edges, "source_prereq", edgesPath),
     iT = col(edges, "target_course", edgesPath),
     iAlt = col(edges, "is_alternative", edgesPath),
@@ -780,6 +785,16 @@ export async function readCoursePairs(): Promise<{
   const dropped: { from: string; to: string; raw: string; reason: string }[] =
     [];
   const seen = new Set<string>();
+  const candidates: {
+    src: string;
+    dst: string;
+    raw: string;
+    key: string;
+    from: string;
+    to: string;
+  }[] = [];
+  // Topic pair → the institutions that give it in this direction.
+  const votes = new Map<string, Set<string>>();
   for (const [i, e] of edges.slice(1).entries()) {
     const timing = e[iTiming] as (typeof TIMINGS)[number];
     if (!TIMINGS.includes(timing)) {
@@ -808,7 +823,8 @@ export async function readCoursePairs(): Promise<{
       const [only] = t;
       if (!only) return { reason: "no-title" };
       if (CODE_TITLE.test(only)) return { reason: "code-title" };
-      return { t: courseTopic(only) };
+      const topic = courseTopic(only);
+      return WRAPPER_ONLY.test(topic) ? { reason: "no-topic" } : { t: topic };
     };
     const src = title(e[iS]), dst = title(e[iT]);
     if ("reason" in src || "reason" in dst) {
@@ -816,15 +832,46 @@ export async function readCoursePairs(): Promise<{
         ? src.reason
         : (dst as { reason: string }).reason;
       dropped.push({ from: e[iS], to: e[iT], raw, reason });
+    } else if (src.t.toLowerCase() === dst.t.toLowerCase()) {
+      // "Calculus I" before "Calculus II": a sequence, not a topic prereq.
+      dropped.push({ from: e[iS], to: e[iT], raw, reason: "same-topic" });
     } else {
       const key = `${src.t}\t${dst.t}`.toLowerCase();
-      if (src.t.toLowerCase() === dst.t.toLowerCase()) {
-        // "Calculus I" before "Calculus II": a sequence, not a topic prereq.
-        dropped.push({ from: e[iS], to: e[iT], raw, reason: "same-topic" });
-      } else if (!seen.has(key)) {
-        seen.add(key);
-        pairs.push({ src: src.t, dst: dst.t, raw });
-      }
+      candidates.push({
+        src: src.t,
+        dst: dst.t,
+        raw,
+        key,
+        from: e[iS],
+        to: e[iT],
+      });
+      (votes.get(key) ?? votes.set(key, new Set()).get(key)!).add(e[iInst]);
+    }
+  }
+  // REVIEW: One university orders Calculus before Linear algebra, another
+  // the reverse, and the seeds cycle. The order more institutions give wins;
+  // a tie drops both. Alternative: keep both and let stage postproc break the
+  // cycle by rank. It keeps the cycle in the seeds that stage difficulty reads.
+  const reverse = (key: string) => key.split("\t").reverse().join("\t");
+  for (const c of candidates) {
+    const n = votes.get(c.key)!.size, m = votes.get(reverse(c.key))?.size ?? 0;
+    if (n === m) {
+      dropped.push({
+        from: c.from,
+        to: c.to,
+        raw: c.raw,
+        reason: "contested-order",
+      });
+    } else if (n < m) {
+      dropped.push({
+        from: c.from,
+        to: c.to,
+        raw: c.raw,
+        reason: "minority-order",
+      });
+    } else if (!seen.has(c.key)) {
+      seen.add(c.key);
+      pairs.push({ src: c.src, dst: c.dst, raw: c.raw });
     }
   }
   return { pairs, dropped, timingCounts };

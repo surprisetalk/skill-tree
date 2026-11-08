@@ -1,17 +1,19 @@
 ## Next
 
-- [ ] Under 1% of seed pairs sit inside a cycle (the status condition). The 7
-      Nov build has 180 of 3,644. Courses add 126: universities order "Linear
-      algebra", "Calculus", and "Mathematics" differently, and they form one
-      component. Metacademy's regression family adds 25.
-  1. Wait for the full build (below) to finish; this changes seeds, so it
-     restarts the stages from `seed-edges`.
-  2. In `readCoursePairs`, count each topic pair per direction across datasets.
-     Keep the direction with more datasets; drop a tie with reason
-     `contested-order`.
-  3. Rerun `seed-edges` and `difficulty`, then read `seed_cycle_pairs` in
-     `build/4_stats.json`. If it stays over 1%, list each strongly connected
-     component of the `readSeeds()` pairs with its sources, and fix the largest.
+- [ ] Under 1% of seed pairs sit inside a cycle (the status condition). Today 65
+      of 3,579 (1.8%). One component holds 55: course pairs (33), AL-CPL
+      precalculus (11), and Metacademy (5) order the same topics differently
+      across sources. Khan adds 4: "Subtract decimals like 0.9-0.7" names no
+      skill, and the embedding fallback maps it onto "…0.75-0.56".
+  1. List the cross-source contradictions in that component: pairs where one
+     source gives A → B and another gives B → A, or a longer loop.
+  2. Where an expert source (AL-CPL, Metacademy, Khan) contradicts courses, drop
+     the course pair with reason `contested-order`. Record the rule as a
+     `REVIEW:` note in stage `seed-edges`.
+  3. Find why stage `list` has no skill for Khan's "Subtract decimals like
+     0.9-0.7" (`data/khanacademy/khandata.tsv` row 305).
+  4. Rerun `seed-edges` and `difficulty`; read `seed_cycle_pairs` in
+     `build/4_stats.json`.
 
 ## Blocked on you
 

@@ -167,9 +167,11 @@ then keeps the gzip only. Uncompressed .csv files are gitignored.
   one OR group (`is_alternative` 1) each make a pair.
 - `readCoursePairs` (`lib.ts`) joins codes to titles, strips course wrapping
   with `courseTopic` ("Calculus III for Engineers" → "Calculus"), and dedupes by
-  topic pair. A code with no course, two titles, an empty title, or a code-only
-  title ("CEN 271"), and a pair of one topic ("Calculus I" → "Calculus II"), go
-  to `1e_unresolved.tsv` with that reason.
+  topic pair. A code with no course, two titles, an empty title, a code-only
+  title ("CEN 271"), or a wrapper-only topic ("Practicum II", `no-topic`), and a
+  pair of one topic ("Calculus I" → "Calculus II"), go to `1e_unresolved.tsv`
+  with that reason. Each topic pair keeps the direction more institutions give
+  (`minority-order`); a tie drops both (`contested-order`).
 
 ### data/khanacademy/ — Khan Academy Math Prerequisite Graph (TSV)
 
@@ -327,7 +329,8 @@ A new build table gets a schema; a new id goes through `slugify`.
   that stage `list` dropped goes to `build/1e_unresolved.tsv` with reason
   `no-skill`. Pairs resolve to skill IDs by exact match, then by embedding
   (cosine ≥ 0.90 and a shared token). Unresolved pairs go to
-  `build/1e_unresolved.tsv` with a reason per label.
+  `build/1e_unresolved.tsv` with a reason per label. A source that gives both A
+  → B and B → A loses both, as `contested-order`.
 - Stage `trees`: LCSH (gunzip) and DBpedia (bzcat) SKOS broader chains, cached
   as `slug → ancestors[]`. The same pass picks each dump's 5000 most-used
   broader targets as the topic refs of stage `tag`.

@@ -2309,6 +2309,22 @@ export async function stageSeedEdges() {
       `${d.from}\t${d.to}\tcourses\t${d.raw}\t${d.reason}\t${d.reason}`,
     );
   }
+  const seen = new Map<string, Edge>();
+  for (const e of edges) {
+    const k = `${e.src}\t${e.dst}\t${e.source}`;
+    const prev = seen.get(k);
+    if (!prev || (prev.fallback && !e.fallback)) seen.set(k, e);
+  }
+  // A source that names both A → B and B → A gives no order, and the pair
+  // is a seed cycle. Both go; the floors still count them as resolved.
+  const contested = (e: Edge) => seen.has(`${e.dst}\t${e.src}\t${e.source}`);
+  const uniq = [...seen.values()].filter((e) => {
+    if (!contested(e)) return true;
+    quarantine.push(
+      `${e.src}\t${e.dst}\t${e.source}\t${e.src}->${e.dst}\tcontested-order\tcontested-order`,
+    );
+    return false;
+  });
   Deno.writeTextFileSync(
     `${BUILD}/1e_unresolved.tsv`,
     quarantine.join("\n") + "\n",
@@ -2318,13 +2334,6 @@ export async function stageSeedEdges() {
       quarantine.length - 1
     } pairs dropped, written to build/1e_unresolved.tsv`,
   );
-  const seen = new Map<string, Edge>();
-  for (const e of edges) {
-    const k = `${e.src}\t${e.dst}\t${e.source}`;
-    const prev = seen.get(k);
-    if (!prev || (prev.fallback && !e.fallback)) seen.set(k, e);
-  }
-  const uniq = [...seen.values()];
   // REVIEW: Each floor is 90% of the resolved share on the last run that set
   // it, so a lost source stops the stage, and embedding jitter does not.
   // Alternative: a status condition. It lets a quarantined source ship.

@@ -1045,6 +1045,7 @@ Deno.test("readCoursePairs: joins codes to titles, keeps timing before, splits O
     "d1,H1,CEN 271,",
     "d1,J1,Ethics in Islam,",
     "d1,K1,ETHICS IN ISLAM,",
+    "d1,L1,Practicum II,",
     "d2,A100,Algebra,",
     "d2,D400,Topology,",
   ].join("\n") + "\n";
@@ -1067,7 +1068,9 @@ Deno.test("readCoursePairs: joins codes to titles, keeps timing before, splits O
     edgeRow("d1", "H1", "D400", 0, 0, "before") +
     edgeRow("d1", "A100", "J1", 0, 0, "before") +
     // A case variant of a kept pair makes no second pair.
-    edgeRow("d1", "A100", "K1", 0, 0, "before");
+    edgeRow("d1", "A100", "K1", 0, 0, "before") +
+    // A wrapper word alone names no topic.
+    edgeRow("d1", "L1", "D400", 0, 0, "before");
   const r = await inCourseDir(courses, edges, (m) => m.readCoursePairs());
   assertEquals(r.pairs.map((p) => [p.src, p.dst]), [
     ["Algebra", "Calculus"],
@@ -1084,9 +1087,10 @@ Deno.test("readCoursePairs: joins codes to titles, keeps timing before, splits O
     ["d1:E1->D400", "no-title"],
     ["d1:B200->F1", "same-topic"],
     ["d1:H1->D400", "code-title"],
+    ["d1:L1->D400", "no-topic"],
   ]);
   assertEquals(r.timingCounts, {
-    before: 13,
+    before: 14,
     concurrent: 1,
     before_or_concurrent: 1,
   });
@@ -1108,6 +1112,28 @@ Deno.test("courseTopic: a strip never leaves a dangling connector or cuts a year
       "Programming in C",
     ],
   );
+});
+
+Deno.test("readCoursePairs: the order more institutions give wins, and a tie drops both", async () => {
+  const courses = COURSE_HEAD + ["d1", "d2", "d3"].flatMap((d) => [
+    `${d},A,Algebra,`,
+    `${d},B,Calculus,`,
+    `${d},C,Physics,`,
+    `${d},D,Chemistry,`,
+  ]).join("\n") + "\n";
+  const row = (inst: string, ds: string, s: string, t: string) =>
+    `${inst},${ds},e,${s},${t},0,0,before,\n`;
+  const edges = EDGE_HEAD +
+    row("U1", "d1", "A", "B") + row("U2", "d2", "A", "B") +
+    row("U3", "d3", "B", "A") +
+    row("U1", "d1", "C", "D") + row("U2", "d2", "D", "C");
+  const r = await inCourseDir(courses, edges, (m) => m.readCoursePairs());
+  assertEquals(r.pairs.map((p) => [p.src, p.dst]), [["Algebra", "Calculus"]]);
+  assertEquals(r.dropped.map((d) => [d.raw, d.reason]), [
+    ["d3:B->A", "minority-order"],
+    ["d1:C->D", "contested-order"],
+    ["d2:D->C", "contested-order"],
+  ]);
 });
 
 Deno.test("readCoursePairs: an unknown timing or alternative flag throws with the line", async () => {
