@@ -263,8 +263,8 @@ export const isJunkTopic = (t: string): boolean =>
 const GEN_MODEL = "claude-haiku-5-5";
 // Thinking counts against max_tokens; a reply that hits the cap is rejected.
 const THINK_TOKENS = 2000;
-// A batch takes up to 100,000 requests. In one run, a batch of 7,813 ended in
-// 8 min, but two batches of 10,000 sat at 0 done for 7.5 h.
+// A batch takes up to 100,000 requests. request_counts stays at 0 until the
+// batch ends, so smaller batches show progress (one of 10,000 took 7.5 h).
 const BATCH_SIZE = 2_000;
 // The API expires a batch after 24 hours.
 const BATCH_WAIT_MS = 25 * 3600_000;
