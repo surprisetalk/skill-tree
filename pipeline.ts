@@ -81,10 +81,14 @@ const readDifficultyRaw = () =>
 const ANOMALOUS_HUB_RE =
   /retell-stories-related-to.*-day|^sced-|language-immersion-prior|understand-object-naming-and-naming-conventions|^(leadership|assisted-reading|corrective-reading|study-hall)$/;
 
-// Placeholders. The full-build entry in todo.md sets all three from the
-// first `deno task status` on a real build. Alternative: derive them from the
-// seed edges' own precision. It needs a build that held seeds out.
-const EXPERT_PRECISION_FLOOR = 0.05;
+// REVIEW: Floors from the first full Claude build: 258 positives, precision
+// 6/12, recall 10/258 (0.039). Each floor tightens a placeholder and never
+// loosens one. Recall keeps its 0.05 placeholder and fails, and todo.md tracks
+// the fix. Alternative: set recall to 0.03 so status passes. Then the floor
+// grades this build, not the goal. The positive count stays at 3, the
+// fixture's count. Alternative: 200, which catches a resolver regression on
+// the real build. It needs a fixture build with 200 positive pairs.
+const EXPERT_PRECISION_FLOOR = 0.25;
 const EXPERT_RECALL_FLOOR = 0.05;
 const EXPERT_MIN_POSITIVES = 3;
 

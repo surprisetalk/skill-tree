@@ -1,28 +1,51 @@
 ## Next
 
-## Blocked on you
+Each entry below is a `deno task status` condition that fails on the full Claude
+build of 9 Nov. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
+first for `enrich` and `prereq`).
 
-- [ ] You get a fresh `skills.tsv` from a full build, BNCC included, with every
-      Lightcast skill described, and `deno task status` passes. Today
-      `skills.tsv` does not exist, so 18 conditions score 0. Blocker: your
-      `ANTHROPIC_API_KEY`. Stages `enrich` and `prereq` now send prompts to
-      Claude Haiku 5.5 through the Batches API (about $3–6 for the run).
-      `build/5_prereqs.tsv` is empty, so every skill gets Claude picks; the
-      gpt-oss picks sit in commit "build: 19,400 gpt-oss prereq picks".
-  1. Put the key in `.env` (gitignored), then run
-     `set -a; . ./.env; set +a; nohup caffeinate -i sh build/chain/chain.sh &`.
-     Each stage logs to `build/chain/<stage>.log`; `build/chain/chain.log` has
-     the steps.
-  2. If a stage fails, fix it and run `sh build/chain/chain.sh <stage>`. A rerun
-     collects in-flight batches from `build/*.batches` instead of paying again.
-  3. When `chain done` shows, commit `build/1b_infill.tsv` and
-     `build/5_prereqs.tsv` by path: `jj ci -m "…" <paths>`.
-  4. Set the three LectureBank floors (`EXPERT_PRECISION_FLOOR`,
-     `EXPERT_RECALL_FLOOR`, `EXPERT_MIN_POSITIVES`, pipeline.ts) from the
-     `expert pairs:` stderr line in `build/chain/status.log`. Write a todo entry
-     for each condition below 1.0.
-  5. Read the transitive-reduction visit count in `build/chain/postproc.log`
-     against the 2e9 cap (prereq.ts).
+- [ ] Difficulty bands agree with seeds and grade anchors. Today: 481/3725 seed
+      pairs fail to fit bands 1–20 (12.9%, floor 1%); 3216/32423 grade-anchored
+      skills miss their band by over 5 (9.9%, floor 5%); about 12.8% of seed
+      edges put the prereq in a higher band (floor 10%); about 93.8% of skills
+      sit at or above every transitive prereq's band (floor 95%).
+  1. In stage `difficulty`, count `seed_anchor_conflicts` per seed source into
+     `4_stats.json`.
+  2. Fix the source with the most conflicts first: drop its bad pairs in
+     `seed-edges`, or fix the grade anchor that contradicts it.
+  3. Rerun from `difficulty`, then read all four conditions again; one cause
+     likely drives them all.
+
+- [ ] At least 80% of seed edges survive into `skills.tsv`. Today 78.6%.
+      `postproc` adds every seed (added=3489, dup=236).
+  1. Count the seed edges each `postproc` step drops, transitive reduction
+     included, and log the counts.
+  2. If transitive reduction drops seeds that a path implies, count an implied
+     seed as kept in the condition: the path holds the edge.
+
+- [ ] At least 95% of OpenSALT skills carry a `grade:*` tag. Today 79.6%.
+  1. Group the untagged OpenSALT skills by framework (`1_skills.tsv`).
+  2. For the largest frameworks, inherit `educationLevel` from the parent CFItem
+     through `isChildOf` in stage `list`.
+
+- [ ] No skill has a hex-overflow id. Today 4,830 skills (5.3%) have an id of 70
+      characters or more that ends in a 6-hex suffix (`slug_overflow=4015` in
+      `build/chain/list.log`).
+  1. Send each title whose slug overflows through the `enrich` summarize prompt
+     (3–7 words), as long OpenSALT titles already are.
+  2. Rerun from `enrich`; the summaries apply in stage `list`.
+
+- [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 10/258 positive
+      LectureBank pairs (0.039) sit in the transitive closure, and only 12
+      `skills.tsv` edges join two annotated topics.
+  1. List the 248 missed positives with both resolved skill ids.
+  2. For each, check whether the prereq is in the dependent's candidate pool in
+     stage `prereq`. If most are absent, widen the pool; if present, the picks
+     miss them, so fix the prompt.
+  3. 2,599 prereq prompts (3%) got a rejected answer and have no picks. Rerun
+     `prereq` to send them again before you judge recall.
+
+## Blocked on you
 
 - [ ] `deno task status` also scores prereq edges against Junyi crowd labels.
       Blocker: a PSLC DataShop login. You make the account.
