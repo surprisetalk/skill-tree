@@ -254,6 +254,14 @@ Git tracks the gzips, because jj refuses a new file over 1 MiB.
   `build/1g_bncc_translate.tsv`, keyed by code. Stage `list` throws on a code
   with no translation.
 
+### data/csp/ — Common Standards Project (gzipped JSON, gitignored for now)
+
+From api.commonstandardsproject.com/api/v1 (no key). `data/download.ts` writes
+each standard set's raw API body to **{setId}.json.gz**. A set has `subject`,
+`educationLevels`, `document.publicationStatus`, `jurisdiction`, `license`, and
+`standards` keyed by id (`statementNotation`, `description`, `depth`,
+`parentId`). No stage reads it yet (`todo.md`).
+
 ### data/opensalt/ — OpenSALT Standards Frameworks (CASE JSON)
 
 K-12 standards frameworks from opensalt.net in 1EdTech CASE format. Includes
@@ -316,13 +324,16 @@ A new build table gets a schema; a new id goes through `slugify`.
   sub-objectives; a title with no Latin letter is dropped and counted. Each
   DigComp LearningOutcome is one skill with tags `digcomp:outcome`,
   `digcomp:area:*`, `digcomp:competence:*`, and `digcomp:level:*`; stage
-  `difficulty` anchors the level at job zone 1-4. OpenSALT statements parse as
-  HTML with `deno-dom`; a `script`, `style`, or head element in one stops the
-  stage. Learning Commons statements parse the same way and pass the same
-  scaffolding filters (`cleanStandard`). A component is one skill with tags
-  `learningcommons:component` and `grade:*`. A standard is one skill per
-  distinct statement, tags `learningcommons:standard`, `grade:*`, and
-  `code:<statementCode>`. A `buildsTowards` endpoint also gets
+  `difficulty` anchors the level at job zone 1-4. An OpenSALT item with no
+  `educationLevel` takes its nearest `isChildOf` ancestor's. Each item of a
+  framework that grades no item (SCED, Praxis) gets
+  `opensalt:ungraded-framework`. OpenSALT statements parse as HTML with
+  `deno-dom`; a `script`, `style`, or head element in one stops the stage.
+  Learning Commons statements parse the same way and pass the same scaffolding
+  filters (`cleanStandard`). A component is one skill with tag
+  `learningcommons:component`, plus `grade:*` when it names at most 4 grades. A
+  standard is one skill per distinct statement, tags `learningcommons:standard`,
+  `grade:*`, and `code:<statementCode>`. A `buildsTowards` endpoint also gets
   `learningcommons:coherence` and skips the long-title drop. Other sources keep
   `<…>` as text.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, course
@@ -341,15 +352,16 @@ A new build table gets a schema; a new id goes through `slugify`.
   broader targets as the topic refs of stage `tag`.
 
 **LLM enrichment** (stage `enrich`): fill missing Lightcast descriptions;
-summarize long OpenSALT/O\*NET-task titles into 3-7 word names; expand short
-O\*NET task statements and OpenSALT standards; translate MOOCCubeX labels and
-BNCC objectives (first, since stage `list` needs them). Resumable via the
-`1b`–`1g` caches. Stage `list` applies them on its next run.
+summarize each title over 120 characters or with a slug over 80 into a 3-7 word
+name; expand short O\*NET task statements and OpenSALT standards; translate
+MOOCCubeX labels and BNCC objectives (first, since stage `list` needs them).
+Resumable via the `1b`–`1g` caches. Stage `list` applies them on its next run.
 
 **Prereq inference** (stage `prereq`): per-skill top-K candidates by cosine
 similarity (within-topic + ancestor + cross-topic pools), then the LLM picks
-true prerequisites. Resumable via `5_prereqs.tsv`. `SKIP_LLM=1` reuses that
-cache as is, for a regression build without the generator.
+true prerequisites. Resumable via `5_prereqs.tsv`; a cache row that names a gone
+id drops, and its prompt goes out again. `SKIP_LLM=1` reuses that cache, less
+the stale rows, for a regression build without the generator.
 
 **Merge step** (stage `dedupe`): token-sort signature merge + per-topic
 Jaccard+cosine merge + Learning Commons candidates (a Learning Commons row and
@@ -397,11 +409,13 @@ Columns:
 - `difficulty` — integer band 1-20 derived from grade anchors (OpenSALT
   `educationLevel` + Khan V-Position) DigComp levels, and O\*NET job zones via
   kNN smoothing and isotonic PAV calibration. One pass then puts each expert
-  seed prereq at least one band below its dependent. An anchored skill never
-  moves. Pairs join in file order while every skill still fits a band; a pair
-  that cannot fit, or sits in a cycle, is dropped and counted in `4_stats.json`
-  (`seed_anchor_ties` when two anchors share a band, else
-  `seed_anchor_conflicts`). Stage `postproc` keeps every seed edge either way.
+  seed prereq at least one band below its dependent. An anchored skill sits in
+  its anchor's band and never moves; kNN sets only the others. Pairs join in
+  file order while every skill still fits a band; a pair that cannot fit, or
+  sits in a cycle, is dropped and counted in `4_stats.json` (`seed_anchor_ties`
+  when two anchors share a band, else `seed_anchor_conflicts`, per source in
+  `seed_anchor_conflicts_by_source`). Stage `postproc` keeps every seed edge
+  either way, as an edge or as a path after the transitive reduction.
 - `prereqs` — comma-separated prereq IDs. Strict DAG, no self-loops, all IDs
   resolve within the file.
 - `occupations` / `topics` — comma-separated slugs from embedding match +

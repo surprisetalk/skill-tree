@@ -9,6 +9,8 @@ const run = (args: string[], cwd: string, boundMs: number) =>
   new Deno.Command(Deno.execPath(), {
     args: ["run", "-A", "--config", CONFIG, PIPELINE, ...args],
     cwd,
+    // No fixture run may pay for a Claude call.
+    env: { ANTHROPIC_API_KEY: "" },
     signal: AbortSignal.timeout(boundMs),
     stdout: "piped",
     stderr: "piped",
@@ -54,6 +56,21 @@ Deno.test("list: OpenSALT markup is parsed away", () => {
   const opensalt = rows.filter((c) => c[3].includes("opensalt"));
   const tagged = opensalt.filter((c) => TAG_RE.test(c[1] + c[2]));
   assertEquals(tagged.length, 0, `tag left in ${tagged[0]?.[0]}`);
+});
+
+Deno.test("list: OpenSALT grades come from the item or an ancestor", () => {
+  const tags = (id: string) => rows.find((c) => c[0] === id)?.[4].split(",");
+  // AP CSP grades its parent topic, not the essential knowledge item.
+  assert(
+    tags("a-sequence-of-bits-may-represent-instructions-or-data")?.includes(
+      "grade:08",
+    ),
+  );
+  assert(tags("warehouse-operations")?.includes("opensalt:ungraded-framework"));
+  assert(
+    rows.some((c) => c[4].includes("opensalt:ungraded-framework")),
+    "no row from an ungraded framework",
+  );
 });
 
 Deno.test("list stats: all four sources contribute, and dedupe merged rows", () => {
@@ -162,7 +179,7 @@ const goodBuild = (): Fixture => {
       ),
     ].join("\n") + "\n",
     "build/1_skills.tsv":
-      "id\ttitle\tdescription\tsources\ttags\naddition\tAddition\t\topensalt\tgrade:1\n",
+      "id\ttitle\tdescription\tsources\ttags\naddition\tAddition\t\topensalt\tgrade:1\nlicensure\tLicensure\t\topensalt\topensalt:ungraded-framework\n",
     "build/1e_seed_edges.tsv":
       "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback\ncounting\taddition\tkhan\t1.00\t0\t0\n",
     "build/2_ids.tsv": skills.map(([id]) => id).join("\n") + "\n",
@@ -256,8 +273,16 @@ Deno.test(
     ].map(([id, band, pre]) =>
       [id, id, id, "", band, pre, "", "", "", ""].join("\t")
     ).join("\n") + "\n";
+    // Seeds: counting > addition is an edge, counting > multiplication is a
+    // path, and calculus > counting is neither.
+    build["build/1e_seed_edges.tsv"] +=
+      "counting\tmultiplication\tkhan\t1.00\t0\t0\ncalculus\tcounting\tkhan\t1.00\t0\t0\n";
     const { code, score, stderr } = await runIn("status", build);
     assertEquals(code, 1, stderr);
+    assertEquals(
+      score("At least 80% of seed edges survive into skills.tsv."),
+      (2 / 3 - 0) / (0.8 - 0),
+    );
     // 11 edges: loop-a, loop-b, self, and ghost are bad.
     assertEquals(
       score("The prereq graph is a DAG, and every prereq names another skill."),
@@ -471,6 +496,25 @@ const finalBuild = (): Fixture => {
     "build/1k_dbpedia_tree.tsv": "addition\tarithmetic\n",
   };
 };
+
+// A cache row that names a gone id drops, and its prompt goes out again.
+const staleP = early(() =>
+  runIn("prereq", {
+    ...finalBuild(),
+    "build/2_ids.tsv": "counting\naddition\nmultiplication\n",
+    "build/2_embeddings.bin": goodBuild()["build/2_embeddings.bin"].slice(
+      0,
+      3 * 768 * 4,
+    ),
+    "build/2_pathological.tsv": "",
+    "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\tghost\n",
+  }, ["build/5_prereqs.tsv"])
+);
+Deno.test("prereq: a cache row that names a gone id drops and asks again", async () => {
+  const { files, stderr } = await staleP();
+  assertEquals(files["build/5_prereqs.tsv"], "addition\tcounting\n", stderr);
+  assert(stderr.includes("expected ANTHROPIC_API_KEY"), stderr);
+});
 
 // An edge that another path implies is gone, and every closure is unchanged.
 const reduceP = early(() =>
@@ -692,7 +736,7 @@ Deno.test(
           "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\tghost\n",
           "build/1e_seed_edges.tsv": seedHeader,
         }),
-        'build/5_prereqs.tsv:2: expected a skill id from build/3b_tagged_deduped.tsv, received "ghost". Delete the rows of build/5_prereqs.tsv that name ids outside build/3b_tagged_deduped.tsv, then run: deno run -A pipeline.ts prereq',
+        'build/5_prereqs.tsv:2: expected a skill id from build/3b_tagged_deduped.tsv, received "ghost". Run: deno run -A pipeline.ts prereq. It drops the rows that name a gone id and asks again.',
       ],
       [
         "postproc",
@@ -1390,6 +1434,43 @@ Deno.test(
     // 11.5 + 1.5 * 3.
     assertEquals(JSON.parse(files["build/4_stats.json"]).anchors.digcomp, 1);
     assertEquals(difficultyCol(files, 2).get("dig"), 16);
+  }),
+);
+
+Deno.test(
+  "difficulty: an anchored skill sits in its anchor's band, whatever its neighbors",
+  early(async () => {
+    // Two twin pairs: each pair shares one vector, and the grades run in
+    // opposite id order. kNN blends a pair, and PAV pools one of them.
+    const twins = [["twin-a", "1"], ["twin-b", "12"], ["twin-c", "12"], [
+      "twin-d",
+      "1",
+    ]];
+    const build = difficultyBuild();
+    const old = new Float32Array(
+      (build["build/2_embeddings.bin"] as Uint8Array).slice().buffer,
+    );
+    const n = old.length / 768;
+    const emb = new Float32Array((n + 4) * 768);
+    emb.set(old);
+    twins.forEach((_, k) => emb[(n + k) * 768 + 700 + (k >> 1)] = 1);
+    build["build/2_embeddings.bin"] = new Uint8Array(emb.buffer);
+    build["build/2_ids.tsv"] += twins.map(([id]) => id).join("\n") + "\n";
+    build["build/3b_tagged_deduped.tsv"] += twins.map(([id, g]) =>
+      [id, id, "", "test", `grade:${g}`, "", ""].join("\t")
+    ).join("\n") + "\n";
+    const { code, stderr, files } = await runIn("difficulty", build, [
+      "build/4_difficulty.tsv",
+    ]);
+    assertEquals(code, 0, stderr);
+    const band = difficultyCol(files, 1);
+    // Grade 1 is difficulty 2, band 3; grade 12 is 13, band 14.
+    assertEquals(
+      twins.map(([id]) =>
+        band.get(id)
+      ),
+      [3, 14, 14, 3],
+    );
   }),
 );
 

@@ -440,6 +440,7 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
   },
   { label: "cert atlas exam objectives (1 MB gzipped)", fn: certAtlas },
   { label: "bncc brazil national curriculum (2 MB)", fn: bncc },
+  { label: "common standards project (every jurisdiction)", fn: csp },
   {
     label: "lecturebank expert prerequisite pairs (9 MB clone, eval only)",
     fn: async () => {
@@ -678,6 +679,123 @@ async function certAtlas() {
   );
   await writeGzip(dest, JSON.stringify(exams));
   console.log(`  ${exams.length} exams written to ${dest}`);
+}
+
+// Common Standards Project: every jurisdiction, every standard set. The API
+// answers without a key. Each set carries its own `license` (ASN sets: CC BY
+// 3.0 US, Desire2Learn).
+// REVIEW: One gzip per set, the raw API body. Alternative: one slim file like
+// Cert Atlas. It costs a full recrawl whenever stage list needs another field.
+const CSP_API = "https://api.commonstandardsproject.com/api/v1";
+const CSP_DIR = DATA + "csp/";
+// The largest sets (2.7 MB) take 21 s on a quiet line.
+const CSP_TIMEOUT_MS = 120_000;
+// A small nonprofit host: keep the request rate low.
+const CSP_WORKERS = 4;
+
+async function cspGet(path: string): Promise<Json> {
+  let last = "";
+  let body: Json | undefined;
+  for (let attempt = 1; attempt <= 2 && !body; attempt++) {
+    try {
+      const r = await fetch(CSP_API + path, {
+        signal: AbortSignal.timeout(CSP_TIMEOUT_MS),
+      });
+      if (r.ok) body = await r.json() as Json;
+      else last = `${r.status} ${r.statusText}`;
+    } catch (e) {
+      last = (e as Error).message;
+    }
+  }
+  if (!body) {
+    throw new Error(
+      `${CSP_API}${path}: expected a JSON answer, received ${last} after 2 tries. Run the downloader again; finished sets skip.`,
+    );
+  }
+  if (typeof body.data !== "object" || !body.data) {
+    throw new Error(
+      `${CSP_API}${path}: expected {"data": ...}, received ${
+        JSON.stringify(body).slice(0, 80)
+      }. The CSP API changed: update csp() in data/download.ts.`,
+    );
+  }
+  return body.data as Json;
+}
+
+async function pool<T>(items: T[], fn: (t: T) => Promise<void>) {
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: CSP_WORKERS }, async () => {
+      while (next < items.length) await fn(items[next++]);
+    }),
+  );
+}
+
+async function csp() {
+  await mkdir(CSP_DIR);
+  const list = await cspGet("/jurisdictions") as unknown as { id: string }[];
+  if (!Array.isArray(list) || !list.length) {
+    throw new Error(
+      `${CSP_API}/jurisdictions: expected a non-empty array, received ${
+        JSON.stringify(list).slice(0, 80)
+      }. The CSP API changed: update csp() in data/download.ts.`,
+    );
+  }
+  const setIds: string[] = [];
+  await pool(list, async ({ id }) => {
+    const j = await cspGet(`/jurisdictions/${id}`);
+    if (!Array.isArray(j.standardSets)) {
+      throw new Error(
+        `${CSP_API}/jurisdictions/${id}: expected a standardSets array, received ${
+          JSON.stringify(j.standardSets)
+        }. The CSP API changed: update csp() in data/download.ts.`,
+      );
+    }
+    for (const s of j.standardSets as { id: string }[]) setIds.push(s.id);
+  });
+  console.log(`  ${list.length} jurisdictions, ${setIds.length} standard sets`);
+  let fetched = 0, skipped = 0;
+  const failed: string[] = [];
+  const t0 = performance.now();
+  await pool(setIds, async (id) => {
+    // A set id holds only [A-Za-z0-9_-]; anything else would escape the dir.
+    if (!/^[\w-]+$/.test(id)) {
+      throw new Error(
+        `CSP set id ${
+          JSON.stringify(id)
+        }: expected [A-Za-z0-9_-]. Update csp() in data/download.ts to map it to a safe file name.`,
+      );
+    }
+    const dest = `${CSP_DIR}${id}.json.gz`;
+    if (await exists(dest)) {
+      skipped++;
+      return;
+    }
+    // One failed set must not stop the other 25k: fetch them all, then throw.
+    let body: Json;
+    try {
+      body = await cspGet(`/standard_sets/${id}`);
+    } catch (e) {
+      failed.push((e as Error).message);
+      return;
+    }
+    await writeGzip(dest, JSON.stringify(body));
+    if (++fetched % 500 === 0) {
+      console.log(
+        `  ${fetched + skipped}/${setIds.length} sets, ${
+          Math.round((performance.now() - t0) / 1000)
+        } s`,
+      );
+    }
+  });
+  console.log(`  ${fetched} sets fetched, ${skipped} skipped (exist)`);
+  if (failed.length) {
+    throw new Error(
+      `${failed.length} of ${setIds.length} CSP sets failed. First: ${
+        failed[0]
+      }`,
+    );
+  }
 }
 
 console.log(`Downloading ${steps.length} datasets to ${DATA}\n`);

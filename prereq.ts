@@ -7,6 +7,7 @@ import {
   FRAMEWORK_RE,
   gradeToDifficulty,
   loadAliasesCollapsed,
+  loadTsvCache,
   normalizedEmbeddingsForSkills,
   PATHOLOGICAL,
   PREREQ_CACHE,
@@ -440,7 +441,26 @@ function parsePrereqResponse(text: string, n: number): number[] | null {
 
 export async function stagePrereq() {
   const { skills } = parseSkillsWithDifficulty();
-  // SKIP_LLM=1 reuses the cache as is: a regression build needs no generator.
+  // A rename (a new summary, a new merge) leaves cache rows that name a gone
+  // id, and stage postproc throws on them. Drop them, so their prompts go out
+  // again. An id that dedupe merged maps through its alias, as in postproc.
+  const ids = new Set(skills.map((s) => s.id));
+  const alias = loadAliasesCollapsed();
+  const known = (id: string) => ids.has(alias.get(id) ?? id);
+  const cache = [...loadTsvCache(PREREQ_CACHE)];
+  const fresh = cache.filter(([s, ps]) =>
+    known(s) && (ps === "none" || ps.split(",").every(known))
+  );
+  if (fresh.length < cache.length) {
+    writeTable(PREREQS, fresh);
+    console.log(
+      `[prereq] dropped ${
+        cache.length - fresh.length
+      } of ${cache.length} cache rows that name a gone id`,
+    );
+  }
+  // SKIP_LLM=1 reuses the cache, less stale rows: a regression build needs no
+  // generator.
   if (Deno.env.get("SKIP_LLM") === "1") {
     console.log("[prereq] SKIP_LLM=1: using existing cache only");
     return;
@@ -502,9 +522,7 @@ export function stagePostproc() {
   // Stage prereq resumes from its cache, so a rerun keeps a stale row.
   const fix = (path: string) =>
     path === PREREQS.path
-      ? `Delete the rows of ${path} that name ids outside ${TAGGED_DEDUPED.path}, then ${
-        rerun(path).replace("Run", "run")
-      }`
+      ? `${rerun(path)}. It drops the rows that name a gone id and asks again.`
       : rerun(path);
   const inSkills = (id: string, path: string, line: number) => {
     if (!skill.has(alias.get(id) ?? id)) {
@@ -1042,8 +1060,9 @@ export function stagePostproc() {
       }
     }
     final = final.filter(([s, p]) => !redundant.has(`${s}\t${p}`));
+    const seedsImplied = [...redundant].filter((k) => seedEdgeKeys.has(k));
     console.log(
-      `[postproc] transitive reduction: dropped ${redundant.size} edges in ${steps} visits`,
+      `[postproc] transitive reduction: dropped ${redundant.size} edges (${seedsImplied.length} seed, each implied by a path) in ${steps} visits`,
     );
   }
 

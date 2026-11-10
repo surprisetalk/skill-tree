@@ -1562,31 +1562,24 @@ export function stageDifficulty() {
     calibrated[i] = c;
   }
 
+  // REVIEW: An anchored skill's band is its anchor's band; kNN sets only the
+  // others. A grade-1 standard then sits in band 2, so two seed pairs of one
+  // grade tie, not conflict. Alternative: the kNN band, as before. It put a
+  // grade-K skill in band 8 and a grade-6 skill in band 3, and 293 of 1,117
+  // Khan seeds landed out of order.
+  const toBand = (v: number) => Math.max(1, Math.min(20, Math.round(v) + 1));
+  // The kNN band of every skill, anchored or not: the grade audit reads it.
+  const knnBand = new Int32Array(skills.length);
   const band = new Int32Array(skills.length);
-  let healthCapped = 0;
   for (let i = 0; i < skills.length; i++) {
-    let b = Math.max(1, Math.min(20, Math.round(calibrated[i]) + 1));
-    // Medical O*NET neighbors pull K-12 health concepts up. Cap them at band 13.
-    if (!Number.isNaN(anchor[i])) {
-      const anchorBand = Math.round(anchor[i]) + 1;
-      if (anchorBand <= 13 && b > 13) {
-        b = 13;
-        healthCapped++;
-      }
-    }
-    if (!Number.isInteger(b) || b < 1 || b > 20) {
-      throw new Error(
-        `[difficulty] bad band for ${skills[i].id}: ${b} (calibrated=${
-          calibrated[i]
-        })`,
-      );
-    }
-    band[i] = b;
+    knnBand[i] = toBand(calibrated[i]);
+    band[i] = Number.isNaN(anchor[i]) ? knnBand[i] : toBand(anchor[i]);
   }
   // Seed order: a seed prereq sits in a lower band than its dependent. An
   // anchored skill keeps its band; every other skill moves inside [lo, hi].
   const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
-  const allSeeds = readSeeds().map(({ pre, dep }) => {
+  const seedRows = readSeeds();
+  const allSeeds = seedRows.map(({ pre, dep }, i) => {
     const si = idToIdx.get(pre), di = idToIdx.get(dep);
     if (pre === dep) {
       throw new Error(
@@ -1598,7 +1591,7 @@ export function stageDifficulty() {
         `[difficulty] seed id not in build/1_skills.tsv. Expected both ids of a seed pair in the skill table. Received ${pre} > ${dep} in build/1e_seed_edges.tsv. Fix: rerun stage seed-edges after the last dedupe.`,
       );
     }
-    return [si, di];
+    return [si, di, i] as const;
   });
   // Seeds inside a cycle cannot order anything; postproc breaks them by rank.
   const succ = new Map<number, number[]>();
@@ -1647,7 +1640,8 @@ export function stageDifficulty() {
   // Two anchors in one band tie: integer bands cannot order them, and neither
   // anchor contradicts the pair. Stage postproc keeps the edge either way.
   let seedAnchorTies = 0;
-  const seeds = acyclic.filter(([si, di]) => {
+  const conflictsBySource: Record<string, number> = {};
+  const seeds = acyclic.filter(([si, di, row]) => {
     undo.length = 0;
     if (raise(di, lo[si] + 1) && lower(si, hi[di] - 1)) {
       prereqs[di].push(si);
@@ -1659,6 +1653,10 @@ export function stageDifficulty() {
       !Number.isNaN(anchor[si]) && !Number.isNaN(anchor[di]) &&
       band[si] === band[di]
     ) seedAnchorTies++;
+    else {
+      const src = seedRows[row].source;
+      conflictsBySource[src] = (conflictsBySource[src] ?? 0) + 1;
+    }
     return false;
   });
   const seedAnchorConflicts = acyclic.length - seeds.length - seedAnchorTies;
@@ -1674,11 +1672,6 @@ export function stageDifficulty() {
   }
   const bandCounts = new Array(20).fill(0);
   for (const b of band) bandCounts[b - 1]++;
-  if (healthCapped > 0) {
-    console.log(
-      `[difficulty] K-12 anchor band cap applied to ${healthCapped} skills`,
-    );
-  }
 
   writeTable(
     DIFFICULTY,
@@ -1722,14 +1715,16 @@ export function stageDifficulty() {
     }
     if (!grades.length) continue;
     gradeAnchoredSkills++;
-    const anchorBand = Math.round(Math.max(...grades)) + 1;
-    const gap = Math.abs(band[i] - anchorBand);
+    // The anchor is the lowest grade, so the audit is too. It grades the kNN
+    // band, since an anchored skill's own band is its anchor.
+    const anchorBand = Math.round(Math.min(...grades)) + 1;
+    const gap = Math.abs(knnBand[i] - anchorBand);
     if (gap > 5) {
       inversions++;
       worstInversion = Math.max(worstInversion, gap);
       if (invSamples.length < 10) {
         invSamples.push(
-          `${skills[i].id}: grade→${anchorBand}, band=${band[i]}`,
+          `${skills[i].id}: grade→${anchorBand}, knn band=${knnBand[i]}`,
         );
       }
     }
@@ -1760,6 +1755,9 @@ export function stageDifficulty() {
     seed_cycle_pairs: allSeeds.length - acyclic.length,
     seed_anchor_conflicts: seedAnchorConflicts,
     seed_anchor_ties: seedAnchorTies,
+    seed_anchor_conflicts_by_source: Object.fromEntries(
+      Object.entries(conflictsBySource).sort((a, b) => b[1] - a[1]),
+    ),
     grade_band_inversion_samples: invSamples,
     total_seconds: (performance.now() - t0) / 1000,
   });

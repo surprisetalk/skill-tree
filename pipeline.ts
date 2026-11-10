@@ -4,6 +4,7 @@
 
 import { stageDedupe, stageDifficulty, stageEmbed, stageTag } from "./graph.ts";
 import {
+  ancestorsOf,
   BUILD,
   EMBED_DIM,
   embeddingFallback,
@@ -99,6 +100,9 @@ async function stageStatus() {
   const edgeCount = () => skills().reduce((n, s) => n + s.prereqs.length, 0);
   const usedAsPrereq = () => new Set(skills().flatMap((s) => s.prereqs));
   const seeds = readSeeds;
+  let aboveFn: ((id: string) => Set<string>) | undefined;
+  const above = () =>
+    aboveFn ??= ancestorsOf(new Map(skills().map((s) => [s.id, s.prereqs])));
   const stat = (key: string, file = "4_stats.json"): number => {
     const path = `${BUILD}/${file}`;
     const v = (readJson(need(path)) as Record<string, unknown>)[key];
@@ -216,10 +220,11 @@ async function stageStatus() {
       const bad = both.filter((e) => m.get(e.pre)!.band > m.get(e.dep)!.band);
       return grade(bad.length / both.length, 0.10, 1);
     }],
+    // A transitively reduced DAG drops a seed edge that a path implies: the
+    // path keeps the seed's order, so the seed counts as kept.
     ["At least 80% of seed edges survive into skills.tsv.", () => {
-      const m = byId();
       const all = seeds();
-      const kept = all.filter((e) => m.get(e.dep)?.prereqs.includes(e.pre));
+      const kept = all.filter((e) => above()(e.dep).has(e.pre));
       return grade(kept.length / all.length, 0.8, 0);
     }],
     [
@@ -290,12 +295,18 @@ async function stageStatus() {
         0.001,
         0.01,
       )],
-    ["At least 95% of OpenSALT skills carry a grade tag.", () => {
-      const rows = readTable(SKILL_LIST)
-        .filter((r) => r.sources.split(",").includes("opensalt"));
-      const tagged = rows.filter((r) => /(^|,)grade:/.test(r.tags));
-      return grade(tagged.length / rows.length, 0.95, 0);
-    }],
+    [
+      "At least 95% of OpenSALT skills from graded frameworks carry a grade tag.",
+      () => {
+        const rows = readTable(SKILL_LIST).filter((r) =>
+          r.sources.split(",").includes("opensalt") &&
+          (/(^|,)grade:/.test(r.tags) ||
+            !/(^|,)opensalt:ungraded-framework(,|$)/.test(r.tags))
+        );
+        const tagged = rows.filter((r) => /(^|,)grade:/.test(r.tags));
+        return grade(tagged.length / rows.length, 0.95, 0);
+      },
+    ],
     [
       "No anomalous hub (holiday retells, SCED catalog) has over 200 dependents.",
       () => {
@@ -335,19 +346,10 @@ async function stageStatus() {
         return grade(junk.length / skills().length, 0, 1);
       },
     ],
-    ["Addition is a transitive prereq of multiplication.", () => {
-      const m = byId();
-      const stack = [...m.get("multiplication")?.prereqs ?? []];
-      const seen = new Set<string>();
-      while (stack.length) {
-        const u = stack.pop()!;
-        if (u === "addition") return 1;
-        if (seen.has(u)) continue;
-        seen.add(u);
-        stack.push(...m.get(u)?.prereqs ?? []);
-      }
-      return 0;
-    }],
+    [
+      "Addition is a transitive prereq of multiplication.",
+      () => above()("multiplication").has("addition") ? 1 : 0,
+    ],
     [
       "Spot checks pass: known tags present, known false prereqs absent.",
       () => {

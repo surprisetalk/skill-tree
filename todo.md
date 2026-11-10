@@ -54,30 +54,27 @@ first for `enrich` and `prereq`).
   2. Score it with the LectureBank precision and recall code.
 
 - [ ] Skills from every US state standard set appear in `skills.tsv`, merged
-      with OpenSALT where they repeat. Decision: approved design, Common
-      Standards Project (CSP) and ASN, everything they give, with no row bound.
-      Blocker: the full CSP crawl runs for hours, and the Mac disk is 97% full
-      (34 GB free, 7 Nov). Its size decides whether `data/csp/` is committed
-      like `data/opensalt/` (107 MB) or gitignored. ASN bulk access needs your
-      email request. CSP lists 786 jurisdictions: 52 US states and D.C., 13
-      Canadian entries, Common Core, 342 organizations, 375 schools or
-      districts. It adds Canada, organizations, schools, and each state's
-      non-core subjects (Texas: 29 beyond the core four) to Learning Commons.
-  1. `data/download.ts` fetches each CSP jurisdiction from
-     `api.commonstandardsproject.com/api/v1` (no key), then each standard set,
-     into `data/csp/{setId}.json`. It skips files that exist, uses a 30 s
-     timeout, and retries once.
-  2. Example set record:
-     `{"id": "…", "title": "Grade 3", "subject": "Mathematics", "educationLevels": ["03"], "jurisdiction": {"title": "Texas"}, "standards": {"<id>": {"statementNotation": "3.4.A", "description": "…", "depth": 2}}}`.
-  3. ASN: only single documents download
-     (`asn.desire2learn.com/resources/{id}_full.json`). Bulk needs the batch
-     service (asn.desire2learn.com/content/asn-batch-service). CSP first
-     imported its states from ASN, so ASN adds mostly duplicates.
-  4. Stage `list` parses CSP standards like OpenSALT items: same scaffolding
+      with OpenSALT where they repeat. Decision: Common Standards Project (CSP)
+      and ASN, everything they give, with no row bound. Blocker: ASN bulk access
+      needs your email request. CSP needs no key.
+  1. Finish the crawl: rerun `data/download.ts`; finished sets skip. It writes
+     `data/csp/{setId}.json.gz`, the raw API body.
+  2. Commit `data/csp/` if the full crawl stays under about 200 MB, else
+     gitignore it. The first 10,032 of 24,969 sets take 85 MB.
+  3. Stage `list` parses CSP standards like OpenSALT items: same scaffolding
      filters, `grade:*` tags from `educationLevels`, `sources: ["csp"]`, and
-     `code:<statementNotation>`.
+     `code:<statementNotation>`. Set shape:
+     `{"subject", "educationLevels": ["03"], "document": {"publicationStatus"}, "jurisdiction": {"title"}, "license", "standards": {"<id>": {"statementNotation", "description", "depth", "parentId"}}}`.
+  4. Drop sets whose `document.publicationStatus` is `Deprecated`, as Learning
+     Commons keeps only current frameworks. Keep school and organization sets.
+     Alternative: keep deprecated sets. Each retired version then returns as a
+     near-duplicate skill.
   5. Stage `dedupe` merges a CSP row and an OpenSALT row that carry the same
      `code:*` tag before the cosine pass.
+  6. ASN: only single documents download
+     (`asn.desire2learn.com/resources/{id}_full.json`). Bulk needs the batch
+     service. CSP first imported its states from ASN, so ASN adds mostly
+     duplicates.
 
 - [ ] Delete the CSP API key from git history, or confirm that it is CSP's
       public demo key. Blocker: you. Commit `4724493^` holds a hardcoded

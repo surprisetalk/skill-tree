@@ -43,8 +43,9 @@ const FOLD: Record<string, string> = {
 
 const FOLD_RE = new RegExp(`[${Object.keys(FOLD).join("")}]`, "g");
 
-export const slugify = (s: string) => {
-  const base = decodeEntities(s).normalize("NFKD")
+// The slug before the 80-character cap. Longer, and slugify adds a hex hash.
+export const slugBase = (s: string) =>
+  decodeEntities(s).normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(FOLD_RE, (c) => FOLD[c])
     .replace(/[^a-z0-9\s-]/g, " ")
@@ -52,6 +53,9 @@ export const slugify = (s: string) => {
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+
+export const slugify = (s: string) => {
+  const base = slugBase(s);
   if (base.length <= 80) return base;
   const hash = h32(base).toString(16).padStart(8, "0").slice(0, 6);
   let out = "";
@@ -1388,11 +1392,12 @@ export function readDifficulty(): Map<string, { band: number; raw: number }> {
 }
 
 // Expert seed edges outside the holdout, with dedupe aliases applied.
-export function readSeeds(): { pre: string; dep: string }[] {
+export function readSeeds(): { pre: string; dep: string; source: string }[] {
   const alias = loadAliasesCollapsed();
   return readTable(SEEDS).filter((r) => !r.holdout).map((r) => ({
     pre: alias.get(r.src_id) ?? r.src_id,
     dep: alias.get(r.dst_id) ?? r.dst_id,
+    source: r.source,
   }));
 }
 
@@ -1771,6 +1776,27 @@ export function readLectureBank(): { pairs: ExpertPair[]; unnamed: number } {
 // Precision counts only the graph edges whose pair an expert annotated,
 // because an unannotated edge has no label. Alternative: divide by every edge
 // between matched topics. It reads a missing annotation as a wrong edge.
+// The transitive prereqs of a skill, memoized. graph maps dep → prereqs.
+export function ancestorsOf(
+  graph: Map<string, string[]>,
+): (id: string) => Set<string> {
+  const memo = new Map<string, Set<string>>();
+  return (id) => {
+    let seen = memo.get(id);
+    if (seen) return seen;
+    seen = new Set();
+    const stack = [...graph.get(id) ?? []];
+    while (stack.length) {
+      const u = stack.pop()!;
+      if (seen.has(u)) continue;
+      seen.add(u);
+      stack.push(...graph.get(u) ?? []);
+    }
+    memo.set(id, seen);
+    return seen;
+  };
+}
+
 export function expertScores(
   graph: Map<string, string[]>,
   pairs: ExpertPair[],
@@ -1790,21 +1816,7 @@ export function expertScores(
       if (positive) hits++;
     }
   }
-  const ancestors = new Map<string, Set<string>>();
-  const above = (id: string): Set<string> => {
-    let seen = ancestors.get(id);
-    if (seen) return seen;
-    seen = new Set();
-    const stack = [...graph.get(id) ?? []];
-    while (stack.length) {
-      const u = stack.pop()!;
-      if (seen.has(u)) continue;
-      seen.add(u);
-      stack.push(...graph.get(u) ?? []);
-    }
-    ancestors.set(id, seen);
-    return seen;
-  };
+  const above = ancestorsOf(graph);
   let positives = 0, recovered = 0;
   for (const [k, positive] of annotated) {
     if (!positive) continue;

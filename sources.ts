@@ -26,6 +26,7 @@ import {
   Skill,
   SKILL_LIST,
   skillIndex,
+  slugBase,
   slugify,
   STOPWORDS,
   stronglyConnected,
@@ -397,6 +398,8 @@ const SCAFFOLDING_TYPES = new Set([
   "Team Leader",
   "People Leader",
   "Senior Leader",
+  // Kentucky social studies: "E: Microeconomics" heads a kindergarten strand.
+  "Concepts and Practices",
 ]);
 const SCAFFOLDING_RE =
   /^(\s*)?(grade|kindergarten|pre-?k|elementary|middle school|high school|[0-9]+(st|nd|rd|th)\s+grade|unit\s+\d|chapter\s+\d|section\s+\d|module\s+\d|standard\s+\d|topic\s+\d|strand|domain)\b/i;
@@ -856,6 +859,44 @@ export function stageList() {
         continue;
       }
       const isSced = docSlug.startsWith("sced-");
+      // An item with no educationLevel takes its nearest isChildOf ancestor's.
+      const byId = new Map(items.map((it: { identifier: string }) => [
+        it.identifier,
+        it,
+      ]));
+      const parentOf = new Map<string, string>();
+      for (const a of j.CFAssociations ?? []) {
+        if (a.associationType !== "isChildOf") continue;
+        const child = a.originNodeURI?.identifier;
+        if (!parentOf.has(child)) {
+          parentOf.set(child, a.destinationNodeURI?.identifier);
+        }
+      }
+      // deno-lint-ignore no-explicit-any -- CASE items, read field by field
+      const levels = (it: any): unknown[] => {
+        // CASE trees run under 20 deep; a longer chain is an isChildOf cycle.
+        for (let depth = 0; depth < 50; depth++) {
+          if (Array.isArray(it.educationLevel) && it.educationLevel.length) {
+            return it.educationLevel;
+          }
+          it = byId.get(parentOf.get(it.identifier) ?? "");
+          if (!it) return [];
+        }
+        throw new Error(
+          `${path}: expected an isChildOf chain under 50 deep from an item, received 50 or more. The framework has an isChildOf cycle: fix it, or re-download it.`,
+        );
+      };
+      // REVIEW: Tag the items of a framework that grades no item (SCED course
+      // codes, Praxis, nursing courses). Stage status leaves them out of the
+      // grade-tag share. Alternative: tag SCED 9-12 (its codes 01-24 are
+      // secondary) and the rest grade:UG. Stage difficulty anchors at the
+      // lowest grade, so AP Calculus would anchor at 9: an anchor the source
+      // does not give.
+      const ungraded =
+        // deno-lint-ignore no-explicit-any -- CASE items
+        !items.some((it: any) =>
+          Array.isArray(it.educationLevel) && it.educationLevel.length
+        );
       const seenInFrame = new Set<string>();
       for (const it of items) {
         if (it.CFItemType && SCAFFOLDING_TYPES.has(it.CFItemType)) {
@@ -890,11 +931,10 @@ export function stageList() {
         // Stage prereq keeps sced:catalog entries out of candidate pools.
         const tags: string[] = ["opensalt"];
         if (isSced) tags.push("sced:catalog");
-        if (Array.isArray(it.educationLevel)) {
-          for (const g of it.educationLevel) {
-            const gv = normGrade(String(g));
-            if (gv) tags.push(`grade:${gv}`);
-          }
+        if (ungraded) tags.push("opensalt:ungraded-framework");
+        for (const g of levels(it)) {
+          const gv = normGrade(String(g));
+          if (gv) tags.push(`grade:${gv}`);
         }
         if (Array.isArray(it.conceptKeywords)) {
           for (const kw of it.conceptKeywords) {
@@ -938,7 +978,15 @@ export function stageList() {
         title: text.charAt(0).toUpperCase() + text.slice(1),
         description: "",
         sources: ["learningcommons"],
-        tags: ["learningcommons:component", ...gradeTags(c.grades)],
+        // REVIEW: A component that names over 4 grades (more than 9-12) gets
+        // no grade tag. Its grades are the union of every standard it
+        // supports, often K-8, and a merge hands them to a grade-8 standard,
+        // which then anchors at K. Alternative: keep them. 149 seed pairs
+        // then invert around a K anchor.
+        tags: [
+          "learningcommons:component",
+          ...(c.grades.length <= 4 ? gradeTags(c.grades) : []),
+        ],
       };
       raw.push(skill);
       lcNodes.set(skill, [c.id]);
@@ -1317,12 +1365,7 @@ export function stageList() {
       continue;
     }
     if (fromOpensalt && !exempt) {
-      const slugBase = decodeEntities(s.title).toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, " ").trim().replace(/\s+/g, "-").replace(
-          /-+/g,
-          "-",
-        );
-      if (slugBase.length > 80) {
+      if (slugBase(s.title).length > 80) {
         // Still overflows post-summarize: summarization didn't fire or didn't help.
         slugOverflowDropped++;
         continue;
@@ -1530,7 +1573,10 @@ export async function stageEnrich() {
       SKILL_LIST,
     )
   ) {
-    if (title.length > SUM_MAX) sumTargets.push({ id, title });
+    // A title whose slug overflows gets a hex-hashed id: name it shorter.
+    if (title.length > SUM_MAX || slugBase(title).length > 80) {
+      sumTargets.push({ id, title });
+    }
     if (
       sources.includes("lightcast") &&
       (!desc || tags?.includes("desc:placeholder"))
