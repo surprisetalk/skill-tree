@@ -304,6 +304,23 @@ Deno.test(
 );
 
 Deno.test(
+  "status: a prereq pick no easier than its skill scores below 1",
+  early(async () => {
+    const build = goodBuild();
+    build["build/5_prereqs.tsv"] += "counting\taddition\n";
+    const { code, score } = await runIn("status", build);
+    assertEquals(code, 1);
+    // 4 rows, 1 stale.
+    assertEquals(
+      score(
+        "Every 5_prereqs.tsv row names skills of the current difficulty stage, each pick easier than its skill.",
+      ),
+      1 - 1 / 4,
+    );
+  }),
+);
+
+Deno.test(
   "status: a missing or still-Chinese translation scores below 1",
   early(async () => {
     for (

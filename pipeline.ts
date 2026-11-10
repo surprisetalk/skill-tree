@@ -171,29 +171,23 @@ async function stageStatus() {
       }
       return grade(Math.max(...groups.values()), 5, Math.max(ids.length, 6));
     }],
-    ["Under 8% of LLM prereq picks sit above their skill's difficulty.", () => {
-      const raw = readDifficultyRaw();
-      let picks = 0, reversed = 0;
-      for (const { skill, picks: ps } of readTable(PREREQS)) {
-        for (const p of ps) {
-          const rs = raw.get(skill), rp = raw.get(p);
-          // Stale ids score in the next condition.
-          if (rs === undefined || rp === undefined) continue;
-          picks++;
-          if (rp >= rs) reversed++;
-        }
-      }
-      if (!picks) return 0;
-      return grade(reversed / picks, 0.08, 1);
-    }],
+    // REVIEW: One check, the rule stage prereq's purge applies: every row
+    // names skills of this build, and every pick sits below its skill. It
+    // fails when difficulty reruns after prereq. Alternative: keep "Under 8% of
+    // LLM prereq picks sit above their skill's difficulty". The purge re-asks
+    // those picks, and candidates are all easier, so it could not fail.
     [
-      "Every 5_prereqs.tsv row names only skills from the current difficulty stage.",
+      "Every 5_prereqs.tsv row names skills of the current difficulty stage, each pick easier than its skill.",
       () => {
         const raw = readDifficultyRaw();
         const rows = readTable(PREREQS);
-        const stale = rows.filter((r) =>
-          !raw.has(r.skill) || r.picks.some((p) => !raw.has(p))
-        );
+        const stale = rows.filter((r) => {
+          const rs = raw.get(r.skill);
+          return rs === undefined || r.picks.some((p) => {
+            const rp = raw.get(p);
+            return rp === undefined || rp >= rs;
+          });
+        });
         return grade(stale.length / rows.length, 0, 1);
       },
     ],
