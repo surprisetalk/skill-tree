@@ -260,8 +260,9 @@ From api.commonstandardsproject.com/api/v1 (no key). `data/download.ts` writes
 each standard set's raw API body to **{setId}.json.gz**. A set has `subject`,
 `educationLevels`, `document.publicationStatus`, `jurisdiction`, `license`, and
 `standards` keyed by id (`statementNotation`, `description`, `depth`,
-`parentId`). Each set states its own licence (ASN sets: CC BY 3.0 US,
-Desire2Learn). No stage reads it yet (`todo.md`).
+`parentId`). Each set states its own licence (CC BY 4.0 US or CC BY 3.0 US). A
+set with no licence goes to **data/csp-unlicensed/**, which git ignores: the
+repo is public. No stage reads either yet (`todo.md`).
 
 ### data/opensalt/ — OpenSALT Standards Frameworks (CASE JSON)
 
