@@ -22,10 +22,9 @@ first for `enrich` and `prereq`).
   2. Where the pair contradicts two grade anchors, decide per source which side
      is wrong: drop the pair in `seed-edges`, or fix the anchor's tag.
 
-- [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 10/258 positive
-      LectureBank pairs (0.039) sit in the transitive closure.
-  1. The build of 10 Nov resent the rejected prompts: recall is 11/258 (0.043).
-     It needs 13.
+- [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 11/258 positive
+      LectureBank pairs (0.043) sit in the transitive closure; it needs 13.
+  1. The build of 10 Nov resent the rejected prompts; that added 1.
   2. Of the 248 missed positives, 243 have the prereq outside the dependent's
      candidate pool. 233 share no topic, and 118 fail the guard
      `raw[j] <
