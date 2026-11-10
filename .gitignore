@@ -35,5 +35,3 @@ skills.tsv.tmp
 # course prerequisites: git tracks the gzip only
 data/courses/*.csv
 
-# Common Standards Project crawl: commit once its size is known (todo.md)
-data/csp/
