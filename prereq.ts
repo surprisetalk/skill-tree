@@ -447,16 +447,21 @@ export async function stagePrereq() {
   const ids = new Set(skills.map((s) => s.id));
   const alias = loadAliasesCollapsed();
   const known = (id: string) => ids.has(alias.get(id) ?? id);
-  const cache = [...loadTsvCache(PREREQ_CACHE)];
-  const fresh = cache.filter(([s, ps]) =>
+  // A repeated key (a torn append) keeps one row, as loadTsvCache reads it.
+  const cache = loadTsvCache(PREREQ_CACHE);
+  const lines = cache.size &&
+    Deno.readTextFileSync(PREREQ_CACHE).split("\n").length - 1;
+  const fresh = [...cache].filter(([s, ps]) =>
     known(s) && (ps === "none" || ps.split(",").every(known))
   );
-  if (fresh.length < cache.length) {
-    writeTable(PREREQS, fresh);
+  if (fresh.length < lines) {
+    // A missing cache reads as empty; an empty table does not write.
+    if (fresh.length) writeTable(PREREQS, fresh);
+    else Deno.removeSync(PREREQ_CACHE);
     console.log(
       `[prereq] dropped ${
-        cache.length - fresh.length
-      } of ${cache.length} cache rows that name a gone id`,
+        lines - fresh.length
+      } of ${lines} cache rows: a gone id or a repeated key`,
     );
   }
   // SKIP_LLM=1 reuses the cache, less stale rows: a regression build needs no

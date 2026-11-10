@@ -510,10 +510,35 @@ const staleP = early(() =>
     "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\tghost\n",
   }, ["build/5_prereqs.tsv"])
 );
+// A repeated key keeps one row; a cache with no fresh row goes away.
+const staleCases = [
+  "addition\tcounting\naddition\tcounting\n",
+  "addition\tghost\n",
+].map((cache) =>
+  early(() =>
+    runIn("prereq", {
+      ...finalBuild(),
+      "build/2_ids.tsv": "counting\naddition\nmultiplication\n",
+      "build/2_embeddings.bin": goodBuild()["build/2_embeddings.bin"].slice(
+        0,
+        3 * 768 * 4,
+      ),
+      "build/2_pathological.tsv": "",
+      "build/5_prereqs.tsv": cache,
+    }, ["build/5_prereqs.tsv"])
+  )
+);
 Deno.test("prereq: a cache row that names a gone id drops and asks again", async () => {
   const { files, stderr } = await staleP();
   assertEquals(files["build/5_prereqs.tsv"], "addition\tcounting\n", stderr);
   assert(stderr.includes("expected ANTHROPIC_API_KEY"), stderr);
+  const [dup, none] = await Promise.all(staleCases.map((c) => c()));
+  assertEquals(
+    dup.files["build/5_prereqs.tsv"],
+    "addition\tcounting\n",
+    dup.stderr,
+  );
+  assert(none.stderr.includes("expected ANTHROPIC_API_KEY"), none.stderr);
 });
 
 // An edge that another path implies is gone, and every closure is unchanged.
