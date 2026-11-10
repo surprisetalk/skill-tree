@@ -295,6 +295,12 @@ async function stageStatus() {
         0.001,
         0.01,
       )],
+    // REVIEW: This check is narrower now. It leaves out rows from frameworks
+    // that grade no item (SCED, Praxis, nursing: about 2,200 of 11,594 rows),
+    // so it reads 99% where every OpenSALT row reads about 80%. isChildOf
+    // inheritance added only a few hundred grades. Alternative: keep every
+    // row. Then it stays red until those rows get grades their source does
+    // not give.
     [
       "At least 95% of OpenSALT skills from graded frameworks carry a grade tag.",
       () => {

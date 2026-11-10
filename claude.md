@@ -254,13 +254,14 @@ Git tracks the gzips, because jj refuses a new file over 1 MiB.
   `build/1g_bncc_translate.tsv`, keyed by code. Stage `list` throws on a code
   with no translation.
 
-### data/csp/ — Common Standards Project (gzipped JSON, gitignored for now)
+### data/csp/ — Common Standards Project (gzipped JSON, tracked in git)
 
 From api.commonstandardsproject.com/api/v1 (no key). `data/download.ts` writes
 each standard set's raw API body to **{setId}.json.gz**. A set has `subject`,
 `educationLevels`, `document.publicationStatus`, `jurisdiction`, `license`, and
 `standards` keyed by id (`statementNotation`, `description`, `depth`,
-`parentId`). No stage reads it yet (`todo.md`).
+`parentId`). Each set states its own licence (ASN sets: CC BY 3.0 US,
+Desire2Learn). No stage reads it yet (`todo.md`).
 
 ### data/opensalt/ — OpenSALT Standards Frameworks (CASE JSON)
 

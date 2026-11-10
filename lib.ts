@@ -1771,11 +1771,6 @@ export function readLectureBank(): { pairs: ExpertPair[]; unnamed: number } {
   return { pairs, unnamed };
 }
 
-// Pairs are skill ids. `graph` maps a skill to its direct prereqs. A pair is
-// annotated once, and positive when any set marks it so.
-// Precision counts only the graph edges whose pair an expert annotated,
-// because an unannotated edge has no label. Alternative: divide by every edge
-// between matched topics. It reads a missing annotation as a wrong edge.
 // The transitive prereqs of a skill, memoized. graph maps dep → prereqs.
 export function ancestorsOf(
   graph: Map<string, string[]>,
@@ -1797,6 +1792,11 @@ export function ancestorsOf(
   };
 }
 
+// Pairs are skill ids. `graph` maps a skill to its direct prereqs. A pair is
+// annotated once, and positive when any set marks it so.
+// Precision counts only the graph edges whose pair an expert annotated,
+// because an unannotated edge has no label. Alternative: divide by every edge
+// between matched topics. It reads a missing annotation as a wrong edge.
 export function expertScores(
   graph: Map<string, string[]>,
   pairs: ExpertPair[],

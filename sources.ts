@@ -839,7 +839,8 @@ export function stageList() {
       perFrameDup = 0,
       stuPrefix = 0,
       pureVerb = 0,
-      frameDropped = 0;
+      frameDropped = 0,
+      danglingParent = 0;
     for (const e of readDirSorted("data/opensalt")) {
       if (!e.name.endsWith(".json") || e.name === "index.json") continue;
       const path = `data/opensalt/${e.name}`;
@@ -859,32 +860,58 @@ export function stageList() {
         continue;
       }
       const isSced = docSlug.startsWith("sced-");
-      // An item with no educationLevel takes its nearest isChildOf ancestor's.
+      // An item with no educationLevel takes its nearest isChildOf ancestors'.
       const byId = new Map(items.map((it: { identifier: string }) => [
         it.identifier,
         it,
       ]));
-      const parentOf = new Map<string, string>();
-      for (const a of j.CFAssociations ?? []) {
-        if (a.associationType !== "isChildOf") continue;
+      const docId = j.CFDocument?.identifier;
+      const parentsOf = new Map<string, string[]>();
+      for (const [k, a] of (j.CFAssociations ?? []).entries()) {
+        if (a?.associationType !== "isChildOf") continue;
         const child = a.originNodeURI?.identifier;
-        if (!parentOf.has(child)) {
-          parentOf.set(child, a.destinationNodeURI?.identifier);
+        const parent = a.destinationNodeURI?.identifier;
+        if (typeof child !== "string" || typeof parent !== "string") {
+          throw new Error(
+            `${path} CFAssociations[${k}]: expected an isChildOf association with string originNodeURI.identifier and destinationNodeURI.identifier, received ${
+              JSON.stringify(a).slice(0, 120)
+            }. Re-download it: deno run -A data/download.ts`,
+          );
         }
+        // A top-level item is a child of the CFDocument: it is a root.
+        if (parent === docId) continue;
+        if (!byId.has(parent)) {
+          danglingParent++;
+          continue;
+        }
+        parentsOf.set(child, [...parentsOf.get(child) ?? [], parent]);
       }
+      // CASE trees run under 20 deep; a longer chain is an isChildOf cycle.
       // deno-lint-ignore no-explicit-any -- CASE items, read field by field
-      const levels = (it: any): unknown[] => {
-        // CASE trees run under 20 deep; a longer chain is an isChildOf cycle.
-        for (let depth = 0; depth < 50; depth++) {
-          if (Array.isArray(it.educationLevel) && it.educationLevel.length) {
-            return it.educationLevel;
-          }
-          it = byId.get(parentOf.get(it.identifier) ?? "");
-          if (!it) return [];
+      const levels = (it: any, depth = 0): string[] => {
+        if (depth >= 50) {
+          throw new Error(
+            `${path}: expected an isChildOf chain under 50 deep from item ${it.identifier}, received 50 or more. The framework has an isChildOf cycle: fix it, or re-download it.`,
+          );
         }
-        throw new Error(
-          `${path}: expected an isChildOf chain under 50 deep from an item, received 50 or more. The framework has an isChildOf cycle: fix it, or re-download it.`,
-        );
+        if (Array.isArray(it.educationLevel) && it.educationLevel.length) {
+          return it.educationLevel.map(String);
+        }
+        const found = [
+          ...new Set(
+            (parentsOf.get(it.identifier) ?? []).map((p) =>
+              levels(byId.get(p), depth + 1).join(",")
+            ).filter(Boolean),
+          ),
+        ];
+        if (found.length > 1) {
+          throw new Error(
+            `${path} item ${it.identifier}: expected its isChildOf parents to give one educationLevel, received ${
+              found.map((f) => `[${f}]`).join(" and ")
+            }. Give the item its own educationLevel, or pick one parent here.`,
+          );
+        }
+        return found[0] ? found[0].split(",") : [];
       };
       // REVIEW: Tag the items of a framework that grades no item (SCED course
       // codes, Praxis, nursing courses). Stage status leaves them out of the
@@ -958,7 +985,7 @@ export function stageList() {
       }
     }
     console.log(
-      `  opensalt: ${n} (scaff_type=${scaffType}, scaff_pat=${scaffPat}, pure_verb=${pureVerb}, stu_prefix=${stuPrefix}, trunc=${truncated}, dup=${perFrameDup}, framework_dropped=${frameDropped})`,
+      `  opensalt: ${n} (scaff_type=${scaffType}, scaff_pat=${scaffPat}, pure_verb=${pureVerb}, stu_prefix=${stuPrefix}, trunc=${truncated}, dup=${perFrameDup}, framework_dropped=${frameDropped}, dangling_parent=${danglingParent})`,
     );
   }
 

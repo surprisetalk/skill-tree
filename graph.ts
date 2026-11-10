@@ -1224,6 +1224,9 @@ export function stageDedupe() {
 
 // ---------- stage difficulty ----------
 
+// K is difficulty 1 and grade 12 is 13.
+const K_TO_12 = 12;
+
 export function stageDifficulty() {
   const skills = readTable(TAGGED_DEDUPED);
   const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
@@ -1239,7 +1242,12 @@ export function stageDifficulty() {
         if (d !== null) grades.push(d);
       }
     }
-    if (grades.length) {
+    // REVIEW: Every grade from K to 12 says "all grades": no anchor, and kNN
+    // sets the band. Such a skill is a broad topic ("history") merged with
+    // school standards, and the lowest grade would pin it at K. Alternative:
+    // anchor at K, beside "count objects".
+    const span = Math.max(...grades) - Math.min(...grades);
+    if (grades.length && span < K_TO_12) {
       // The first grade that teaches it. A 3-12 span anchors at 3, not 12.
       anchor[i] = Math.min(...grades);
       gradeAnchored++;
@@ -1567,13 +1575,22 @@ export function stageDifficulty() {
   // grade tie, not conflict. Alternative: the kNN band, as before. It put a
   // grade-K skill in band 8 and a grade-6 skill in band 3, and 293 of 1,117
   // Khan seeds landed out of order.
-  const toBand = (v: number) => Math.max(1, Math.min(20, Math.round(v) + 1));
+  const toBand = (v: number, i: number) => {
+    if (!Number.isFinite(v)) {
+      throw new Error(
+        `[difficulty] ${
+          skills[i].id
+        }: expected a finite difficulty, received ${v}. Check its anchor tags in ${TAGGED_DEDUPED.path} and rerun: deno run -A pipeline.ts difficulty`,
+      );
+    }
+    return Math.max(1, Math.min(20, Math.round(v) + 1));
+  };
   // The kNN band of every skill, anchored or not: the grade audit reads it.
   const knnBand = new Int32Array(skills.length);
   const band = new Int32Array(skills.length);
   for (let i = 0; i < skills.length; i++) {
-    knnBand[i] = toBand(calibrated[i]);
-    band[i] = Number.isNaN(anchor[i]) ? knnBand[i] : toBand(anchor[i]);
+    knnBand[i] = toBand(calibrated[i], i);
+    band[i] = Number.isNaN(anchor[i]) ? knnBand[i] : toBand(anchor[i], i);
   }
   // Seed order: a seed prereq sits in a lower band than its dependent. An
   // anchored skill keeps its band; every other skill moves inside [lo, hi].
@@ -1717,6 +1734,8 @@ export function stageDifficulty() {
       }
     }
     if (!grades.length) continue;
+    // A K-12 span sets no anchor, so the audit skips it.
+    if (Math.max(...grades) - Math.min(...grades) >= K_TO_12) continue;
     gradeAnchoredSkills++;
     // The anchor is the lowest grade, so the audit is too. It grades the kNN
     // band, since an anchored skill's own band is its anchor.

@@ -1475,6 +1475,30 @@ Deno.test(
 );
 
 Deno.test(
+  "difficulty: a skill tagged K to 12 sets no anchor",
+  early(async () => {
+    const build = difficultyBuild();
+    const old = new Uint8Array(build["build/2_embeddings.bin"] as Uint8Array);
+    const emb = new Float32Array(old.length / 4 + 768);
+    emb.set(new Float32Array(old.slice().buffer));
+    emb[emb.length - 1] = 1;
+    build["build/2_embeddings.bin"] = new Uint8Array(emb.buffer);
+    build["build/2_ids.tsv"] += "every-grade\n";
+    build["build/3b_tagged_deduped.tsv"] +=
+      "every-grade\tEvery grade\t\ttest\tgrade:K,grade:6,grade:12\t\t\n";
+    const { code, stderr, files } = await runIn("difficulty", build, [
+      "build/4_difficulty.tsv",
+      "build/4_stats.json",
+    ]);
+    assertEquals(code, 0, stderr);
+    const stats = JSON.parse(files["build/4_stats.json"]);
+    // Only grade-low and grade-high anchor on a grade.
+    assertEquals([stats.anchors.grade, stats.grade_anchored_skills], [2, 2]);
+    assert(difficultyCol(files, 1).get("every-grade")! > 2);
+  }),
+);
+
+Deno.test(
   "difficulty: an expert seed claims its bands before a course seed",
   early(async () => {
     // The course pair wants a below grade-low (band 3); the Khan pair wants a
