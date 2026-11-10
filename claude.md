@@ -410,11 +410,12 @@ Columns:
 - `difficulty` — integer band 1-20 derived from grade anchors (OpenSALT
   `educationLevel` + Khan V-Position) DigComp levels, and O\*NET job zones via
   kNN smoothing and isotonic PAV calibration. One pass then puts each expert
-  seed prereq at least one band below its dependent. An anchored skill sits in
-  its anchor's band and never moves; kNN sets only the others. Pairs join in
-  file order while every skill still fits a band; a pair that cannot fit, or
-  sits in a cycle, is dropped and counted in `4_stats.json` (`seed_anchor_ties`
-  when two anchors share a band, else `seed_anchor_conflicts`, per source in
+  seed prereq at least one band below its dependent. A skill with its own label
+  (grade, Khan position, DigComp level) sits in that label's band and never
+  moves; kNN sets the others, job-zone skills included. Pairs join in file order
+  while every skill still fits a band; a pair that cannot fit, or sits in a
+  cycle, is dropped and counted in `4_stats.json` (`seed_anchor_ties` when two
+  anchors share a band, else `seed_anchor_conflicts`, per source in
   `seed_anchor_conflicts_by_source`). Stage `postproc` keeps every seed edge
   either way, as an edge or as a path after the transitive reduction.
 - `prereqs` — comma-separated prereq IDs. Strict DAG, no self-loops, all IDs

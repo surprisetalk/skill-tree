@@ -1508,6 +1508,32 @@ Deno.test(
 );
 
 Deno.test(
+  "difficulty: a job-zone skill takes its kNN band, not its zone's",
+  early(async () => {
+    // do-the-budget (zone 3, anchor 16, band 17) shares grade-low's vector.
+    const build = difficultyBuild();
+    const emb = new Float32Array(
+      (build["build/2_embeddings.bin"] as Uint8Array).slice().buffer,
+    );
+    const budget = 4;
+    emb.fill(0, budget * 768, (budget + 1) * 768);
+    emb[budget * 768] = 1;
+    build["build/2_embeddings.bin"] = new Uint8Array(emb.buffer);
+    const { code, stderr, files } = await runIn("difficulty", build, [
+      "build/4_difficulty.tsv",
+    ]);
+    assertEquals(code, 0, stderr);
+    const band = difficultyCol(files, 1);
+    assert(
+      band.get("do-the-budget")! < 17,
+      `band ${band.get("do-the-budget")}`,
+    );
+    // grade-low keeps its own band: grade 1 is band 3.
+    assertEquals(band.get("grade-low"), 3);
+  }),
+);
+
+Deno.test(
   "difficulty: a skill tagged K to 12 sets no anchor",
   early(async () => {
     const build = difficultyBuild();

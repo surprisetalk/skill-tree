@@ -1301,6 +1301,9 @@ export function stageDifficulty() {
   }
 
   let zoneAnchored = 0;
+  // A job zone averages the occupations that use a skill: it calibrates kNN,
+  // but it does not set the skill's own band.
+  const zoneOnly = new Uint8Array(skills.length);
   {
     const zoneRows = readTsv("data/onet/Job Zones.txt");
     const iZs = col(zoneRows, "O*NET-SOC Code", "data/onet/Job Zones.txt"),
@@ -1390,6 +1393,7 @@ export function stageDifficulty() {
       const i = idToIdx.get(key);
       if (i === undefined || !Number.isNaN(anchor[i])) continue;
       anchor[i] = 11.5 + 1.5 * (wz / w);
+      zoneOnly[i] = 1;
       zoneAnchored++;
     }
   }
@@ -1570,11 +1574,13 @@ export function stageDifficulty() {
     calibrated[i] = c;
   }
 
-  // REVIEW: An anchored skill's band is its anchor's band; kNN sets only the
-  // others. A grade-1 standard then sits in band 2, so two seed pairs of one
-  // grade tie, not conflict. Alternative: the kNN band, as before. It put a
-  // grade-K skill in band 8 and a grade-6 skill in band 3, and 293 of 1,117
-  // Khan seeds landed out of order.
+  // REVIEW: A skill with its own label (grade, Khan position, DigComp level)
+  // sits in that label's band; kNN sets the others, job-zone skills included.
+  // A grade-1 standard then sits in band 3, so two seed pairs of one grade tie,
+  // not conflict. Alternative: the kNN band for every skill, as before. It put
+  // a grade-K skill in band 8 and a grade-6 skill in band 3, and 293 of 1,117
+  // Khan seeds landed out of order. A job-zone band would put "answer phones"
+  // in band 14 or higher, above all K-12 content.
   const toBand = (v: number, i: number) => {
     if (!Number.isFinite(v)) {
       throw new Error(
@@ -1590,7 +1596,9 @@ export function stageDifficulty() {
   const band = new Int32Array(skills.length);
   for (let i = 0; i < skills.length; i++) {
     knnBand[i] = toBand(calibrated[i], i);
-    band[i] = Number.isNaN(anchor[i]) ? knnBand[i] : toBand(anchor[i], i);
+    band[i] = Number.isNaN(anchor[i]) || zoneOnly[i]
+      ? knnBand[i]
+      : toBand(anchor[i], i);
   }
   // Seed order: a seed prereq sits in a lower band than its dependent. An
   // anchored skill keeps its band; every other skill moves inside [lo, hi].
