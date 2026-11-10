@@ -360,9 +360,10 @@ Resumable via the `1b`–`1g` caches. Stage `list` applies them on its next run.
 
 **Prereq inference** (stage `prereq`): per-skill top-K candidates by cosine
 similarity (within-topic + ancestor + cross-topic pools), then the LLM picks
-true prerequisites. Resumable via `5_prereqs.tsv`; a cache row that names a gone
-id drops, and its prompt goes out again. `SKIP_LLM=1` reuses that cache, less
-the stale rows, for a regression build without the generator.
+true prerequisites. Resumable via `5_prereqs.tsv`; a cache row that names an id
+outside the build, or a pick no easier than its skill, drops, and its prompt
+goes out again. `SKIP_LLM=1` reuses that cache, less the stale rows, for a
+regression build without the generator.
 
 **Merge step** (stage `dedupe`): token-sort signature merge + per-topic
 Jaccard+cosine merge + Learning Commons candidates (a Learning Commons row and

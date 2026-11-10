@@ -440,20 +440,22 @@ function parsePrereqResponse(text: string, n: number): number[] | null {
 }
 
 export async function stagePrereq() {
-  const { skills } = parseSkillsWithDifficulty();
-  // A rename (a new summary, a new merge) leaves cache rows that name a gone
-  // id, and stage postproc throws on them. Drop them, so their prompts go out
-  // again. An id that dedupe merged maps through its alias, as in postproc.
-  const ids = new Set(skills.map((s) => s.id));
-  const alias = loadAliasesCollapsed();
-  const known = (id: string) => ids.has(alias.get(id) ?? id);
+  const { skills, raw } = parseSkillsWithDifficulty();
+  // A cache row is stale when it names an id outside this build (a rename or
+  // a merge), or a pick no easier than its skill: raw difficulty moved, and
+  // the pool the pick came from is gone. Drop it, so its prompt goes out again.
+  const rawOf = new Map(skills.map((s, i) => [s.id, raw[i]]));
   // A repeated key (a torn append) keeps one row, as loadTsvCache reads it.
   const cache = loadTsvCache(PREREQ_CACHE);
   const lines = cache.size &&
     Deno.readTextFileSync(PREREQ_CACHE).split("\n").length - 1;
-  const fresh = [...cache].filter(([s, ps]) =>
-    known(s) && (ps === "none" || ps.split(",").every(known))
-  );
+  const fresh = [...cache].filter(([s, ps]) => {
+    const rs = rawOf.get(s);
+    return rs !== undefined && (ps === "none" || ps.split(",").every((p) => {
+      const rp = rawOf.get(p);
+      return rp !== undefined && rp < rs;
+    }));
+  });
   if (fresh.length < lines) {
     // A missing cache reads as empty; an empty table does not write.
     if (fresh.length) writeTable(PREREQS, fresh);
@@ -461,7 +463,7 @@ export async function stagePrereq() {
     console.log(
       `[prereq] dropped ${
         lines - fresh.length
-      } of ${lines} cache rows: a gone id or a repeated key`,
+      } of ${lines} cache rows: a gone id, a pick no easier than its skill, or a repeated key`,
     );
   }
   // SKIP_LLM=1 reuses the cache, less stale rows: a regression build needs no

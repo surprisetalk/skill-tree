@@ -515,9 +515,13 @@ const staleP = early(() =>
   }, ["build/5_prereqs.tsv"])
 );
 // A repeated key keeps one row; a cache with no fresh row goes away.
+// Raw difficulty: counting 1, addition 2, multiplication 3. A row whose pick
+// is no easier than its skill, or that names a merged id, is stale too.
 const staleCases = [
   "addition\tcounting\naddition\tcounting\n",
   "addition\tghost\n",
+  "addition\tcounting\ncounting\taddition\n",
+  "addition\tcounting\noldadd\tcounting\n",
 ].map((cache) =>
   early(() =>
     runIn("prereq", {
@@ -528,6 +532,7 @@ const staleCases = [
         3 * 768 * 4,
       ),
       "build/2_pathological.tsv": "",
+      "build/3b_aliases.tsv": "dropped_id\tcanonical_id\noldadd\taddition\n",
       "build/5_prereqs.tsv": cache,
     }, ["build/5_prereqs.tsv"])
   )
@@ -536,7 +541,11 @@ Deno.test("prereq: a cache row that names a gone id drops and asks again", async
   const { files, stderr } = await staleP();
   assertEquals(files["build/5_prereqs.tsv"], "addition\tcounting\n", stderr);
   assert(stderr.includes("expected ANTHROPIC_API_KEY"), stderr);
-  const [dup, none] = await Promise.all(staleCases.map((c) => c()));
+  const [dup, none, drifted, merged] = await Promise.all(
+    staleCases.map((c) => c()),
+  );
+  assertEquals(drifted.files["build/5_prereqs.tsv"], "addition\tcounting\n");
+  assertEquals(merged.files["build/5_prereqs.tsv"], "addition\tcounting\n");
   assertEquals(
     dup.files["build/5_prereqs.tsv"],
     "addition\tcounting\n",
