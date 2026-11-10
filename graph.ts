@@ -1604,12 +1604,15 @@ export function stageDifficulty() {
   stronglyConnected(succ).forEach((comp, c) =>
     comp.forEach((n) => cycleOf.set(n, c))
   );
+  // Course catalogs join last, so an expert pair claims its bands first. A
+  // catalog names a course requirement, not a concept prereq.
+  const isCourse = (row: number) => seedRows[row].source === "courses";
   const acyclic = allSeeds.filter(([si, di]) =>
     !cycleOf.has(si) || cycleOf.get(si) !== cycleOf.get(di)
-  );
-  // REVIEW: Keep each acyclic seed pair, in file order, while every skill
-  // still fits a band 1–20 and every anchor keeps its band. A 22-skill chain
-  // then drops 1 pair, not all 21. Alternative: an exact minimum drop set. It
+  ).toSorted((a, b) => Number(isCourse(a[2])) - Number(isCourse(b[2])));
+  // REVIEW: Keep each acyclic seed pair, in file order with course catalogs
+  // last, while every skill still fits a band 1–20 and every anchor keeps its
+  // band. A 22-skill chain then drops 1 pair, not all 21. Alternative: an exact minimum drop set. It
   // needs an ILP solver, a new dependency.
   // lo and hi bound each band through the kept pairs. Each step moves a bound
   // one band, so a propagation is at most 20 deep.

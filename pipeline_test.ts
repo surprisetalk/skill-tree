@@ -1474,6 +1474,25 @@ Deno.test(
   }),
 );
 
+Deno.test(
+  "difficulty: an expert seed claims its bands before a course seed",
+  early(async () => {
+    // The course pair wants a below grade-low (band 3); the Khan pair wants a
+    // above grade-high (band 14). Only one fits, and the course pair yields.
+    const { code, stderr, files } = await runIn("difficulty", {
+      ...difficultyBuild(),
+      "build/1e_seed_edges.tsv": seedHeader +
+        "a\tgrade-low\tcourses\t1.00\t0\t0\ngrade-high\ta\tkhan\t1.00\t0\t0\n",
+    }, ["build/4_difficulty.tsv", "build/4_stats.json"]);
+    assertEquals(code, 0, stderr);
+    assertGreater(difficultyCol(files, 1).get("a")!, 14);
+    assertEquals(
+      JSON.parse(files["build/4_stats.json"]).seed_anchor_conflicts_by_source,
+      { courses: 1 },
+    );
+  }),
+);
+
 const withSeeds = (pairs: string[][]): Fixture => ({
   ...difficultyBuild(),
   "build/1e_seed_edges.tsv": seedHeader +

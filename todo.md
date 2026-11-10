@@ -1,49 +1,53 @@
 ## Next
 
-Each entry below is a `deno task status` condition that fails on the full Claude
-build of 9 Nov. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
+Each entry below is a `deno task status` condition that fails, or a stage that
+is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
-- [ ] Difficulty bands agree with seeds and grade anchors. Today: 481/3725 seed
-      pairs fail to fit bands 1–20 (12.9%, floor 1%); 3216/32423 grade-anchored
-      skills miss their band by over 5 (9.9%, floor 5%); about 12.8% of seed
-      edges put the prereq in a higher band (floor 10%); about 93.8% of skills
-      sit at or above every transitive prereq's band (floor 95%).
-  1. In stage `difficulty`, count `seed_anchor_conflicts` per seed source into
-     `4_stats.json`.
-  2. Fix the source with the most conflicts first: drop its bad pairs in
-     `seed-edges`, or fix the grade anchor that contradicts it.
-  3. Rerun from `difficulty`, then read all four conditions again; one cause
-     likely drives them all.
-
-- [ ] At least 80% of seed edges survive into `skills.tsv`. Today 78.6%.
-      `postproc` adds every seed (added=3489, dup=236).
-  1. Count the seed edges each `postproc` step drops, transitive reduction
-     included, and log the counts.
-  2. If transitive reduction drops seeds that a path implies, count an implied
-     seed as kept in the condition: the path holds the edge.
-
-- [ ] At least 95% of OpenSALT skills carry a `grade:*` tag. Today 79.6%.
-  1. Group the untagged OpenSALT skills by framework (`1_skills.tsv`).
-  2. For the largest frameworks, inherit `educationLevel` from the parent CFItem
-     through `isChildOf` in stage `list`.
-
-- [ ] No skill has a hex-overflow id. Today 4,830 skills (5.3%) have an id of 70
-      characters or more that ends in a 6-hex suffix (`slug_overflow=4015` in
-      `build/chain/list.log`).
-  1. Send each title whose slug overflows through the `enrich` summarize prompt
-     (3–7 words), as long OpenSALT titles already are.
-  2. Rerun from `enrich`; the summaries apply in stage `list`.
+- [ ] Difficulty bands agree with seeds. After pinned anchor bands (10 Nov,
+      before the full build): 226/3725 seed pairs fail to fit bands 1–20 (6.1%,
+      floor 1%); 93.4% of skills sit at or above every transitive prereq's band
+      (floor 95%). A seed edge with its prereq above its dependent puts every
+      descendant below a transitive prereq, so the conflicts drive both.
+  1. Read `seed_anchor_conflicts_by_source` in `build/4_stats.json`. Course
+     catalogs led with 104: an unanchored hub (`calculus`) is a course prereq of
+     a skill that a K-12 anchor pins low (`entrepreneurship`, grade 3), and the
+     pass pulls the hub to band 1.
+  2. Decide how a course pair yields to anchors. Recommended: stage `difficulty`
+     joins course pairs last, after every expert source, so a course pair cannot
+     move a band that an expert pair set.
+  3. Rerun from `difficulty`, then read both conditions again.
 
 - [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 10/258 positive
-      LectureBank pairs (0.039) sit in the transitive closure, and only 12
-      `skills.tsv` edges join two annotated topics.
-  1. List the 248 missed positives with both resolved skill ids.
-  2. For each, check whether the prereq is in the dependent's candidate pool in
-     stage `prereq`. If most are absent, widen the pool; if present, the picks
-     miss them, so fix the prompt.
-  3. 2,599 prereq prompts (3%) got a rejected answer and have no picks. Rerun
-     `prereq` to send them again before you judge recall.
+      LectureBank pairs (0.039) sit in the transitive closure.
+  1. Read recall after the full build of 10 Nov: it resends the 2,599 prereq
+     prompts whose answers were rejected.
+  2. Of the 248 missed positives, 243 have the prereq outside the dependent's
+     candidate pool. 233 share no topic, and 118 fail the guard
+     `raw[j] <
+     raw[i]`. By cosine, only 7 rank in the dependent's top 10 of
+     all skills. Cosine slots buy about 5 pairs.
+  3. Widen the pool with what predicts these pairs: a cross-topic slot for
+     foundation skills (`probability`, `linear-algebra`) that many dependents
+     share. A new pool reaches cached skills only after a clear of
+     `build/5_prereqs.tsv` and a full `prereq` rerun (about 93k prompts).
+
+- [ ] Skills from every Common Standards Project (CSP) set appear in
+      `skills.tsv`, merged with OpenSALT where they repeat. Decision: everything
+      CSP gives, with no row bound. `data/csp/` holds 24,965 of 24,969 sets (178
+      MB); 4 sets answer 503 every time.
+  1. Stage `list` parses CSP standards like OpenSALT items: same scaffolding
+     filters, `grade:*` tags from `educationLevels`, `sources: ["csp"]`, and
+     `code:<statementNotation>`. Set shape:
+     `{"subject", "educationLevels": ["03"], "document": {"publicationStatus"}, "jurisdiction": {"title"}, "license", "standards": {"<id>": {"statementNotation", "description", "depth", "parentId"}}}`.
+  2. Drop sets whose `document.publicationStatus` is `Deprecated`, as Learning
+     Commons keeps only current frameworks. Keep school and organization sets.
+     Alternative: keep deprecated sets. Each retired version then returns as a
+     near-duplicate skill.
+  3. Stage `dedupe` merges a CSP row and an OpenSALT row that carry the same
+     `code:*` tag before the cosine pass.
+  4. Readme: CSP and each set's `license` (ASN sets: CC BY 3.0 US) in the
+     attributions.
 
 ## Blocked on you
 
@@ -53,25 +57,9 @@ first for `enrich` and `prereq`).
      is non-commercial, so use it for eval only.
   2. Score it with the LectureBank precision and recall code.
 
-- [ ] Skills from every US state standard set appear in `skills.tsv`, merged
-      with OpenSALT where they repeat. Decision: Common Standards Project (CSP)
-      and ASN, everything they give, with no row bound. Blocker: ASN bulk access
-      needs your email request. CSP needs no key.
-  1. Finish the crawl: rerun `data/download.ts`; finished sets skip. It writes
-     `data/csp/{setId}.json.gz`, the raw API body.
-  2. Commit `data/csp/` if the full crawl stays under about 200 MB, else
-     gitignore it. The first 10,032 of 24,969 sets take 85 MB.
-  3. Stage `list` parses CSP standards like OpenSALT items: same scaffolding
-     filters, `grade:*` tags from `educationLevels`, `sources: ["csp"]`, and
-     `code:<statementNotation>`. Set shape:
-     `{"subject", "educationLevels": ["03"], "document": {"publicationStatus"}, "jurisdiction": {"title"}, "license", "standards": {"<id>": {"statementNotation", "description", "depth", "parentId"}}}`.
-  4. Drop sets whose `document.publicationStatus` is `Deprecated`, as Learning
-     Commons keeps only current frameworks. Keep school and organization sets.
-     Alternative: keep deprecated sets. Each retired version then returns as a
-     near-duplicate skill.
-  5. Stage `dedupe` merges a CSP row and an OpenSALT row that carry the same
-     `code:*` tag before the cosine pass.
-  6. ASN: only single documents download
+- [ ] ASN standards that CSP lacks appear in `skills.tsv`. Blocker: ASN bulk
+      access needs your email request.
+  1. Only single documents download
      (`asn.desire2learn.com/resources/{id}_full.json`). Bulk needs the batch
      service. CSP first imported its states from ASN, so ASN adds mostly
      duplicates.
