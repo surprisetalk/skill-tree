@@ -51,6 +51,15 @@ Deno.test("list: every row has 5 fields, a slug id, a title, and sources; ids ar
   assertEquals(canapes?.[0], "prepare-canapes");
 });
 
+Deno.test("list: a summary of a summary applies", () => {
+  // O*NET task -> "Designing plant warehousing strategies for production
+  // materials or finished products" -> "Designing plant warehousing strategies".
+  assert(
+    rows.some((c) => c[1] === "Designing plant warehousing strategies"),
+    "the second summary did not apply",
+  );
+});
+
 Deno.test("list: a SKIP infill answer leaves no description", () => {
   assertEquals(rows.filter((c) => c[2] === "SKIP").map((c) => c[0]), []);
 });

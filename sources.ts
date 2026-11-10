@@ -131,6 +131,9 @@ const INFILL_CACHE = `${BUILD}/1b_infill.tsv`;
 // The model's answer for a Lightcast name it cannot define.
 const INFILL_SKIP = "SKIP";
 const SUMMARIZE_CACHE = `${BUILD}/1c_summarize.tsv`;
+// The prompt asks for 3-7 words. Past 15, the model thinks out loud ("Wait,
+// that exceeds 7 words. Shortened version: ...").
+const isSummary = (t: string) => t.split(/\s+/).filter(Boolean).length <= 15;
 const ONET_DESC_CACHE = `${BUILD}/1d_onet_desc.tsv`;
 const OPENSALT_DESC_CACHE = `${BUILD}/1e_opensalt_desc.tsv`;
 
@@ -1347,10 +1350,23 @@ export function stageList() {
   let summarized = 0, onetEnriched = 0, opensaltEnriched = 0;
   for (const s of raw) {
     const k = slugify(s.title);
-    const sum = summarize.get(k);
-    if (sum && sum.length > 0 && sum.length < s.title.length) {
-      const orig = s.title;
+    // A summary that still overflows gets its own summary in the next enrich,
+    // so follow the chain. Each hop is shorter, so it ends; 5 bounds it.
+    const orig = s.title;
+    for (let hop = 0; hop < 5; hop++) {
+      const key = slugify(s.title);
+      const sum = summarize.get(key);
+      if (!sum || sum.length >= s.title.length) break;
+      if (!isSummary(sum)) {
+        throw new Error(
+          `${SUMMARIZE_CACHE}: expected a summary of at most 15 words for "${key}", received "${
+            sum.slice(0, 120)
+          }". Run: deno run -A pipeline.ts enrich (it drops such rows and asks again).`,
+        );
+      }
       s.title = sum;
+    }
+    if (s.title !== orig) {
       if (!s.description) s.description = orig;
       summarized++;
     }
@@ -1630,14 +1646,37 @@ export async function stageEnrich() {
   );
 
   // Summaries rename skills, so they run before the slow infill (about 28k
-  // Lightcast descriptions); stop the stage there and the titles hold.
+  // Lightcast descriptions); stop the stage there and the titles hold. A
+  // cached answer that is not a summary drops, so it is asked again.
+  {
+    const cache = [...loadTsvCache(SUMMARIZE_CACHE)];
+    const good = cache.filter(([, v]) => isSummary(v));
+    if (good.length < cache.length) {
+      Deno.writeTextFileSync(
+        SUMMARIZE_CACHE + ".tmp",
+        good.map(([k, v]) => `${k}\t${v}\n`).join(""),
+      );
+      Deno.renameSync(SUMMARIZE_CACHE + ".tmp", SUMMARIZE_CACHE);
+      console.log(
+        `[enrich:summarize] dropped ${
+          cache.length - good.length
+        } cached answers over 15 words`,
+      );
+    }
+  }
   await resumableClaude(
     "enrich:summarize",
     SUMMARIZE_CACHE,
     sumTargets,
     (t) =>
       `Extract the core skill as a concise 3-7 word noun phrase. Extract only concepts present in the input; do not add or assume. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n\nStandard: ${t.title}\n\nName:`,
-    { numPredict: 60 },
+    {
+      numPredict: 60,
+      clean: (raw) => {
+        const c = cleanDef(raw);
+        return isSummary(c) ? c : "";
+      },
+    },
   );
 
   // Without context, the model reads "Protege" as mentorship, not the ontology editor.
