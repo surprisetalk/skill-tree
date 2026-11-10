@@ -4,35 +4,28 @@ Each entry below is a `deno task status` condition that fails, or a stage that
 is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
-- [ ] The full build of 10 Nov passes `deno task status`. It runs in the
-      background: `sh build/chain/chain.sh enrich`, steps in
-      `build/chain/chain.log`.
-  1. When `chain done` appears, read `build/chain/status.log`. Expect green:
-     seed survival, higher-band seeds, the grade audit, OpenSALT grades, stale
-     `5_prereqs.tsv` rows.
-  2. Hex-overflow ids: 22 cached summaries still overflow 80 characters, and 9
-     rows carry a collision suffix, so `list` never applies their summary. Fix
-     whichever the condition still counts.
-  3. Commit the paid caches by path: `build/1c_summarize.tsv`,
-     `build/5_prereqs.tsv`, `build/3b_aliases.tsv`.
+- [ ] No skill has a hex-overflow id. Today 96 (from 4,830 on 9 Nov).
+  1. List the 96 in `skills.tsv` (id of 70+ characters ending in a 6-hex
+     suffix). Expect two causes: a cached summary that still overflows 80
+     characters, and a row whose id carries a collision suffix, so `list` looks
+     up `slugify(title)` and misses its summary.
+  2. Ask again for a summary that overflows; key the lookup by the row's id.
 
-- [ ] Difficulty bands agree with seeds. After pinned anchor bands (10 Nov,
-      before the full build): 226/3725 seed pairs fail to fit bands 1–20 (6.1%,
-      floor 1%); 93.4% of skills sit at or above every transitive prereq's band
-      (floor 95%). A seed edge with its prereq above its dependent puts every
-      descendant below a transitive prereq, so the conflicts drive both.
-  1. Read `seed_anchor_conflicts_by_source` in `build/4_stats.json`. Course
-     catalogs led with 104: an unanchored hub (`calculus`) is a course prereq of
-     a skill that a K-12 anchor pins low (`entrepreneurship`, grade 3), and the
-     pass pulls the hub to band 1.
-  2. Course pairs now join the band pass last, and a K-12 span sets no anchor
-     (both in the 10 Nov build). Read `seed_anchor_conflicts_by_source` again.
-  3. If conflicts stay over 1%, look at the top source's pairs, as in step 1.
+- [ ] Difficulty bands agree with seeds. Build of 10 Nov: 130/3725 seed pairs
+      fail to fit bands 1–20 (3.5%, floor 1%; khan 36, learningcommons 30,
+      courses 24, foundation 13, opensalt_grade 12). The transitive-band
+      condition scores 0.96 (floor 95% of skills): a seed edge with its prereq
+      above its dependent puts every descendant below a transitive prereq, so
+      the conflicts drive both.
+  1. Print the conflicting Khan and Learning Commons pairs with both anchors (a
+     sample list in `4_stats.json`, like `grade_band_inversion_samples`).
+  2. Where the pair contradicts two grade anchors, decide per source which side
+     is wrong: drop the pair in `seed-edges`, or fix the anchor's tag.
 
 - [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 10/258 positive
       LectureBank pairs (0.039) sit in the transitive closure.
-  1. Read recall after the full build of 10 Nov: it resends the 2,599 prereq
-     prompts whose answers were rejected.
+  1. The build of 10 Nov resent the rejected prompts: recall is 11/258 (0.043).
+     It needs 13.
   2. Of the 248 missed positives, 243 have the prereq outside the dependent's
      candidate pool. 233 share no topic, and 118 fail the guard
      `raw[j] <
