@@ -51,6 +51,10 @@ Deno.test("list: every row has 5 fields, a slug id, a title, and sources; ids ar
   assertEquals(canapes?.[0], "prepare-canapes");
 });
 
+Deno.test("list: a SKIP infill answer leaves no description", () => {
+  assertEquals(rows.filter((c) => c[2] === "SKIP").map((c) => c[0]), []);
+});
+
 Deno.test("list: OpenSALT markup is parsed away", () => {
   const TAG_RE = /<\/?[a-z][^>]*>/i;
   const opensalt = rows.filter((c) => c[3].includes("opensalt"));
@@ -919,10 +923,14 @@ Deno.test("list: DigComp outcomes carry the source, area, competence, and level 
       `${c[0]}: no level`,
     );
   }
+  // A title whose slug overflows gets a summary, and its text moves to the
+  // description.
   assert(
     dc.some((c) =>
-      c[1].startsWith(
-        "Acknowledge the benefits of using different digital search tools",
+      [c[1], c[2]].some((f) =>
+        f.startsWith(
+          "Acknowledge the benefits of using different digital search tools",
+        )
       )
     ),
     "LO1.1.01 missing",

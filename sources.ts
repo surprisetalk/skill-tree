@@ -128,6 +128,8 @@ function pct(arr: number[], p: number): number {
 }
 
 const INFILL_CACHE = `${BUILD}/1b_infill.tsv`;
+// The model's answer for a Lightcast name it cannot define.
+const INFILL_SKIP = "SKIP";
 const SUMMARIZE_CACHE = `${BUILD}/1c_summarize.tsv`;
 const ONET_DESC_CACHE = `${BUILD}/1d_onet_desc.tsv`;
 const OPENSALT_DESC_CACHE = `${BUILD}/1e_opensalt_desc.tsv`;
@@ -759,6 +761,7 @@ export function stageList() {
         continue;
       }
       let desc = infill.get(id) ?? "";
+      if (desc === INFILL_SKIP) desc = "";
       const tags = typeName ? [`lightcast:${typeName}`] : ["lightcast"];
       if (desc && desc.trim() !== typeName) infilled++;
       else {
@@ -1647,8 +1650,12 @@ export async function stageEnrich() {
     infillTargets,
     (t) =>
       `${LIGHTCAST_CONTEXT}\n\nWrite a single factual sentence (≤100 chars) defining the skill without marketing language, jargon, or elaboration. Do not begin with the skill name. If unclear, output: SKIP\n\nSkill: ${t.title}\n\nDefinition:`,
-    // Under 200 tokens, answers stop mid-word.
-    { numPredict: 200 },
+    // Under 200 tokens, answers stop mid-word. A SKIP caches as SKIP, so a
+    // rerun does not ask again; stage list reads it as no description.
+    {
+      numPredict: 200,
+      clean: (raw) => /^\W*skip\W*$/i.test(raw) ? INFILL_SKIP : cleanDef(raw),
+    },
   );
 
   await resumableClaude(
