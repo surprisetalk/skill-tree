@@ -35,22 +35,36 @@ first for `enrich` and `prereq`).
      share. A new pool reaches cached skills only after a clear of
      `build/5_prereqs.tsv` and a full `prereq` rerun (about 93k prompts).
 
+- [ ] A full build finishes in under 2 hours of compute at the CSP scale: 364k
+      skills, about 290k grade anchors. Today `difficulty` and the `prereq`
+      candidate pools scan skills times anchors, and each takes minutes at 93k.
+      Decision (you, 10 Nov): performance first, then a review together, then
+      all of CSP.
+  1. Time each part of `difficulty` (kNN, PAV, seed pass) and of
+     `computePrereqCandidates` (topic pool, the full-scan fallback, the
+     cross-topic pool) at 93k. Print the timings in each stage log.
+  2. Bound the scans that grow as skills times skills: the kNN global fallback
+     and the candidate full-scan fallback. A topic or token index, or a bounded
+     random sample of anchors, keeps the output close. Check that the 93k bands
+     and pools barely move.
+  3. Measure at scale in a jj workspace: apply side commit `lopuqmnx` (the CSP
+     parse), then run `list` through `prereq` with `SKIP_LLM=1`, and time each
+     stage. Ollama must embed about 269k new titles first.
+  4. Stop for the review with the timings and the new status numbers.
+
 - [ ] Skills from every Common Standards Project (CSP) set appear in
-      `skills.tsv`, merged with OpenSALT where they repeat. Decision: everything
-      CSP gives, with no row bound. `data/csp/` holds 24,965 of 24,969 sets (178
-      MB); 4 sets answer 503 every time.
-  1. Stage `list` parses CSP standards like OpenSALT items: same scaffolding
-     filters, `grade:*` tags from `educationLevels`, `sources: ["csp"]`, and
-     `code:<statementNotation>`. Set shape:
-     `{"subject", "educationLevels": ["03"], "document": {"publicationStatus"}, "jurisdiction": {"title"}, "license", "standards": {"<id>": {"statementNotation", "description", "depth", "parentId"}}}`.
-  2. Drop sets whose `document.publicationStatus` is `Deprecated`, as Learning
-     Commons keeps only current frameworks. Keep school and organization sets.
-     Alternative: keep deprecated sets. Each retired version then returns as a
-     near-duplicate skill.
+      `skills.tsv`, after the performance entry above and your review. Decision:
+      every current, licensed set. Measured 10 Nov in side commit `lopuqmnx`:
+      967,098 leaf standards, 557,346 dropped as long titles, 173,895 merged by
+      key; `1_skills.tsv` grows from 95,375 to 364,519 rows (269,285 CSP only,
+      252,501 with a grade tag).
+  1. Rebase `lopuqmnx` onto main. It parses leaf standards of current sets,
+     treats a parent as a heading, tags grades when a set names at most 4, and
+     skips a notation that lists several codes.
+  2. Stage `prereq` then sends about 116M input and 59M output tokens.
   3. Stage `dedupe` merges a CSP row and an OpenSALT row that carry the same
      `code:*` tag before the cosine pass.
-  4. Readme: CSP and each set's `license` (ASN sets: CC BY 3.0 US) in the
-     attributions.
+  4. Readme: CSP attributions per set licence (CC BY 4.0 US, CC BY 3.0 US).
 
 ## Blocked on you
 
