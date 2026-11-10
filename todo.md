@@ -4,6 +4,18 @@ Each entry below is a `deno task status` condition that fails, or a stage that
 is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
+- [ ] The full build of 10 Nov passes `deno task status`. It runs in the
+      background: `sh build/chain/chain.sh enrich`, steps in
+      `build/chain/chain.log`.
+  1. When `chain done` appears, read `build/chain/status.log`. Expect green:
+     seed survival, higher-band seeds, the grade audit, OpenSALT grades, stale
+     `5_prereqs.tsv` rows.
+  2. Hex-overflow ids: 22 cached summaries still overflow 80 characters, and 9
+     rows carry a collision suffix, so `list` never applies their summary. Fix
+     whichever the condition still counts.
+  3. Commit the paid caches by path: `build/1c_summarize.tsv`,
+     `build/5_prereqs.tsv`, `build/3b_aliases.tsv`.
+
 - [ ] Difficulty bands agree with seeds. After pinned anchor bands (10 Nov,
       before the full build): 226/3725 seed pairs fail to fit bands 1–20 (6.1%,
       floor 1%); 93.4% of skills sit at or above every transitive prereq's band
@@ -13,10 +25,9 @@ first for `enrich` and `prereq`).
      catalogs led with 104: an unanchored hub (`calculus`) is a course prereq of
      a skill that a K-12 anchor pins low (`entrepreneurship`, grade 3), and the
      pass pulls the hub to band 1.
-  2. Decide how a course pair yields to anchors. Recommended: stage `difficulty`
-     joins course pairs last, after every expert source, so a course pair cannot
-     move a band that an expert pair set.
-  3. Rerun from `difficulty`, then read both conditions again.
+  2. Course pairs now join the band pass last, and a K-12 span sets no anchor
+     (both in the 10 Nov build). Read `seed_anchor_conflicts_by_source` again.
+  3. If conflicts stay over 1%, look at the top source's pairs, as in step 1.
 
 - [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 10/258 positive
       LectureBank pairs (0.039) sit in the transitive closure.
