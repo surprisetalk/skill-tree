@@ -1669,6 +1669,7 @@ export function stageDifficulty() {
   // anchor contradicts the pair. Stage postproc keeps the edge either way.
   let seedAnchorTies = 0;
   const conflictsBySource: Record<string, number> = {};
+  const conflictSamples: Record<string, string[]> = {};
   const seeds = acyclic.filter(([si, di, row]) => {
     undo.length = 0;
     if (raise(di, lo[si] + 1) && lower(si, hi[di] - 1)) {
@@ -1684,6 +1685,13 @@ export function stageDifficulty() {
     else {
       const src = seedRows[row].source;
       conflictsBySource[src] = (conflictsBySource[src] ?? 0) + 1;
+      // An anchored end shows its anchor band; "~" marks a kNN band.
+      const end = (i: number) =>
+        `${skills[i].id}(${Number.isNaN(anchor[i]) || zoneOnly[i] ? "~" : ""}${
+          band[i]
+        })`;
+      const samples = conflictSamples[src] ??= [];
+      if (samples.length < 5) samples.push(`${end(si)} > ${end(di)}`);
     }
     return false;
   });
@@ -1788,6 +1796,7 @@ export function stageDifficulty() {
     seed_anchor_conflicts_by_source: Object.fromEntries(
       Object.entries(conflictsBySource).sort((a, b) => b[1] - a[1]),
     ),
+    seed_anchor_conflict_samples: conflictSamples,
     grade_band_inversion_samples: invSamples,
     total_seconds: (performance.now() - t0) / 1000,
   });

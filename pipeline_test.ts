@@ -1608,6 +1608,10 @@ Deno.test(
       JSON.parse(files["build/4_stats.json"]).seed_anchor_conflicts_by_source,
       { courses: 1 },
     );
+    assertEquals(
+      JSON.parse(files["build/4_stats.json"]).seed_anchor_conflict_samples,
+      { courses: ["a(~11) > grade-low(3)"] },
+    );
   }),
 );
 
