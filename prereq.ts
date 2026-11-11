@@ -175,16 +175,6 @@ function computePrereqCandidates(): Map<string, number[]> {
   // positives shared no topic with their prereq.
   const FOUNDATION_K = 2;
   const FOUNDATION_MIN = 20;
-  // REVIEW: Each scan scores at most CAND_POOL_CAP skills, a fixed stride
-  // sample of the pool. The full scan (27,613 skills) and the cosine over it
-  // took 744 s of 18 min at 93k, and grow as skills × skills. Alternative: an
-  // approximate nearest-neighbor index such as HNSW. It keeps the true nearest
-  // candidates, but it is a new dependency.
-  const CAND_POOL_CAP = 3000;
-  const capPool = (pool: number[]) =>
-    pool.length <= CAND_POOL_CAP
-      ? pool
-      : pool.filter((_, k) => k % Math.ceil(pool.length / CAND_POOL_CAP) === 0);
   const foundations = skills.flatMap((s, j) =>
     (topicIdx.get(s.id)?.length ?? 0) >= FOUNDATION_MIN ? [j] : []
   );
@@ -282,7 +272,7 @@ function computePrereqCandidates(): Map<string, number[]> {
     }
     lap("topic_pool");
     let cands: number[];
-    if (pool.size >= K) cands = capPool([...pool]);
+    if (pool.size >= K) cands = [...pool];
     else if (
       skills[i].sources.split(",").filter(Boolean).length >= 2 && pool.size < 3
     ) {
@@ -291,7 +281,6 @@ function computePrereqCandidates(): Map<string, number[]> {
     } else {
       cands = [];
       for (let j = 0; j < skills.length; j++) if (candOk(i, j)) cands.push(j);
-      cands = capPool(cands);
       fullScans++;
     }
     lap("full_scan");
@@ -371,7 +360,7 @@ function computePrereqCandidates(): Map<string, number[]> {
         if (!shared) continue;
         for (const j of oi) crossPool.add(j);
       }
-      for (const j of capPool([...crossPool])) {
+      for (const j of crossPool) {
         if (picked.has(j)) continue;
         if (!candOk(i, j)) continue;
         if (frameworkOnly[j]) continue; // H2: framework-only skills never enter global pool
