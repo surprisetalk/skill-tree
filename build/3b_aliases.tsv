@@ -454,6 +454,7 @@ mathematics-grade-6	mathematics-grade-k
 mathematics-grade-7	mathematics-grade-k
 mathematics-grade-8	mathematics-grade-k
 explain-applicable-mathematical-problems-using-a-mathematical-model	explain-mathematically-applicable-problems-using-a-mathematical-model
+compare-characteristics-of-two-functions-each-represented-in-a-different-way	comparing-properties-of-functions-in-different-representations
 use-vocabulary-from-across-content-areas	use-vocabulary-across-content-areas
 b-use-nouns-to-identify-and-name-people-places-and-things	use-nouns-to-identify-and-name-people-places-and-things
 identify-a-topic-and-generate-questions-that-explore-the-topic	identify-a-topic-and-generate-questions-to-explore-the-topic
@@ -811,7 +812,6 @@ find-the-area-of-a-sector-in-a-circle	find-the-area-of-a-sector-of-a-circle
 solve-equations-of-the-form-x2-p-where-p-is-a-positive-rational-number	solve-equations-of-the-form-x3-p-where-p-is-a-positive-rational-number
 represent-proportional-relationships-with-equations	represent-proportional-relationships-by-equations
 create-equations-involving-inverse-variation	create-and-solve-equations-involving-inverse-variation
-multiply-matrices-by-scalars-to-produce-new-matrices-in-a-mathematical-context	multiply-matrices-by-scalars-to-produce-new-matrices
 dividing-decimals-by-whole-numbers-to-hundredths	dividing-whole-numbers-by-decimals-to-hundredths
 estimate-lengths-in-metric-units-to-the-nearest-meter	estimate-lengths-in-metric-units-to-the-nearest-millimeter-centimeter-or-meter
 determine-the-quotient-of-two-numbers-using-strategies-and-algorithms	estimate-the-quotient-of-two-numbers-using-strategies-and-algorithms
@@ -828,7 +828,7 @@ fluently-divide-a-multi-digit-decimal-by-a-whole-number	fluently-divide-a-whole-
 duplicate-simple-patterns-using-concrete-objects	duplicate-extend-and-create-simple-patterns-using-concrete-objects
 solving-comparison-word-problems-with-subtraction	solving-subtraction-comparison-word-problems
 solving-two-step-problems-using-stem-and-leaf-plot-data	solving-one-step-problems-using-stem-and-leaf-plot-data
-compare-properties-of-two-functions-each-represented-in-a-different-way	compare-characteristics-of-two-functions-each-represented-in-a-different-way
+compare-properties-of-two-functions-each-represented-in-a-different-way	comparing-properties-of-functions-in-different-representations
 describe-simple-patterns-using-concrete-objects	create-simple-patterns-using-concrete-objects
 collecting-sample-data-for-multivariable-investigations	collecting-and-analyzing-sample-data-for-multivariable-investigations
 represent-solutions-for-one-variable-one-step-inequalities-on-a-number-line	represent-solutions-for-one-variable-two-step-inequalities-on-number-lines
@@ -1498,7 +1498,6 @@ analyze-and-solve-pairs-of-simultaneous-linear-equations-by	analyze-and-solve-pa
 identify-arithmetic-patterns-and-explain-them-using-the-properties-of-operations	identifying-and-explaining-arithmetic-patterns
 developing-and-using-models-develop-a-model-to-predict-and-or-describe-phenomena	developing-and-using-models-develop-and-use-a-model-to-describe-phenomena
 ps-energy	energy
-goods-and-services-identify-goods-and-consumers	goods-and-services-identify-goods-consumers-and-producers
 grade-2	grade-4
 benchmarks-begin-in-grade-1	benchmarks-begin-in-grade-3
 describe-measure-estimate-and-graph-quantities	describe-measure-estimate-and-or-graph-quantities
@@ -1542,7 +1541,7 @@ analyze-how-multiple-texts-reflect-the-historical-and-or-cultural-contexts	analy
 branches-of-government-identify-the-roles-of-the-three-branches-of-government	identify-the-three-branches-of-government-and-describe-their-roles
 begins-in-grade-1	begins-in-grade-2
 investigate-the-impacts-of-european-colonization-on-indigenous-populations	evaluate-the-impacts-of-european-colonization-on-indigenous-populations
-with-modeling-prompting-and-support-identify-the-topic-of-a-text	with-modeling-prompting-and-support-identify-the-topic-of-text
+identify-the-topic-of-a-text	identify-the-topic-of-text
 demonstrate-sound-letter-concepts-when-writing	demonstrate-and-apply-sound-letter-concepts-when-writing
 grade-1	grade-4
 describe-the-organization-and-functions-of-the-federal-reserve-system	describe-the-structure-and-functions-of-the-federal-reserve-system
@@ -1550,11 +1549,13 @@ determine-a-theme-or-central-idea-s-of-a-text	determine-the-central-idea-or-them
 era-5-the-development-of-the-industrial-united-states-1870-1900	era-6-1870-1900-development-of-the-industrial-united-states
 correctly-name-shapes-regardless-of-their-orientations-or-overall-sizes	correctly-name-shapes-regardless-of-their-orientations-or-overall-size
 recognize-common-types-of-texts-and-characteristics-of-their-structure	recognize-common-types-of-texts
+ask-and-answer-questions-about-unknown-words-in-text	ask-and-answer-questions-about-unknown-words-in-a-text
 explain-the-role-of-money-in-the-exchange-of-goods-and-services	describe-the-role-of-money-in-the-exchange-of-goods-and-services
 read-and-comprehend-literary-texts-appropriately-complex-for-grade-5	read-and-comprehend-literary-texts-appropriately-complex-for-grade-4
 plants-and-animals-can-affect-and-change-their-environment	plants-and-animals-can-change-their-environment
 grade-6-8	grade-4
 mastered-in-grade-3	mastered-in-grade-5
+recognize-and-name-some-upper-and-lowercase-letters	recognize-and-name-all-upper-and-lowercase-letters
 identify-coins-and-bills-and-their-values	identify-coins-and-bills-and-know-their-values
 explain-how-disasters	explain-how-natural-disasters
 interpret-whole-number-quotients-of-whole-numbers	interpret-whole-number-quotients-of-whole-numbers-see-table-2
@@ -1581,11 +1582,15 @@ multiply-polynomials-of-degree-one-and-degree-two	multiply-polynomials-of-degree
 use-evidence-from-literary-texts-to-support-reflection	use-evidence-from-literary-texts-to-support-analysis-and-reflection
 correctly-name-shapes-regardless-of-orientations-or-overall-size	correctly-name-shapes-regardless-of-their-orientations-or-overall-size
 explain-the-role-of-the-author-and-illustrator	explain-the-role-of-the-author-and-illustrator-photographer
+proving-geometric-theorems-algebraically-with-coordinates	coordinate-geometry-proofs
 describe-examples-of-goods-and-services-that-governments-provide	generate-examples-of-the-goods-and-services-that-governments-provide
+identify-the-main-topic-and-retell-key-details-of-an-informational-text	identify-the-main-topic-and-retell-key-details-of-a-text
 create-a-response-to-a-text-author-or-personal-experience	create-a-response-to-a-text-author-theme-or-personal-experience
 grade-5	grade-4
 write-in-cursive-all-uppercase-and-lowercase-letters	write-in-cursive-all-upper-and-lowercase-letters
+retell-familiar-stories-using-key-details	retell-familiar-stories-including-key-details
 identify-when-two-expressions-are-equivalent	identifying-equivalent-expressions
+read-stories-and-poetry-of-appropriate-complexity-for-grade-1	read-prose-and-poetry-of-appropriate-complexity-for-grade-1
 determine-how-profits-influence-sellers-in-markets	explain-how-profits-influence-sellers-in-markets
 fluently-multiply-multi-digit-whole-numbers-using-a-standard-algorithm	fluently-multiply-multi-digit-whole-numbers-using-the-standard-algorithm
 use-data-from-a-sample-to-estimate-population-mean-or-population-proportion	use-data-from-a-sample-to-estimate-a-population-mean-or-proportion
@@ -1608,6 +1613,7 @@ support-the-opinion-with-reasons	support-an-opinion-with-reasons
 distinguish-between-categorical-and-quantitative-data	distinguish-between-quantitative-and-categorical-data
 science-grade-5-adopted-2021	science-grade-3-adopted-2021
 find-the-derivatives-of-inverse-functions	find-derivatives-of-inverse-functions
+solving-problems-with-linear-model-equation	interpreting-slope-and-intercept-of-linear-models
 not-applicable-in-grade-4	not-applicable-in-grade-3
 science-grade-1-adopted-2021	science-grade-3-adopted-2021
 explain-the-pythagorean-theorem-and-its-converse	explain-a-proof-of-the-pythagorean-theorem-and-its-converse
@@ -1628,7 +1634,7 @@ explain-the-author-s-purpose	explain-author-s-purpose
 form-and-use-progressive-verb-tenses	form-and-use-the-progressive-verb-tenses
 read-and-comprehend-literary-texts-appropriately-complex-for-grade-6	read-and-comprehend-literary-texts-appropriately-complex-for-grade-4
 measure-the-length-of-an-object-by-selecting-and-using-standard-tools	measure-the-length-of-an-object-by-selecting-and-using-appropriate-tools
-ask-and-answer-questions-about-unknown-words-in-text	ask-and-answer-questions-about-unknown-words-in-a-text
+encode-words-with-vowel-r-combinations-ar-or-er-ir-and-ur	encode-words-with-vowel-r-combinations
 name-shapes-regardless-of-their-orientation-or-overall-size	correctly-name-shapes-regardless-of-their-orientations-or-overall-size
 demonstrate-fluency-with-addition-and-subtraction-within-5	demonstrate-fluency-for-addition-and-subtraction-within-5
 describe-examples-of-the-goods-and-services-that-governments-provide	generate-examples-of-the-goods-and-services-that-governments-provide
@@ -1638,6 +1644,7 @@ establish-or-build-upon-a-personal-schema-of-the-topic	establish-or-build-upon-a
 describe-the-physical-motor-and-perceptual-development-of-infants	explain-the-physical-motor-and-perceptual-development-of-infants
 use-adjectives-and-adverbs-in-sentences	use-adjectives-adverbs-in-sentences
 edit-writing-to-include-k-4-language-conventions-for-publishing	edit-writing-to-include-k-3-language-conventions-for-publishing
+ask-and-answer-questions-about-key-details-in-an-informational-text	ask-and-answer-questions-about-key-details-in-a-text
 expand-vocabulary-through-wide-reading-listening-and-discussion	expand-vocabulary-through-wide-reading-viewing-listening-and-discussion
 compare-and-contrast-the-adventures-and-experiences-of-characters-in-texts	compare-and-contrast-the-experiences-of-characters-in-various-texts
 human-impact-on-the-environment	human-impact-on-environment
@@ -1666,6 +1673,7 @@ recognize-symbols-and-individuals-that-represent-florida	recognize-symbols-indiv
 distinguish-among-fact-opinion-bias-and-reasoned-judgment-in-a-text	distinguish-among-fact-opinion-and-reasoned-judgment-in-a-text
 retell-the-events-in-a-story-in-a-logical-sequence	retell-story-events-in-a-logical-sequence
 create-readable-documents-with-legible-handwriting-manuscript-and-cursive	create-readable-documents-through-legible-handwriting-cursive
+comparing-properties-of-functions-represented-differently	comparing-properties-of-functions-in-different-representations
 organize-represent-and-interpret-data-with-up-to-three-categories-by	organize-represent-and-interpret-data-with-up-to-three-categories
 use-artifacts-to-share-information-on-social-studies-topics	select-and-use-artifacts-to-share-information-on-social-studies-topics
 compare-two-numbers-between-one-and-ten-presented-as-written-numerals	compare-two-numbers-between-1-and-10-presented-as-written-numerals
@@ -1675,6 +1683,7 @@ interpret-scatter-plots-for-bivariate-measurement-data-to-investigate-patterns	c
 analyze-causes-and-effects-of-events-and-social-issues	113-41-d-6-a-analyze-causes-and-effects-of-events-and-social-issues
 patterns-patterns-in-the-natural-world-can-be-observed	patterns-in-the-natural-world-can-be-observed
 examine-the-causes-course-and-consequences-of-the-korean-war	examine-causes-course-and-consequences-of-the-korean-war
+retell-stories-or-share-key-details-from-a-text-ri-rl	retell-stories-rl-share-key-details-from-a-text-ri
 begins-in-grades-6-8	begins-in-grades-3-5
 standards-for-mathematical-practice-grade-8	standards-for-mathematical-practice-grade-6
 describe-the-impact-of-natural-processes-on-the-human-and-physical-environments	explain-the-impact-of-natural-processes-on-human-and-physical-environments
@@ -1687,20 +1696,27 @@ edit-writing-to-include-k-1-language-conventions-for-publishing	edit-writing-to-
 identify-ways-insurance-may-minimize-personal-financial-risk	identify-ways-insurance-can-minimize-personal-financial-risk
 describe-the-measurable-attributes-of-an-object	describing-measurable-attributes-of-objects
 read-infer-analyze-and-draw-conclusions-to	read-infer-analyze-and-draw-conclusions
+make-logical-connections-between-drawing-and-dictation	make-logical-connections-between-drawing-and-dictation-writing
 applying-scientific-ideas-to-solve-design-problems	apply-scientific-ideas-to-solve-design-problems
+read-stories-drama-and-poetry-of-appropriate-complexity-for-grade-1	read-prose-and-poetry-of-appropriate-complexity-for-grade-1
 analyze-the-effects-of-shortages-and-surpluses-on-supply-and-demand	analyze-effects-of-shortages-and-surpluses-on-supply-and-demand
+identify-the-main-central-topic-and-retell-key-details-of-a-text	identify-the-main-topic-and-retell-key-details-of-a-text
 fluently-divide-multi-digit-numbers-using-a-standard-algorithm	fluently-divide-multi-digit-numbers-using-the-standard-algorithm
+read-information-texts-appropriately-complex-for-grade-1	read-informational-texts-appropriately-complex-for-grade-1
 solve-linear-equations-and-inequalities-in-one-variable	fluently-solve-linear-equations-and-inequalities-in-one-variable
 use-the-four-operations-to-solve-word-problems-involving-measurements	solving-word-problems-with-four-operations
 evaluate-the-ways-insurance-may-minimize-personal-financial-risk	identify-ways-insurance-can-minimize-personal-financial-risk
 era-4-civil-war-and-reconstruction-1850-1877	era-5-1850-1877-civil-war-and-reconstruction
+compare-properties-of-two-linear-functions-represented-in-a-variety-of-ways	comparing-properties-of-functions-in-different-representations
 perform-formal-geometric-constructions-with-a-variety-of-tools-and-methods	make-formal-geometric-constructions-with-a-variety-of-tools-and-methods
 explain-gestalt-s-principles-of-perception	explain-gestalt-principles-of-perception
 english-language-arts-and-reading-grade-1-adopted-2017	english-language-arts-and-reading-grade-8-adopted-2017
 find-the-inverse-of-a-function	find-an-inverse-function
-compare-the-properties-of-two-functions-each-represented-in-a-different-way	compare-characteristics-of-two-functions-each-represented-in-a-different-way
+compare-the-properties-of-two-functions-each-represented-in-a-different-way	comparing-properties-of-functions-in-different-representations
+explain-the-difference-between-facts-and-opinions-about-a-topic	explain-the-difference-between-opinions-and-facts-about-a-topic
 read-numerals-from-0-to-120	read-numerals-to-120
 add-subtract-multiply-and-divide-complex-numbers	simplify-add-subtract-multiply-and-divide-complex-numbers
+identify-the-main-topic-and-key-details-of-an-informational-text	identify-the-main-topic-and-key-details-in-an-informational-text
 earth-materials-and-system	earth-materials-and-systems
 understand-the-pythagorean-theorem-and-its-converse	explain-a-proof-of-the-pythagorean-theorem-and-its-converse
 write-and-evaluate-numerical-expressions-involving-wholenumber-exponents	write-and-evaluate-numerical-expressions-involving-whole-number-exponents
@@ -1708,6 +1724,7 @@ construct-an-argument-from-evidence-data-and-or-a-model	construct-an-argument-wi
 read-and-comprehend-literary-texts-appropriately-complex-for-grade-7	read-and-comprehend-literary-texts-appropriately-complex-for-grade-4
 compare-the-various-economic-systems	compare-various-economic-systems
 grade-7	grade-4
+identify-the-reasons-an-author-gives-to-support-ideas-in-a-text	identify-reasons-an-author-gives-to-support-points-in-a-text
 analyze-the-role-of-geography-on-the-growth-and-development-of-slavery	assess-the-role-of-geography-on-the-growth-and-development-of-slavery
 contributions-of-individuals-and-groups-explain-why-cultures-celebrate	contributions-of-individuals-and-groups-explain-how-cultures-celebrate
 explain-how-specific-visual-aids-contribute-to-and-clarify-a-text	explain-how-specific-images-contribute-to-and-clarify-a-text
@@ -1742,6 +1759,7 @@ standards-for-mathematical-practice-grade-1	standards-for-mathematical-practice-
 identify-a-b-and-a-b-as-reflections-across-the-x-axis	identify-a-b-and-a-b-as-reflections-across-the-y-axis
 explore-and-explain-a-proof-of-the-pythagorean-theorem-and-its-converse	explain-a-proof-of-the-pythagorean-theorem-and-its-converse
 describe-relationships-between-humans-and-the-physical-environment	explain-relationships-between-humans-and-the-physical-environment
+define-the-role-of-the-author-and-illustrator-in-telling-the-story	define-the-role-of-an-author-and-illustrator-in-telling-the-story
 sunlight-warms-the-earth-s-surface	sunlight-warms-earth-s-surface
 identify-the-main-story-elements-in-a-literary-text	identify-and-describe-the-main-story-elements-in-a-literary-text
 science-grade-4-adopted-2021	science-grade-3-adopted-2021
@@ -1787,6 +1805,7 @@ determine-the-central-idea-s-of-a-text	determine-a-central-idea-of-a-text
 no-expectations-for-grade-2	no-expectations-for-grade-4
 listening-comprehension-standard-is-met-in-k-r-2-k-r-5	listening-comprehension-standard-is-met-in-1-r-2-1-r-5
 organize-and-share-findings-in-formal-and-informal-oral-written-formats	organize-and-share-findings-in-formal-and-informal-oral-or-written-formats
+read-informational-text-of-appropriate-complexity-for-grade-1	read-informational-texts-appropriately-complex-for-grade-1
 distinguishing-between-long-and-short-vowel-sounds-in-one-syllable-words	identify-short-and-long-vowel-sounds-in-spoken-one-syllable-words
 compare-children-and-families-of-today-with-those-from-the-past	compare-children-and-families-of-today-with-those-in-the-past
 apply-place-value-understanding-to-round-multi-digit-whole-numbers-to-any-place	use-place-value-understanding-to-round-multi-digit-whole-numbers-to-any-place
@@ -1797,6 +1816,7 @@ summarize-the-principles-of-the-declaration-of-independence	summarize-key-princi
 apply-the-properties-of-operations-to-multiply-and-divide	apply-properties-of-operations-as-strategies-to-multiply-and-divide
 explain-ways-that-firms-engage-in-price-and-nonprice-competition	explain-ways-firms-engage-in-price-and-nonprice-competition
 recount-or-summarize-the-key-ideas-from-the-text	recount-or-summarize-key-ideas-from-the-text
+identify-the-reason-s-an-author-gives-to-support-point-s-in-a-text	identify-reasons-an-author-gives-to-support-points-in-a-text
 describe-the-components-of-culture	describe-components-of-culture
 grade-6	grade-4
 read-and-comprehend-informational-texts-appropriately-complex-for-grade-5	read-and-comprehend-informational-texts-appropriately-complex-for-grade-2
@@ -1812,6 +1832,7 @@ english-language-arts-and-reading-grade-4-adopted-2017	english-language-arts-and
 demonstrate-understanding-of-nuances-in-word-meanings	demonstrate-understanding-of-word-relationships-and-nuances-in-word-meanings
 use-time-order-words-to-signal-a-sequence-of-events	use-time-order-words-to-signal-sequence-of-events
 apply-geometric-concepts-to-solve-design-problems	apply-geometric-methods-to-solve-design-problems
+use-a-variety-of-digital-tools-to-produce-and-publish-writing	use-a-variety-of-conventional-digital-tools-to-produce-and-publish-writing
 the-student-demonstrates-knowledge-of-the-roman-empire	the-student-demonstrates-knowledge-of-the-roman-republic-and-the-roman-empire
 analyze-the-interactions-between-individual-events-and-ideas-in-a-text	analyze-the-interactions-between-individuals-events-and-ideas-in-a-text
 solve-problems-involving-direct-variation	solve-mathematical-problems-involving-direct-variation
@@ -1830,6 +1851,7 @@ multiply-or-divide-to-solve-word-problems-involving-multiplicative-comparison	mu
 defining-engineering-problems-question	defining-engineering-problems
 features-and-graphics-to-locate-and-gain-information	features-and-simple-graphics-to-locate-or-gain-information
 the-student-explains-the-triangle-trade-he	the-student-explains-the-triangle-trade-h
+read-literary-text-prose-and-poetry-of-appropriate-complexity-for-grade-1	read-prose-and-poetry-of-appropriate-complexity-for-grade-1
 read-and-comprehend-informational-texts-appropriately-complex-for-grade-3	read-and-comprehend-informational-texts-appropriately-complex-for-grade-2
 describe-characters-settings-and-major-event-s-in-a-story-using-key-details	describe-characters-settings-and-major-events-in-a-story-using-key-details
 examples-japan-north-korea-india-south-africa-and-china	examples-japan-north-korea-india-south-africa-china
@@ -1841,6 +1863,7 @@ demonstrate-fluency-with-addition-and-subtraction-within-100-by	demonstrate-flue
 explain-how-specific-images-and-details-contribute-to-and-clarify-a-text	explain-how-specific-images-contribute-to-and-clarify-a-text
 identifying-the-front-cover-back-cover-and-title-page-of-a-book	identify-the-front-cover-back-cover-and-title-page-of-a-book
 k-8-standards	hs-standards
+create-and-or-utilize-existing-visual-displays-to-support-descriptions	create-an-original-or-utilize-existing-visual-displays-to-support-descriptions
 write-read-and-evaluate-expressions-in-which-variables-stand-for-numbers	write-read-and-evaluate-expressions-in-which-letters-stand-for-numbers
 engaging-in-an-argument-from-evidence	engaging-in-argument-from-evidence
 capitalize-names-of-people-and-dates	capitalize-dates-and-names-of-people
@@ -1856,6 +1879,7 @@ c-1-7-begins-in-grade-3	begins-in-grade-2
 ask-and-answer-questions-about-explanations-and-arguments	ask-and-answer-questions-about-arguments-and-explanations
 analyze-the-major-factors-that-determined-the-outcome-of-the-civil-war	analyze-major-factors-that-determined-the-outcome-of-the-civil-war
 analyze-and-solve-pairs-of-simultaneous-linear-equations-graphically	analyze-and-solve-pairs-of-simultaneous-linear-equations
+retell-familiar-stories-including-key-events	retell-familiar-stories-including-key-details
 solve-addition-and-subtraction-word-problems	solving-addition-and-subtraction-word-problems
 plants-acquire-their-material-from-growth-chiefly-from-air-and-water	plants-acquire-their-material-for-growth-chiefly-from-air-and-water
 era-4-expansion-and-reform-1801-1861	era-3-expansion-and-reform-1801-1861
@@ -1867,6 +1891,7 @@ encode-final-v-with-ve	encode-final-j-and-ch
 add-subtract-multiply-and-divide-numbers-in-scientific-notation	add-subtract-multiply-and-divide-numbers-written-in-scientific-notation
 write-a-letter-letters-for-most-consonant-and-short-vowel-sounds-phonemes	write-a-letter-or-letters-for-most-consonant-and-short-vowel-sounds-phonemes
 see-w-6-1-w-6-2-w-6-3-and-w-6-7-of-ccss-framework-for-specific-application	see-w-7-1-w-7-2-w-7-3-and-w-7-7-of-ccss-framework-for-specific-application
+entrepreneurship-explain-the-role-of-entrepreneurship-in-pennsylvania	entrepreneurship-explain-the-role-of-the-entrepreneur-in-pennsylvania
 identify-physical-characteristics-of-place	identify-and-describe-the-physical-characteristics-of-place
 chemical-reactions-some-chemical-reactions-release-energy-others-store-energy	some-chemical-reactions-release-energy-others-store-energy
 use-polynomial-identities-with-complex-numbers	use-complex-numbers-in-polynomial-identities-and-equations
@@ -1887,6 +1912,7 @@ systems-in-the-natural-and-designed-worlds-have-parts-that-work-together	systems
 develop-a-probability-distribution-for-a-random-variable	develop-probability-distribution-for-random-variable
 count-within-1000-skip-count-by-5-s-10-s-and-100-s	count-within-1000-skip-count-by-5s-10s-and-100s
 determine-the-causes-of-world-war-ii	determine-the-causes-of-world-war-i
+use-conjugates-to-find-moduli-and-quotients-of-complex-numbers	finding-conjugates-and-using-them-for-moduli-and-quotients-of-complex-numbers
 construct-and-argument-with-evidence-data-and-or-a-model	construct-an-argument-with-evidence-data-and-or-a-model
 represent-complex-numbers-and-their-operations-in-the-complex-plane	represent-complex-numbers-and-their-operations-on-the-complex-plane
 count-within-1000-skip-count-by-2s-5s-10s-and-100s	count-within-1000-skip-count-by-5s-10s-and-100s
@@ -1895,13 +1921,16 @@ count-to-100-by-ones-and-tens	count-to-100-by-ones-and-by-tens
 relate-area-to-the-operations-of-multiplication-and-addition-by	relate-area-to-the-operations-of-multiplication-and-addition
 describe-measurable-attributes-of-objects	describing-measurable-attributes-of-objects
 describe-how-reasons-support-specific-claims-the-author-makes-in-a-text	describe-how-reasons-support-specific-points-the-author-makes-in-a-text
+read-and-understand-informational-texts-appropriately-complex-for-grade-1	read-informational-texts-appropriately-complex-for-grade-1
 set-a-purpose-for-reading-and-identify-the-type-of-text	set-a-purpose-for-reading-and-identify-type-of-text
 generate-and-compare-multiple-solutions-to-a-problem	generate-and-or-compare-multiple-solutions-to-a-problem
 compare-two-numbers-within-10-presented-as-written-numerals	compare-two-numbers-between-1-and-10-presented-as-written-numerals
+use-a-combination-of-drawing-dictating-and-or-writing-to-compose-opinion-pieces	use-a-combination-of-drawing-dictating-and-writing-to-compose-opinion-pieces
 explain-the-role-religion-played-in-early-colonial-society	analyze-the-role-religion-played-in-early-colonial-society
 identify-and-describe-the-physical-characteristics-of-a-place	identify-and-describe-the-physical-characteristics-of-place
 understand-words-are-separated-by-spaces-in-print	understand-that-words-are-separated-by-spaces-in-print
 compare-order-and-describe-the-absolute-value-of-rational-numbers	understand-ordering-and-absolute-value-of-rational-numbers
+demonstrate-an-understanding-of-word-relationships-and-nuances-in-word-meanings	demonstrate-understanding-of-word-relationships-and-nuances-in-word-meanings
 read-and-comprehend-informational-texts-appropriately-complex-for-grade-8	read-and-comprehend-informational-texts-appropriately-complex-for-grade-2
 count-up-to-1000-skip-count-by-5s-10s-and-100s	count-within-1000-skip-count-by-5s-10s-and-100s
 developing-and-using-models-develop-models-to-describe-phenomena	developing-and-using-models-develop-and-use-a-model-to-describe-phenomena
