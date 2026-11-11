@@ -6,6 +6,7 @@ import { stageDedupe, stageDifficulty, stageEmbed, stageTag } from "./graph.ts";
 import {
   ancestorsOf,
   BUILD,
+  col,
   EMBED_DIM,
   embeddingFallback,
   expertScores,
@@ -22,6 +23,7 @@ import {
   readMoocPairs,
   readSeeds,
   readTable,
+  readTsv,
   rerun,
   resolveConcept,
   SKILL_LIST,
@@ -346,6 +348,31 @@ async function stageStatus() {
         return grade(junk.length / skills().length, 0, 1);
       },
     ],
+    // data/_sanity.tsv: 23 skills across subjects, each with the grades where
+    // a learner first meets it, set from curricula, not from a build. Do not
+    // tune a stage to this list; it is the check, not the target.
+    ["At least 80% of the sanity skills sit in their expected band.", () => {
+      const path = "data/_sanity.tsv";
+      const rows = readTsv(path);
+      const [iId, iFrom, iTo] = ["id", "grade_from", "grade_to"].map((c) =>
+        col(rows, c, path)
+      );
+      const m = byId();
+      // Band = grade + 2: K is band 2, grade 12 band 14.
+      const band = (g: string) => (g === "K" ? 0 : Number(g)) + 2;
+      const fit = rows.slice(1).filter((r, k) => {
+        const s = m.get(r[iId]);
+        if (!s) {
+          throw new Error(
+            `${path}:${k + 2}: expected a skill id in skills.tsv, received "${
+              r[iId]
+            }". A rename moved it: put its new id in the file.`,
+          );
+        }
+        return band(r[iFrom]) <= s.band && s.band <= band(r[iTo]);
+      });
+      return grade(fit.length / (rows.length - 1), 0.8, 0);
+    }],
     [
       "Addition is a transitive prereq of multiplication.",
       () => above()("multiplication").has("addition") ? 1 : 0,

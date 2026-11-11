@@ -219,6 +219,9 @@ const goodBuild = (): Fixture => {
       "addition\tcounting\nmultiplication\taddition\nbiology\tnone\n",
     "build/1f_translate.tsv":
       "函数\tfunction\n欧拉函数\tEuler's totient function\n",
+    // Fixture bands: addition 2 (K-1 is bands 2-3), calculus 15 (11-13 is 13-15).
+    "data/_sanity.tsv":
+      "id\tsubject\tgrade_from\tgrade_to\twhy\naddition\tmath\tK\t1\tx\ncalculus\tmath\t11\t13\tx\n",
     "data/mooccubex/cs.json.gz": MOOC_GZ,
     "data/mooccubex/math.json.gz": MOOC_GZ,
     "data/mooccubex/psy.json.gz": MOOC_GZ,
@@ -308,6 +311,21 @@ Deno.test(
     assertEquals(
       score("Addition is a transitive prereq of multiplication."),
       1,
+    );
+  }),
+);
+
+Deno.test(
+  "status: a sanity skill outside its expected band scores below 1",
+  early(async () => {
+    const build = goodBuild();
+    build["data/_sanity.tsv"] += "biology\tscience\tK\t1\tx\n";
+    const { code, score } = await runIn("status", build);
+    assertEquals(code, 1);
+    // biology sits in band 8: 2 of 3 fit, and the floor is 80%.
+    assertEquals(
+      score("At least 80% of the sanity skills sit in their expected band."),
+      2 / 3 / 0.8,
     );
   }),
 );
