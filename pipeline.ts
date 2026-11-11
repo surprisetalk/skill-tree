@@ -348,9 +348,12 @@ async function stageStatus() {
         return grade(junk.length / skills().length, 0, 1);
       },
     ],
-    // data/_sanity.tsv: 23 skills across subjects, each with the grades where
-    // a learner first meets it, set from curricula, not from a build. Do not
-    // tune a stage to this list; it is the check, not the target.
+    // REVIEW: data/_sanity.tsv holds 23 skills across subjects, each with the
+    // grades where a learner first meets it. Claude wrote the ranges from its
+    // sense of curricula, after it saw each skill's band, and cited standard
+    // codes from memory. Correct any row, then drop this prefix. Do not tune a
+    // stage to the list; it is the check, not the target. Alternative: no
+    // sanity goal, and judge the band fix by eye on the overview page.
     ["At least 80% of the sanity skills sit in their expected band.", () => {
       const path = "data/_sanity.tsv";
       const rows = readTsv(path);
