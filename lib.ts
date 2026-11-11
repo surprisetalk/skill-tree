@@ -985,36 +985,34 @@ export const courseTopic = (title: string): string => {
 // Key the pair on the two titles, so one pair stands for the many
 // editions of a course. Alternative: keep one pair per edition. It counts a
 // course once per catalog year and gives the 11-edition university 11 votes.
-export async function readCourseCsv(name: string): Promise<string[][]> {
-  const path = `data/courses/${name}.csv.gz`;
-  try {
-    const stream = new Blob([Deno.readFileSync(path)]).stream().pipeThrough(
-      new DecompressionStream("gzip"),
-    );
-    return headed(
-      path,
-      parseCsvText(await new Response(stream).text(), { fieldsPerRecord: 0 }),
-    );
-  } catch (e) {
-    if (e instanceof Deno.errors.NotFound) {
-      throw new Deno.errors.NotFound(
-        `${path}: missing. Run: deno run -A data/download.ts`,
-      );
-    }
-    throw new Error(
-      `${path}: expected a gzip file of RFC 4180 CSV with a constant field count, received ${
-        (e as Error).message
-      }. Re-download it: rm ${path}; deno run -A data/download.ts`,
-    );
-  }
-}
-
 export async function readCoursePairs(): Promise<{
   pairs: { src: string; dst: string; raw: string }[];
   dropped: { from: string; to: string; raw: string; reason: string }[];
   timingCounts: Record<(typeof TIMINGS)[number], number>;
 }> {
-  const read = readCourseCsv;
+  const read = async (name: string): Promise<string[][]> => {
+    const path = `data/courses/${name}.csv.gz`;
+    try {
+      const stream = new Blob([Deno.readFileSync(path)]).stream().pipeThrough(
+        new DecompressionStream("gzip"),
+      );
+      return headed(
+        path,
+        parseCsvText(await new Response(stream).text(), { fieldsPerRecord: 0 }),
+      );
+    } catch (e) {
+      if (e instanceof Deno.errors.NotFound) {
+        throw new Deno.errors.NotFound(
+          `${path}: missing. Run: deno run -A data/download.ts`,
+        );
+      }
+      throw new Error(
+        `${path}: expected a gzip file of RFC 4180 CSV with a constant field count, received ${
+          (e as Error).message
+        }. Re-download it: rm ${path}; deno run -A data/download.ts`,
+      );
+    }
+  };
   const clean = (t: string) => t.replace(/\s+/g, " ").trim();
   const courses = await read("courses");
   const iDs = col(courses, "dataset", "data/courses/courses.csv.gz"),
