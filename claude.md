@@ -334,7 +334,8 @@ A new build table gets a schema; a new id goes through `slugify`.
   filters (`cleanStandard`). A component is one skill with tag
   `learningcommons:component`, plus `grade:*` when it names at most 4 grades. A
   standard is one skill per distinct statement, tags `learningcommons:standard`,
-  `grade:*`, and `code:<statementCode>`. A `buildsTowards` endpoint also gets
+  `grade:*` from each item that names at most 4 grades, and
+  `code:<statementCode>`. A `buildsTowards` endpoint also gets
   `learningcommons:coherence` and skips the long-title drop. Other sources keep
   `<…>` as text.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, course

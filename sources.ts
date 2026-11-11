@@ -1078,7 +1078,9 @@ export function stageList() {
       const tags = [
         "learningcommons:standard",
         ...(coherence.has(it.id) ? ["learningcommons:coherence"] : []),
-        ...gradeTags(it.grades),
+        // A standard that one framework tags K-8 is no grade-K skill, and a
+        // merge would pin its twin at K, as for a component above.
+        ...(it.grades.length <= 4 ? gradeTags(it.grades) : []),
         ...(it.code ? [codeTag(it.code)].filter((t) => t !== null) : []),
       ];
       const seen = byText.get(cleaned.title);
