@@ -51,12 +51,14 @@ Deno.test("list: every row has 5 fields, a slug id, a title, and sources; ids ar
   assertEquals(canapes?.[0], "prepare-canapes");
 });
 
-Deno.test("list: a summary of a summary applies", () => {
-  // O*NET task -> "Designing plant warehousing strategies for production
-  // materials or finished products" -> "Designing plant warehousing strategies".
+Deno.test("list: a summary names a task whose slug overflows", () => {
+  // O*NET task "Design or implement plant warehousing strategies for
+  // production materials or finished products" (slug over 80 characters).
   assert(
-    rows.some((c) => c[1] === "Designing plant warehousing strategies"),
-    "the second summary did not apply",
+    rows.some((c) =>
+      c[1] === "Designing plant warehousing strategies for production materials"
+    ),
+    "the summary did not apply",
   );
 });
 
@@ -112,12 +114,21 @@ Deno.test("list stats: all four sources contribute, and dedupe merged rows", () 
 Deno.test("list: no bad title prefix, short code:* tag, or double-encoded UTF-8", () => {
   // First letter only is case-insensitive, so acronyms like "CAN Bus" pass.
   const prefix =
-    /^((Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]+|([Cc]an|[Cc]ould|[Ss]hould|[Hh]ow to|[Ww]hat is|[Ww]hy does)\s|[Ww]ith\s+(prompting|guidance|support))/;
+    /^((Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]+|([Cc]an|[Cc]ould|[Ss]hould|[Hh]ow to|[Ww]hat is|[Ww]hy does)\s|[*_]*[Ww]ith\s+(modeling|prompting|guidance|support)|[*_])/;
   const badTitles = rows.map((c) => c[1]).filter((t) => prefix.test(t));
   assertEquals(
     badTitles.slice(0, 5),
     [],
     `${badTitles.length} titles with a prefix`,
+  );
+  // Markdown emphasis is gone; a lone "_" is a blank, as in "What does _ mean?".
+  const marked = rows.map((c) => c[1]).filter((t) =>
+    /(^|\s)[*_]+[^*_\s][^*_]*[*_]+(\s|[,.]|$)/.test(t)
+  );
+  assertEquals(marked.slice(0, 5), [], `${marked.length} titles with emphasis`);
+  assert(
+    rows.some((c) => c[1] === "Encode words with or after w read /er/"),
+    "emphasis around single letters stayed",
   );
   const shortTags = rows.flatMap((c) => c[4].split(",")).filter((t) =>
     t.startsWith("code:") && t.length < "code:".length + 4
@@ -609,6 +620,35 @@ const reduceP = early(() =>
 );
 Deno.test("postproc: keeps direct prereqs only, with every closure unchanged", async () => {
   const out = await reduceP();
+  assertEquals(out.code, 0, out.stderr);
+  assertEquals(
+    out.files["build/6_edges.tsv"],
+    "skill_id\tprereq_id\naddition\tcounting\nmultiplication\taddition\n",
+  );
+});
+
+// "mathematics" names the topic of 50 skills: a subject area. Its LLM edge and
+// its seed edge both leave the graph.
+const subjectP = early(() => {
+  const b = finalBuild();
+  const fillers = Array.from({ length: 50 }, (_, i) => `filler-${i}`);
+  b["build/3b_tagged_deduped.tsv"] += [
+    "mathematics\tMathematics\t\tfoundation\t\t\t",
+    ...fillers.map((id) => `${id}\t${id}\t\tfoundation\t\t\tmathematics`),
+  ].join("\n") + "\n";
+  b["build/4_difficulty.tsv"] += ["mathematics", ...fillers].map((id) =>
+    `${id}\t1\t0.5\n`
+  ).join("");
+  return runIn("postproc", {
+    ...b,
+    "build/5_prereqs.tsv":
+      "addition\tcounting,mathematics\nmultiplication\taddition\n",
+    "build/1e_seed_edges.tsv": seedHeader +
+      "mathematics\tmultiplication\tcourses\t1.00\t0\t0\n",
+  }, ["build/6_edges.tsv"]);
+});
+Deno.test("postproc: a subject area leaves the graph, seed edges included", async () => {
+  const out = await subjectP();
   assertEquals(out.code, 0, out.stderr);
   assertEquals(
     out.files["build/6_edges.tsv"],
@@ -1451,8 +1491,6 @@ const difficultyBuild = (): Fixture => {
   ];
   const emb = new Float32Array(skills.length * 768);
   skills.forEach((_, i) => emb[i * 768 + i] = 1);
-  const onetHeader =
-    "O*NET-SOC Code\tElement ID\tElement Name\tScale ID\tData Value\tN\tStandard Error\tLower CI Bound\tUpper CI Bound\tRecommend Suppress\tNot Relevant\tDate\tDomain Source\n";
   return {
     "build/3b_tagged_deduped.tsv": [
       "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
@@ -1468,19 +1506,6 @@ const difficultyBuild = (): Fixture => {
     "data/khanacademy/khandata.tsv":
       "Code\tData Name\tPrereq(s)\tH-Position\tV-Position\tDisplay Name\tLink to Practice problem\n" +
       "1\tkhan-low\troot\t0\t0\tKhan low\t\n2\tkhan-high\t1\t0\t10\tKhan high\t\n",
-    "data/onet/Job Zones.txt":
-      "O*NET-SOC Code\tJob Zone\tDate\tDomain Source\n11-1011.00\t3\t08/2023\tAnalyst\n",
-    "data/onet/Content Model Reference.txt":
-      "Element ID\tElement Name\tDescription\n1\tWorker\tWorker\n",
-    "data/onet/Skills.txt": onetHeader,
-    "data/onet/Knowledge.txt": onetHeader,
-    "data/onet/Abilities.txt": onetHeader,
-    "data/onet/Task Statements.txt":
-      "O*NET-SOC Code\tTask ID\tTask\tTask Type\tIncumbents Responding\tDate\tDomain Source\n11-1011.00\t1\tDo the budget.\tCore\t5\t08/2023\tIncumbent\n",
-    "data/onet/Tasks to DWAs.txt":
-      "O*NET-SOC Code\tTask ID\tDWA ID\tDate\tDomain Source\n11-1011.00\t1\t4.A.1.I01.D01\t07/2014\tAnalyst\n",
-    "data/onet/DWA Reference.txt":
-      "Element ID\tIWA ID\tDWA ID\tDWA Title\n4.A.1\t4.A.1.I01\t4.A.1.I01.D01\tReview art or design materials.\n",
   };
 };
 
@@ -1492,7 +1517,7 @@ const difficultyCol = (files: Record<string, string>, i: number) =>
   );
 
 Deno.test(
-  "difficulty: a DWA title anchors its skill, and a seed prereq sits in a lower band",
+  "difficulty: a seed prereq sits in a lower band, and only grades and Khan anchor",
   early(async () => {
     const { code, stderr, files } = await runIn(
       "difficulty",
@@ -1503,12 +1528,12 @@ Deno.test(
       ],
     );
     assertEquals(code, 0, stderr);
-    // The task statement and the DWA title each anchor one skill.
-    assertEquals(
-      JSON.parse(files["build/4_stats.json"]).anchors.zone,
-      2,
-      "the DWA title skill has no job-zone anchor",
-    );
+    // A job zone and a DigComp level ("dig") anchor nothing.
+    assertEquals(JSON.parse(files["build/4_stats.json"]).anchors, {
+      grade: 2,
+      khan: 2,
+      total: 4,
+    });
     const band = difficultyCol(files, 1);
     assert(
       band.get("pre")! < band.get("dep")!,
@@ -1516,10 +1541,6 @@ Deno.test(
         band.get("dep")
       }`,
     );
-    // A digcomp level anchors at the job-zone scale: advanced is zone 3,
-    // 11.5 + 1.5 * 3.
-    assertEquals(JSON.parse(files["build/4_stats.json"]).anchors.digcomp, 1);
-    assertEquals(difficultyCol(files, 2).get("dig"), 16);
   }),
 );
 
@@ -1561,9 +1582,9 @@ Deno.test(
 );
 
 Deno.test(
-  "difficulty: a job-zone skill takes its kNN band, not its zone's",
+  "difficulty: a workplace skill takes its band from the school anchors near it",
   early(async () => {
-    // do-the-budget (zone 3, anchor 16, band 17) shares grade-low's vector.
+    // do-the-budget, an O*NET task of job zone 3, shares grade-low's vector.
     const build = difficultyBuild();
     const emb = new Float32Array(
       (build["build/2_embeddings.bin"] as Uint8Array).slice().buffer,
@@ -1577,10 +1598,7 @@ Deno.test(
     ]);
     assertEquals(code, 0, stderr);
     const band = difficultyCol(files, 1);
-    assert(
-      band.get("do-the-budget")! < 17,
-      `band ${band.get("do-the-budget")}`,
-    );
+    assertEquals(band.get("do-the-budget"), 3);
     // grade-low keeps its own band: grade 1 is band 3.
     assertEquals(band.get("grade-low"), 3);
   }),
@@ -2221,8 +2239,15 @@ Deno.test("pilot: grows from the roots, snaps, stops at grade 1, and rejects a c
   const out = await pilotP();
   assertEquals(out.code, 0, out.stderr);
   const counts = { positives: 1, predicted: 0, hits: 0, recovered: 1 };
-  const scores = { ...counts, precision: null, recall: 1 };
+  const scores = {
+    ...counts,
+    precision: null,
+    recall: 1,
+    negatives: 0,
+    negatives_in_closure: 0,
+  };
   assertEquals(JSON.parse(out.files["build/pilot_stats.json"]), {
+    open_at_depth_cap: 0,
     nodes: 4,
     roots: 1,
     snapped_nodes: 2,
@@ -2242,6 +2267,36 @@ Deno.test("pilot: grows from the roots, snaps, stops at grade 1, and rejects a c
       },
     },
     expert: { reached_pairs: 1, pilot: scores, skills_tsv: scores },
+    band_inversions: { pairs: 2, inverted: 0, worst: [] },
     sanity: [{ id: "calculus", grades: "12-12", height_max: 2, band: 15 }],
   });
+});
+
+Deno.test("digcompSeedEdges: each level of a competence is a prereq of the next; a level tag alone throws", async () => {
+  const { digcompSeedEdges } = await import("./sources.ts");
+  const t = (comp: string, level: string) =>
+    `digcomp:outcome,digcomp:competence:${comp},digcomp:level:${level}`;
+  const edges = digcompSeedEdges([
+    { id: "a1", tags: t("search", "basic") },
+    { id: "a2", tags: t("search", "basic") },
+    { id: "b1", tags: t("search", "intermediate") },
+    { id: "c1", tags: t("search", "highly-advanced") },
+    { id: "x1", tags: t("privacy", "basic") },
+    { id: "x2", tags: t("privacy", "intermediate") },
+    { id: "plain", tags: "grade:3" },
+  ]);
+  // No advanced outcome of "search": intermediate and highly advanced stay
+  // apart, as DigComp orders only adjacent levels.
+  assertEquals(edges.map((e) => `${e.src}>${e.dst}`), [
+    "a1>b1",
+    "a2>b1",
+    "x1>x2",
+  ]);
+  let msg = "";
+  try {
+    digcompSeedEdges([{ id: "y", tags: "digcomp:level:basic" }]);
+  } catch (e) {
+    msg = (e as Error).message;
+  }
+  assert(msg.includes("digcomp:competence:*"), msg);
 });

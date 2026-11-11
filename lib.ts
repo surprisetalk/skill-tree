@@ -571,6 +571,107 @@ export async function resumableClaude<T extends { id: string }>(
   );
 }
 
+// REVIEW: Stage pilot asks the Messages API directly, 8 requests at a time.
+// It grows one tree level per round, and one batch round took over 30 min, so
+// 15 levels took a night. Alternative: resumableClaude. Batches cost half as
+// much, but the wait multiplies by the depth of the tree.
+export async function claudeNow<T extends { id: string }>(
+  label: string,
+  cachePath: string,
+  targets: T[],
+  promptFn: (t: T) => string,
+  opts: {
+    numPredict: number;
+    // A JSON schema for the reply; the API constrains the output to it.
+    schema: Record<string, unknown>;
+    clean: (raw: string, item: T) => string;
+    model?: string;
+  },
+): Promise<void> {
+  const cached = loadTsvCache(cachePath);
+  const todo = [...new Map(targets.map((t) => [t.id, t])).values()].filter((
+    t,
+  ) => !cached.has(t.id));
+  const model = opts.model ?? GEN_MODEL;
+  console.log(
+    `[${label}] targets=${targets.length} todo=${todo.length} → ${cachePath}`,
+  );
+  if (!todo.length) return;
+  if (!Deno.env.get("ANTHROPIC_API_KEY")) {
+    throw new Error(
+      `[${label}] expected ANTHROPIC_API_KEY in the environment, received none. ${todo.length} prompts wait for ${model}. Export the key (for example from .env: set -a; . ./.env; set +a), then rerun.`,
+    );
+  }
+  // One retry on a transient error (429, 5xx, network); the SDK does the retry.
+  const client = new Anthropic({ maxRetries: 1, timeout: 120_000 });
+  const fh = Deno.openSync(cachePath, { create: true, append: true });
+  const enc = new TextEncoder();
+  const t0 = performance.now();
+  let done = 0, rejected = 0, inTok = 0, outTok = 0, firstRejected = "";
+  const queue = [...todo];
+  // The first error stops every worker, and the file closes after the last.
+  let failure: Error | null = null;
+  const worker = async () => {
+    while (queue.length && !failure) {
+      const t = queue.shift()!;
+      const m = await client.messages.create({
+        model,
+        max_tokens: opts.numPredict + THINK_TOKENS,
+        thinking: { type: "adaptive" },
+        output_config: {
+          effort: "low",
+          format: { type: "json_schema", schema: opts.schema },
+        },
+        messages: [{ role: "user", content: promptFn(t) }],
+      });
+      inTok += m.usage.input_tokens;
+      outTok += m.usage.output_tokens;
+      // A refusal or a reply cut at max_tokens is not an answer, and a
+      // rejected prompt stays uncached, as in resumableClaude.
+      const raw = m.stop_reason === "end_turn"
+        ? m.content.flatMap((c) => c.type === "text" ? [c.text] : []).join(" ")
+          .replace(/[\t\n\r]/g, " ").trim()
+        : "";
+      const cleaned = raw && opts.clean(raw, t);
+      done++;
+      if (cleaned) fh.writeSync(enc.encode(`${t.id}\t${cleaned}\n`));
+      else {
+        rejected++;
+        firstRejected ||= `${m.stop_reason}: ${raw}`;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: 8 }, () =>
+      worker().catch((e) => {
+        failure ??= e;
+      })),
+  );
+  fh.close();
+  if (failure) {
+    throw new Error(
+      `[${label}] expected every request to ${model} to succeed, received: ${
+        (failure as Error).message
+      }. ${done} answers are in ${cachePath}; rerun to ask the rest.`,
+      { cause: failure },
+    );
+  }
+  if (done >= 200 && rejected / done > 0.5) {
+    throw new Error(
+      `[${label}] expected under 50% rejected answers, received ${rejected}/${done}. First rejected answer: "${
+        firstRejected.slice(0, 200)
+      }". Check the prompt and ${model}, then rerun.`,
+    );
+  }
+  console.log(
+    `[${label}] done ${done} (rejected=${rejected}) ${inTok} in / ${outTok} out tokens in ${
+      ((performance.now() - t0) / 1000).toFixed(0)
+    }s${
+      firstRejected ? `. First rejected: "${firstRejected.slice(0, 300)}"` : ""
+    }`,
+  );
+}
+
 // Stage dedupe can merge a canonical id again, so aliases form chains.
 export function loadAliasesCollapsed(): Map<string, string> {
   const path = ALIASES.path;

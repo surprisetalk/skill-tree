@@ -38,6 +38,8 @@ import {
   stagePilot,
   stagePostproc,
   stagePrereq,
+  SUBJECT_MIN,
+  subjectAreas,
 } from "./prereq.ts";
 import {
   stageEnrich,
@@ -377,6 +379,14 @@ async function stageStatus() {
       });
       return grade(fit.length / (rows.length - 1), 0.8, 0);
     }],
+    [
+      `No subject area (the id of a topic of ${SUBJECT_MIN}+ skills) is a prereq.`,
+      () => {
+        const areas = subjectAreas(skills());
+        const bad = skills().filter((s) => s.prereqs.some((p) => areas.has(p)));
+        return grade(bad.length / skills().length, 0, 1);
+      },
+    ],
     [
       "Addition is a transitive prereq of multiplication.",
       () => above()("multiplication").has("addition") ? 1 : 0,

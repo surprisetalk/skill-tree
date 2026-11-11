@@ -61,3 +61,16 @@ Evidence for each note: `research.md`.
   `buildsTowards` and `hasStandardAlignment` edges resolve exactly. Alternative:
   an `lc:<id>` tag per node. It needs no file, but the tag cap of 20 loses most
   nodes of a statement that fifty states repeat.
+- Stages `prereq` and `difficulty` stay. A top-down LLM tree does not replace
+  them yet. Example from the pilot (`deno run -A pipeline.ts pilot`, report in
+  `build/pilot_stats.json`): Electricians → National Electrical Codes → … →
+  Professional Communication → Instructional Design → … → Applied Behavior
+  Analysis. From 20 roots the pilot reached 5,953 nodes; 47% matched no skill,
+  3,019 edges closed a cycle, chains ran 100 to 380 steps, and 22% of edges
+  between banded skills climbed a band. The tree drifts sideways through lateral
+  prereqs and wrong snaps ("checking responsiveness" in CPR became
+  `viewport-meta-tag`). On the 50 expert positives it reached, its closure
+  recalls 42% against 12% for `skills.tsv`, but it also holds 17% of the
+  negatives against 1%. Alternative: switch now. It needs a guard that each
+  prereq is easier than its skill, and a stricter snap, before the tree
+  converges.

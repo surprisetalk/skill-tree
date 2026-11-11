@@ -2,6 +2,7 @@ import {
   ALIASES,
   ancestorsOf,
   BUILD,
+  claudeNow,
   col,
   DIFFICULTY,
   EDGES,
@@ -515,6 +516,24 @@ export async function stagePrereq() {
 
 // ---------- stage postproc ----------
 
+// REVIEW: A skill is a subject area when its id is the topic of 50 or more
+// skills: 224 on 10 Nov (problem-solving 4,799, geometry, mathematics). The
+// cutoff is your decision of 10 Nov. Alternative: a hand list of subject
+// areas. It misses a new one until someone adds it.
+export const SUBJECT_MIN = 50;
+
+export function subjectAreas(
+  skills: { id: string; topics: string[] }[],
+): Set<string> {
+  const n = new Map<string, number>();
+  for (const s of skills) {
+    for (const t of s.topics) n.set(t, (n.get(t) ?? 0) + 1);
+  }
+  return new Set(
+    skills.filter((s) => (n.get(s.id) ?? 0) >= SUBJECT_MIN).map((s) => s.id),
+  );
+}
+
 export function stagePostproc() {
   const skill = new Map(
     readTable(TAGGED_DEDUPED).map((s) => [s.id, {
@@ -917,6 +936,22 @@ export function stagePostproc() {
   console.log(
     `[postproc] seeds: added=${seedAdded}, dup=${seedDup}, missing=${seedMissing}`,
   );
+
+  // A subject area is a topic, not a skill: "mathematics → arithmetic" orders
+  // nothing. A skill whose id names the topic of SUBJECT_MIN skills leaves the
+  // graph, seed edges included, and stays a topic.
+  {
+    const areas = subjectAreas(
+      [...skill].map(([id, s]) => ({ id, topics: [...s.topics] })),
+    );
+    const before = final.length;
+    final = final.filter(([s, p]) => !areas.has(s) && !areas.has(p));
+    console.log(
+      `[postproc] subject areas: ${areas.size} skills, dropped ${
+        before - final.length
+      } edges`,
+    );
+  }
 
   // Cycle breaker (Tarjan + rank-based back-edge drop)
   let cyclesBroken = 0, cyclesSeedDropped = 0;
@@ -1462,27 +1497,38 @@ const SNAP_K = 10;
 const EXPAND_MODEL = "claude-sonnet-5-5";
 
 const EXPAND_PROMPT =
-  `You list the prerequisites of a skill, course, or occupation. Return the skills a learner MUST understand before learning it. Be strict — only genuinely foundational dependencies, not merely related or adjacent topics, and not its own subtopics. At most ${PREREQ_PICK_CAP}. Name each in 1-6 words, as a skill a curriculum teaches. Return ONLY the names separated by semicolons (e.g. "fractions; ratios"), or the word "none" when it is a primitive that needs no prior skill (e.g. counting, adding small numbers). No explanation.`;
+  `You list the prerequisites of a skill, course, or occupation. Return the skills a learner MUST understand before learning it. Be strict — only genuinely foundational dependencies, not merely related or adjacent topics, and not its own subtopics. At most ${PREREQ_PICK_CAP}. Name each in 1-6 words, as a skill a curriculum teaches. Return an empty list when it is a primitive that needs no prior skill (e.g. counting, adding small numbers).`;
+
+const EXPAND_SCHEMA = {
+  type: "object",
+  properties: { prereqs: { type: "array", items: { type: "string" } } },
+  required: ["prereqs"],
+  additionalProperties: false,
+};
 
 const SNAP_PROMPT =
-  `You match a skill name to a list of skills. Return the number of the candidate that names the same skill: the same concept at the same scope. A broader, narrower, or merely related skill is not a match. Return ONLY the number, or the word "none". No explanation.`;
+  `You match a skill name to a list of skills. Answer the number of the candidate that names the same skill: the same concept at the same scope. A broader, narrower, or merely related skill is not a match. Answer "none" when no candidate matches.`;
 
-// Names from "a; b" or "none", or null for prose: a name over 8 words is a
-// sentence.
-function parseExpand(text: string): string[] | null {
-  const t = text.trim().replace(/\.$/, "");
-  if (/^(none|n\/a)$/i.test(t)) return [];
-  const names = [
-    ...new Set(
-      t.split(";").map((n) =>
-        n.trim().replace(/^\d+[.)]\s*|^["'*-]+|["'*]+$/g, "").trim()
-      ).filter(Boolean),
-    ),
-  ];
-  if (
-    !names.length ||
-    names.some((n) => n.split(/\s+/).length > 8 || !slugify(n))
-  ) return null;
+const SNAP_SCHEMA = {
+  type: "object",
+  properties: {
+    match: {
+      type: "string",
+      enum: ["none", ...Array.from({ length: SNAP_K }, (_, i) => `${i + 1}`)],
+    },
+  },
+  required: ["match"],
+  additionalProperties: false,
+};
+
+// The names of an expand reply, or null when a name is a sentence (over 8
+// words) or has no slug. The schema fixes the shape.
+function parseExpand(raw: string): string[] | null {
+  const { prereqs } = JSON.parse(raw) as { prereqs: string[] };
+  const names = [...new Set(prereqs.map((n) => n.trim()).filter(Boolean))];
+  if (names.some((n) => n.split(/\s+/).length > 8 || !slugify(n))) {
+    return null;
+  }
   return names.slice(0, PREREQ_PICK_CAP);
 }
 
@@ -1596,30 +1642,34 @@ export async function stagePilot() {
     if (early(id)) leaf.set(id, "k-standard");
     return !early(id);
   });
+  // The report is written before the depth crash, so the crash carries data.
+  let capped: Error | null = null;
   for (let depth = 0; frontier.length; depth++) {
     if (depth >= PILOT_DEPTH_CAP) {
       const path = pathTo(frontier[0]);
-      throw new Error(
+      capped = new Error(
         `pilot: expected every chain to end within ${PILOT_DEPTH_CAP} levels, received ${frontier.length} open nodes at depth ${depth}. Root "${
           path[0]
         }", path ${
           path.join(" → ")
-        }. Read the answers along that path in ${EXPAND_CACHE}.`,
+        }. Read the answers along that path in ${EXPAND_CACHE}; ${BUILD}/pilot_stats.json holds the report.`,
       );
+      break;
     }
     console.log(
       `[pilot] depth ${depth}: expand ${frontier.length}, nodes ${nodes.size}`,
     );
-    await resumableClaude(
+    await claudeNow(
       "pilot:expand",
       EXPAND_CACHE,
       frontier.map((id) => nodes.get(id)!),
       (n) =>
         `${EXPAND_PROMPT}\n\nSkill: ${n.title}${
           n.description ? `\nDescription: ${n.description.slice(0, 2500)}` : ""
-        }\n\nPrerequisites (or "none"):`,
+        }`,
       {
         numPredict: 200,
+        schema: EXPAND_SCHEMA,
         model: EXPAND_MODEL,
         clean: (raw) => {
           const names = parseExpand(raw);
@@ -1633,7 +1683,7 @@ export async function stagePilot() {
       throw new Error(
         `pilot: expected an answer for every open node, received none for ${missing.length}, first "${
           missing[0]
-        }". The model gave prose or a list over ${PREREQ_PICK_CAP} names. Rerun to ask again; ${EXPAND_CACHE} keeps the rest.`,
+        }". The model gave a name over 8 words, or a reply cut at max_tokens; the log above shows the first. Rerun to ask again; ${EXPAND_CACHE} keeps the rest.`,
       );
     }
     const asked = frontier.map((id) => {
@@ -1649,9 +1699,9 @@ export async function stagePilot() {
       for (const name of names) {
         if (resolved.has(name)) continue;
         const exact = resolveConcept(name, idx);
-        how.set(name, "exact");
         if (exact) {
           resolved.set(name, exact);
+          how.set(name, "exact");
           continue;
         }
         const key = slugify(name);
@@ -1663,7 +1713,7 @@ export async function stagePilot() {
     if (ask.length) {
       const lists = await shortlist(ask.map((t) => t.name));
       const jobs = ask.map((t, i) => ({ ...t, cands: lists[i] }));
-      await resumableClaude(
+      await claudeNow(
         "pilot:snap",
         SNAP_CACHE,
         jobs,
@@ -1677,14 +1727,14 @@ export async function stagePilot() {
                 s.description ? ` — ${s.description.slice(0, 100)}` : ""
               }`;
             }).join("\n")
-          }\n\nNumber (or "none"):`,
+          }`,
         {
           numPredict: 20,
+          schema: SNAP_SCHEMA,
           clean: (raw, j) => {
-            const t = raw.trim().toLowerCase().replace(/\.$/, "");
-            if (t === "none") return "none";
-            const k = /^\d+$/.test(t) ? Number(t) : 0;
-            return k >= 1 && k <= j.cands.length ? j.cands[k - 1] : "";
+            const { match } = JSON.parse(raw) as { match: string };
+            if (match === "none") return "none";
+            return j.cands[Number(match) - 1] ?? "";
           },
         },
       );
@@ -1696,7 +1746,7 @@ export async function stagePilot() {
       const v = snapped.get(key);
       if (v === undefined) {
         throw new Error(
-          `pilot: expected a snap answer for "${name}", received none. The model gave prose. Rerun to ask again; ${SNAP_CACHE} keeps the rest.`,
+          `pilot: expected a snap answer for "${name}", received none. The reply was cut at max_tokens or refused; the log above shows the first. Rerun to ask again; ${SNAP_CACHE} keeps the rest.`,
         );
       }
       if (v !== "none" && !byId.has(v)) {
@@ -1791,12 +1841,29 @@ export async function stagePilot() {
   });
   const built = readTable(SKILLS_OUT);
   const ratio = (a: number, b: number) => b ? a / b : null;
+  // A pair is negative when no set marks it positive, as in expertScores.
+  const negatives = [
+    ...new Set(
+      reached.filter((p) => p.pre !== p.dep).map((p) => `${p.pre}\t${p.dep}`),
+    ),
+  ].filter((k) =>
+    !reached.some((p) => p.positive && `${p.pre}\t${p.dep}` === k)
+  );
   const score = (g: Map<string, string[]>) => {
     const r = expertScores(g, reached);
+    // A closure that holds most nodes recalls every pair. The negatives it
+    // holds say how much of the recall is real.
+    const above = ancestorsOf(g);
+    const negIn = negatives.filter((k) => {
+      const [pre, dep] = k.split("\t");
+      return above(dep).has(pre);
+    }).length;
     return {
       ...r,
       precision: ratio(r.hits, r.predicted),
       recall: ratio(r.recovered, r.positives),
+      negatives: negatives.length,
+      negatives_in_closure: negIn,
     };
   };
 
@@ -1808,6 +1875,8 @@ export async function stagePilot() {
   const bandOf = new Map(built.map((s) => [s.id, s.difficulty]));
 
   writeStats("pilot", {
+    // Nodes still open when the depth cap stopped the run; 0 when it ended.
+    open_at_depth_cap: capped ? frontier.length : 0,
     nodes: all.length,
     roots: roots.length,
     snapped_nodes: count("skill"),
@@ -1842,6 +1911,30 @@ export async function stagePilot() {
       pilot: score(prereqs),
       skills_tsv: score(new Map(built.map((s) => [s.id, s.prereqs]))),
     },
+    // Edges whose ends both carry a skills.tsv band. An inverted edge puts the
+    // prereq in a higher band: the chain climbs instead of descending.
+    band_inversions: (() => {
+      const pairs = [...prereqs].flatMap(([dep, ps]) =>
+        ps.flatMap((p) => {
+          const bd = bandOf.get(dep), bp = bandOf.get(p);
+          return bd !== undefined && bp !== undefined
+            ? [{ dep, p, rise: bp - bd }]
+            : [];
+        })
+      );
+      const up = pairs.filter((e) => e.rise > 0).sort((a, b) =>
+        b.rise - a.rise
+      );
+      return {
+        pairs: pairs.length,
+        inverted: up.length,
+        worst: up.slice(0, 10).map((e) =>
+          `${nodes.get(e.dep)!.title} (band ${bandOf.get(e.dep)}) ← ${
+            nodes.get(e.p)!.title
+          } (band ${bandOf.get(e.p)})`
+        ),
+      };
+    })(),
     sanity: sanity.slice(1).filter((r) => nodes.has(r[sId])).map((r) => ({
       id: r[sId],
       grades: `${r[sFrom]}-${r[sTo]}`,
@@ -1849,4 +1942,5 @@ export async function stagePilot() {
       band: bandOf.get(r[sId]) ?? null,
     })),
   });
+  if (capped) throw capped;
 }

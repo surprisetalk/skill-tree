@@ -1285,130 +1285,21 @@ export function stageDifficulty() {
     }
   }
 
-  // The 4 named DigComp levels take the job-zone anchor scale
-  // (11.5 + 1.5 * zone, zones 1 to 4), because both rate adult skill. Alternative:
-  // a separate scale. It needs a fourth anchor source and a calibration of its own.
-  let digcompAnchored = 0;
-  for (let i = 0; i < skills.length; i++) {
-    const m = skills[i].tags.match(
-      /(?:^|,)digcomp:level:(basic|intermediate|advanced|highly-advanced)(?:,|$)/,
-    );
-    if (!m || !Number.isNaN(anchor[i])) continue;
-    const zone = ["basic", "intermediate", "advanced", "highly-advanced"]
-      .indexOf(m[1]) + 1;
-    anchor[i] = 11.5 + 1.5 * zone;
-    digcompAnchored++;
-  }
-
-  let zoneAnchored = 0;
-  // A job zone averages the occupations that use a skill: it calibrates kNN,
-  // but it does not set the skill's own band.
-  const zoneOnly = new Uint8Array(skills.length);
-  {
-    const zoneRows = readTsv("data/onet/Job Zones.txt");
-    const iZs = col(zoneRows, "O*NET-SOC Code", "data/onet/Job Zones.txt"),
-      iZz = col(zoneRows, "Job Zone", "data/onet/Job Zones.txt");
-    const socToZone = new Map<string, number>();
-    for (let i = 1; i < zoneRows.length; i++) {
-      const soc = zoneRows[i][iZs], z = Number(zoneRows[i][iZz]);
-      if (soc && Number.isFinite(z) && z >= 1 && z <= 5) socToZone.set(soc, z);
-    }
-    const cmr = onetElementNames();
-    const skillZoneSum = new Map<string, { w: number; wz: number }>();
-    for (const fname of ["Skills.txt", "Knowledge.txt", "Abilities.txt"]) {
-      const rows = readTsv(`data/onet/${fname}`);
-      const iS = col(rows, "O*NET-SOC Code", `data/onet/${fname}`),
-        iE = col(rows, "Element ID", `data/onet/${fname}`),
-        iSc = col(rows, "Scale ID", `data/onet/${fname}`),
-        iV = col(rows, "Data Value", `data/onet/${fname}`);
-      for (let i = 1; i < rows.length; i++) {
-        if (rows[i][iSc] !== "IM") continue;
-        const name = cmr.get(rows[i][iE]);
-        const zone = socToZone.get(rows[i][iS]);
-        if (!name || zone === undefined) continue;
-        const w = Number(rows[i][iV]);
-        if (!Number.isFinite(w) || w <= 0) continue;
-        const key = slugify(name);
-        const e = skillZoneSum.get(key) ?? { w: 0, wz: 0 };
-        e.w += w;
-        e.wz += w * zone;
-        skillZoneSum.set(key, e);
-      }
-    }
-    // O*NET Tasks: each task statement is linked to exactly one SOC, so we can
-    // anchor each task directly via its SOC's zone. Same for DWAs via Task→DWA.
-    const taskSocByTid = new Map<string, string>();
-    const taskTextByTid = new Map<string, string>();
-    {
-      const rows = readTsv("data/onet/Task Statements.txt");
-      const iS = col(rows, "O*NET-SOC Code", "data/onet/Task Statements.txt"),
-        iTid = col(rows, "Task ID", "data/onet/Task Statements.txt"),
-        iTask = col(rows, "Task", "data/onet/Task Statements.txt");
-      for (let i = 1; i < rows.length; i++) {
-        const tid = rows[i][iTid], task = rows[i][iTask], soc = rows[i][iS];
-        if (!tid || !task || !soc) continue;
-        if (!taskSocByTid.has(tid)) {
-          taskSocByTid.set(tid, soc);
-          taskTextByTid.set(tid, task);
-        }
-        const key = slugify(task);
-        const zone = socToZone.get(soc);
-        if (zone === undefined) continue;
-        const e = skillZoneSum.get(key) ?? { w: 0, wz: 0 };
-        e.w += 1;
-        e.wz += zone;
-        skillZoneSum.set(key, e);
-      }
-    }
-    {
-      const dwaPath = "data/onet/DWA Reference.txt";
-      const dwaRows = readTsv(dwaPath);
-      const iDwa = col(dwaRows, "DWA ID", dwaPath),
-        iTitle = col(dwaRows, "DWA Title", dwaPath);
-      const dwaTitle = new Map<string, string>();
-      for (const r of dwaRows.slice(1)) {
-        if (r[iDwa] && r[iTitle]) dwaTitle.set(r[iDwa], r[iTitle]);
-      }
-      const t2d = readTsv("data/onet/Tasks to DWAs.txt");
-      const iTid = col(t2d, "Task ID", "data/onet/Tasks to DWAs.txt"),
-        iDid = col(t2d, "DWA ID", "data/onet/Tasks to DWAs.txt");
-      for (let i = 1; i < t2d.length; i++) {
-        const tid = t2d[i][iTid], did = t2d[i][iDid];
-        const title = dwaTitle.get(did);
-        const soc = taskSocByTid.get(tid);
-        if (!title || !soc) continue;
-        const zone = socToZone.get(soc);
-        if (zone === undefined) continue;
-        const key = slugify(title);
-        const e = skillZoneSum.get(key) ?? { w: 0, wz: 0 };
-        e.w += 1;
-        e.wz += zone;
-        skillZoneSum.set(key, e);
-      }
-    }
-
-    const idToIdx = new Map<string, number>();
-    for (let i = 0; i < skills.length; i++) idToIdx.set(skills[i].id, i);
-    for (const [key, { w, wz }] of skillZoneSum) {
-      const i = idToIdx.get(key);
-      if (i === undefined || !Number.isNaN(anchor[i])) continue;
-      anchor[i] = 11.5 + 1.5 * (wz / w);
-      zoneOnly[i] = 1;
-      zoneAnchored++;
-    }
-  }
-
+  // Job zones and DigComp levels anchor nothing. A band says when a typical
+  // learner can first learn a skill; a job zone rates the preparation of an
+  // occupation, and zone 1 sat above grade 12 (decision, 10 Nov). DigComp
+  // levels order their outcomes as seeds instead (stage seed-edges).
   const anchorIdxs: number[] = [];
   for (let i = 0; i < skills.length; i++) {
     if (!Number.isNaN(anchor[i])) anchorIdxs.push(i);
   }
   console.log(
-    `[difficulty] anchors: grade=${gradeAnchored}, khan=${khanAnchored}, digcomp=${digcompAnchored}, zone=${zoneAnchored}, total=${anchorIdxs.length}`,
+    `[difficulty] anchors: grade=${gradeAnchored}, khan=${khanAnchored}, total=${anchorIdxs.length}`,
   );
   // With no anchors of one kind, kNN still runs and every band skews.
-  if (!gradeAnchored || !khanAnchored || !zoneAnchored) {
+  if (!gradeAnchored || !khanAnchored) {
     throw new Error(
-      `difficulty: expected grade, Khan, and Job Zone anchors, received grade=${gradeAnchored}, khan=${khanAnchored}, zone=${zoneAnchored}. Check the grade:* tags in ${TAGGED}, data/khanacademy/khandata.tsv, and data/onet/Job Zones.txt.`,
+      `difficulty: expected grade and Khan anchors, received grade=${gradeAnchored}, khan=${khanAnchored}. Check the grade:* tags in ${TAGGED} and data/khanacademy/khandata.tsv.`,
     );
   }
 
@@ -1574,13 +1465,11 @@ export function stageDifficulty() {
     calibrated[i] = c;
   }
 
-  // REVIEW: A skill with its own label (grade, Khan position, DigComp level)
-  // sits in that label's band; kNN sets the others, job-zone skills included.
-  // A grade-1 standard then sits in band 3, so two seed pairs of one grade tie,
-  // not conflict. Alternative: the kNN band for every skill, as before. It put
-  // a grade-K skill in band 8 and a grade-6 skill in band 3, and 293 of 1,117
-  // Khan seeds landed out of order. A job-zone band would put "answer phones"
-  // in band 14 or higher, above all K-12 content.
+  // REVIEW: A skill with its own label (grade, Khan position) sits in that
+  // label's band; kNN sets the others. A grade-1 standard then sits in band 3,
+  // so two seed pairs of one grade tie, not conflict. Alternative: the kNN band
+  // for every skill, as before. It put a grade-K skill in band 8 and a grade-6
+  // skill in band 3, and 293 of 1,117 Khan seeds landed out of order.
   const toBand = (v: number, i: number) => {
     if (!Number.isFinite(v)) {
       throw new Error(
@@ -1596,9 +1485,7 @@ export function stageDifficulty() {
   const band = new Int32Array(skills.length);
   for (let i = 0; i < skills.length; i++) {
     knnBand[i] = toBand(calibrated[i], i);
-    band[i] = Number.isNaN(anchor[i]) || zoneOnly[i]
-      ? knnBand[i]
-      : toBand(anchor[i], i);
+    band[i] = Number.isNaN(anchor[i]) ? knnBand[i] : toBand(anchor[i], i);
   }
   // Seed order: a seed prereq sits in a lower band than its dependent. An
   // anchored skill keeps its band; every other skill moves inside [lo, hi].
@@ -1687,9 +1574,7 @@ export function stageDifficulty() {
       conflictsBySource[src] = (conflictsBySource[src] ?? 0) + 1;
       // An anchored end shows its anchor band; "~" marks a kNN band.
       const end = (i: number) =>
-        `${skills[i].id}(${Number.isNaN(anchor[i]) || zoneOnly[i] ? "~" : ""}${
-          band[i]
-        })`;
+        `${skills[i].id}(${Number.isNaN(anchor[i]) ? "~" : ""}${band[i]})`;
       const samples = conflictSamples[src] ??= [];
       if (samples.length < 5) samples.push(`${end(si)} > ${end(di)}`);
     }
@@ -1778,8 +1663,6 @@ export function stageDifficulty() {
     anchors: {
       grade: gradeAnchored,
       khan: khanAnchored,
-      zone: zoneAnchored,
-      digcomp: digcompAnchored,
       total: anchorIdxs.length,
     },
     within_topic: withinTopic,

@@ -133,7 +133,9 @@ const INFILL_SKIP = "SKIP";
 const SUMMARIZE_CACHE = `${BUILD}/1c_summarize.tsv`;
 // The prompt asks for 3-7 words. Past 15, the model thinks out loud ("Wait,
 // that exceeds 7 words. Shortened version: ...").
-const isSummary = (t: string) => t.split(/\s+/).filter(Boolean).length <= 15;
+// A summary exists to give an id without a hex suffix, so its slug fits 80.
+const isSummary = (t: string) =>
+  t.split(/\s+/).filter(Boolean).length <= 15 && slugBase(t).length <= 80;
 const ONET_DESC_CACHE = `${BUILD}/1d_onet_desc.tsv`;
 const OPENSALT_DESC_CACHE = `${BUILD}/1e_opensalt_desc.tsv`;
 
@@ -425,6 +427,22 @@ const SCAFFOLDING_SIMPLE_RE = new RegExp(
   ].map((r) => r.source).join("|"),
   "i",
 );
+// Learning Commons statements carry Markdown emphasis ("Encode words with
+// _or_ after _w_") and a scaffold lead ("*With modeling, prompting, and
+// support* ask and answer questions"). The skill is the text after the lead.
+// A lead with no comma or marker after it names no skill, and stays.
+const LEAD_WORD =
+  "(?:verbal\\s+)?(?:modeling|prompting|prompts|guidance|support)";
+const SCAFFOLD_LEAD = new RegExp(
+  `^[*_]*with\\s+${LEAD_WORD}(?:(?:\\s*,\\s*|\\s+)(?:(?:and|or)\\s+)?${LEAD_WORD})*` +
+    `(?:\\s+as\\s+needed|\\s+from\\s[^,*_]*)?\\s*[,*_][,*_\\s]*`,
+  "i",
+);
+const EMPHASIS =
+  /(^|[\s("'“])[*_]+([^*_\s](?:[^*_]*[^*_\s])?)[*_]+(?=[\s,.;:)!?"'”]|$)/g;
+// "* recognize own name in print" leads with a bullet.
+const unmark = (t: string) =>
+  t.replace(/^\*\s+/, "").replace(SCAFFOLD_LEAD, "").replace(EMPHASIS, "$1$2");
 // CASE educationLevel uses "KG" and "TK"; stage difficulty expects "K".
 const normGrade = (g: string): string => {
   const u = g.trim().toUpperCase();
@@ -475,7 +493,9 @@ function cleanStandard(
     title = fullStmt;
     description = notes && notes !== fullStmt ? notes : "";
   }
-  title = title.replace(/^[•▪►■◆]\s*/, "").replace(/^\d+\.\s+/, "");
+  title = unmark(
+    title.replace(/^[•▪►■◆]\s*/, "").replace(/^\d+\.\s+/, ""),
+  );
   const before = title;
   title = stripStudentPrefix(title);
   title = title.replace(
@@ -1004,8 +1024,9 @@ export function stageList() {
       grades.map((g) => `grade:${normGrade(g)}`);
     for (const c of lc.components) {
       // "With support from adults, share a feeling" names the skill after the comma.
-      const text = htmlText(c.text, `${LC_EXTRACT} component ${c.id}`).trim()
-        .replace(/^with\s+(?:prompting|guidance|support)\b[^,]*,\s*/i, "");
+      const text = unmark(
+        htmlText(c.text, `${LC_EXTRACT} component ${c.id}`).trim(),
+      );
       const skill: Skill = {
         id: "",
         title: text.charAt(0).toUpperCase() + text.slice(1),
@@ -1350,24 +1371,17 @@ export function stageList() {
   let summarized = 0, onetEnriched = 0, opensaltEnriched = 0;
   for (const s of raw) {
     const k = slugify(s.title);
-    // A summary that still overflows gets its own summary in the next enrich,
-    // so follow the chain. Each hop is shorter, so it ends; 5 bounds it.
-    const orig = s.title;
-    for (let hop = 0; hop < 5; hop++) {
-      const key = slugify(s.title);
-      const sum = summarize.get(key);
-      if (!sum || sum.length >= s.title.length) break;
+    const sum = summarize.get(k);
+    if (sum) {
       if (!isSummary(sum)) {
         throw new Error(
-          `${SUMMARIZE_CACHE}: expected a summary of at most 15 words for "${key}", received "${
+          `${SUMMARIZE_CACHE}: expected a summary of at most 15 words and a slug of at most 80 characters for "${k}", received "${
             sum.slice(0, 120)
           }". Run: deno run -A pipeline.ts enrich (it drops such rows and asks again).`,
         );
       }
+      if (!s.description) s.description = s.title;
       s.title = sum;
-    }
-    if (s.title !== orig) {
-      if (!s.description) s.description = orig;
       summarized++;
     }
     if (!s.description && s.sources.includes("onet")) {
@@ -1660,7 +1674,7 @@ export async function stageEnrich() {
       console.log(
         `[enrich:summarize] dropped ${
           cache.length - good.length
-        } cached answers over 15 words`,
+        } cached answers over 15 words or 80 slug characters`,
       );
     }
   }
@@ -1669,7 +1683,7 @@ export async function stageEnrich() {
     SUMMARIZE_CACHE,
     sumTargets,
     (t) =>
-      `Extract the core skill as a concise 3-7 word noun phrase. Extract only concepts present in the input; do not add or assume. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n\nStandard: ${t.title}\n\nName:`,
+      `Extract the core skill as a concise 3-7 word noun phrase of at most 70 characters. Extract only concepts present in the input; do not add or assume. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n\nStandard: ${t.title}\n\nName:`,
     {
       numPredict: 60,
       clean: (raw) => {
@@ -1958,6 +1972,48 @@ export function lcSeedEdges(
     } else edges.push({ src, dst, raw });
   }
   return { edges, dropped };
+}
+
+const DIGCOMP_LEVELS = ["basic", "intermediate", "advanced", "highly-advanced"];
+
+// REVIEW: Within one DigComp competence, each outcome of a level is a seed
+// prereq of each outcome of the next level. DigComp orders its levels per
+// competence, not per outcome. Alternative: order the levels inside stage
+// difficulty only, with no edge. It adds no edge that DigComp never states,
+// but it needs an ordering path apart from the seeds.
+export function digcompSeedEdges(
+  tagged: { id: string; tags: string }[],
+): { src: string; dst: string; raw: string }[] {
+  const byComp = new Map<string, string[][]>();
+  for (const s of tagged) {
+    const comp = s.tags.match(/(?:^|,)digcomp:competence:([^,]+)/)?.[1];
+    const level = s.tags.match(/(?:^|,)digcomp:level:([^,]+)/)?.[1];
+    if (!comp && !level) continue;
+    const k = DIGCOMP_LEVELS.indexOf(level ?? "");
+    if (!comp || k < 0) {
+      throw new Error(
+        `${TAGGED_DEDUPED.path}: expected a DigComp skill to carry one digcomp:competence:* tag and a digcomp:level:* tag of ${
+          DIGCOMP_LEVELS.join(", ")
+        }, received "${s.tags}" on "${s.id}". Rerun: deno run -A pipeline.ts list`,
+      );
+    }
+    const levels = byComp.get(comp) ??
+      byComp.set(comp, DIGCOMP_LEVELS.map(() => [])).get(comp)!;
+    levels[k].push(s.id);
+  }
+  const edges: { src: string; dst: string; raw: string }[] = [];
+  for (const [comp, levels] of byComp) {
+    for (let k = 0; k + 1 < levels.length; k++) {
+      for (const src of levels[k]) {
+        for (const dst of levels[k + 1]) {
+          if (src !== dst) {
+            edges.push({ src, dst, raw: `${comp}:${src}>${dst}` });
+          }
+        }
+      }
+    }
+  }
+  return edges;
 }
 
 export async function stageSeedEdges() {
@@ -2436,6 +2492,19 @@ export async function stageSeedEdges() {
       );
     }
   }
+  {
+    const dig = digcompSeedEdges(tagged);
+    perSource.digcomp = { total: dig.length, resolved: dig.length };
+    for (const e of dig) {
+      edges.push({
+        ...e,
+        source: "digcomp",
+        confidence: 1,
+        holdout: (h32("digcomp|" + e.raw) % 5) === 0,
+        fallback: false,
+      });
+    }
+  }
   // Course edges whose code has no sure title carry no label to resolve.
   (perSource.courses ??= { total: 0, resolved: 0 }).total +=
     courses.dropped.length;
@@ -2506,6 +2575,8 @@ export async function stageSeedEdges() {
     opensalt_grade: 0.201,
     foundation: 0.9,
     learningcommons: 0.71,
+    // Ids from tags, so every pair resolves.
+    digcomp: 0.9,
   };
   const short = Object.entries(perSource).flatMap(([src, s]) => {
     const floor = SEED_FLOORS[src];
