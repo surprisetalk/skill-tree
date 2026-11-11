@@ -568,6 +568,8 @@ const finalBuild = (): Fixture => {
       "skill_id\tprereq_id\naddition\tcounting\nmultiplication\taddition\n",
     "build/1j_lcsh_tree.tsv": "counting\tarithmetic\n",
     "build/1k_dbpedia_tree.tsv": "addition\tarithmetic\n",
+    "build/5b_expand.tsv": "counting\tnone\n",
+    "build/5c_snap.tsv": "number-sense\tnone\n",
   };
 };
 
@@ -582,7 +584,9 @@ const staleP = early(() =>
     ),
     "build/2_pathological.tsv": "",
     "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\tghost\n",
-  }, ["build/5_prereqs.tsv"])
+    "build/5b_expand.tsv": "ghost\tCounting\naddition\tCounting\n",
+    "build/5c_snap.tsv": "number-sense\tghost\ncounting\tcounting\n",
+  }, ["build/5_prereqs.tsv", "build/5b_expand.tsv", "build/5c_snap.tsv"])
 );
 // A repeated key keeps one row; a cache with no fresh row goes away.
 // Raw difficulty: counting 1, addition 2, multiplication 3. A row whose pick
@@ -610,6 +614,8 @@ const staleCases = [
 Deno.test("prereq: a cache row that names a gone id drops and asks again", async () => {
   const { files, stderr } = await staleP();
   assertEquals(files["build/5_prereqs.tsv"], "addition\tcounting\n", stderr);
+  assertEquals(files["build/5b_expand.tsv"], "addition\tCounting\n");
+  assertEquals(files["build/5c_snap.tsv"], "counting\tcounting\n");
   assert(stderr.includes("expected ANTHROPIC_API_KEY"), stderr);
   const [dup, none, drifted, merged] = await Promise.all(
     staleCases.map((c) => c()),
@@ -668,6 +674,42 @@ Deno.test("postproc: a subject area is no prereq of a skill inside it, seed edge
   assertEquals(out.code, 0, out.stderr);
   assertEquals(
     out.files["build/6_edges.tsv"],
+    "skill_id\tprereq_id\naddition\tcounting\nmultiplication\taddition\n",
+  );
+});
+
+// Claude names Calculus (band 4) as a prereq of addition (band 2). Unanchored,
+// addition keeps the band-inverted edge, and stage finalize lifts it. Anchored,
+// it does not.
+const namedP = [0, 1].map((anchored) =>
+  early(() => {
+    const b = finalBuild();
+    b["build/3b_tagged_deduped.tsv"] +=
+      "calculus\tCalculus\tThe arithmetic skill calculus.\tfoundation\tgrade:1\t\tarithmetic,mathematics\n";
+    b["build/4_difficulty.tsv"] =
+      (b["build/4_difficulty.tsv"] as string).replace(
+        "addition\t2\t2\t0",
+        `addition\t2\t2\t${anchored}`,
+      ) + "calculus\t4\t4\t0\n";
+    return runIn("postproc", {
+      ...b,
+      "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\taddition\n",
+      "build/5b_expand.tsv": "addition\tCalculus; Ghost Skill\n",
+      "build/5c_snap.tsv": "calculus\tcalculus\nghost-skill\tnone\n",
+      "build/1e_seed_edges.tsv": seedHeader,
+    }, ["build/6_edges.tsv"]);
+  })
+);
+Deno.test("postproc: a named prereq of an unanchored skill skips the easier guard", async () => {
+  const [free, anchored] = await Promise.all(namedP.map((p) => p()));
+  assertEquals(free.code, 0, free.stderr);
+  assertEquals(
+    free.files["build/6_edges.tsv"],
+    "skill_id\tprereq_id\naddition\tcalculus\naddition\tcounting\nmultiplication\taddition\n",
+  );
+  assertEquals(anchored.code, 0, anchored.stderr);
+  assertEquals(
+    anchored.files["build/6_edges.tsv"],
     "skill_id\tprereq_id\naddition\tcounting\nmultiplication\taddition\n",
   );
 });

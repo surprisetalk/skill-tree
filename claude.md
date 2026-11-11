@@ -362,11 +362,16 @@ MOOCCubeX labels and BNCC objectives (first, since stage `list` needs them).
 Resumable via the `1b`–`1g` caches. Stage `list` applies them on its next run.
 
 **Prereq inference** (stage `prereq`): per-skill top-K candidates by cosine
-similarity (within-topic + ancestor + cross-topic pools), then the LLM picks
-true prerequisites. Resumable via `5_prereqs.tsv`; a cache row that names an id
-outside the build, or a pick no easier than its skill, drops, and its prompt
-goes out again. `SKIP_LLM=1` reuses that cache, less the stale rows, for a
-regression build without the generator.
+similarity (within-topic + ancestor + cross-topic pools; an IVF index serves the
+big pools), then the LLM picks true prerequisites. Then Claude names each
+skill's prereqs (`5b_expand.tsv`), and each name snaps to a skill: an exact
+match, else Claude picks from the name's 10 nearest skills (`5c_snap.tsv`, keyed
+by name slug). Stage `postproc` adds these named edges; one whose dependent has
+no anchor skips the easier-than check, and the chain lift orders its bands.
+Resumable via the three caches; a row that names an id outside the build, or a
+pick no easier than its skill, drops, and its prompt goes out again.
+`SKIP_LLM=1` reuses the caches, less the stale rows, for a regression build
+without the generator.
 
 **Merge step** (stage `dedupe`): token-sort signature merge + per-topic
 Jaccard+cosine merge + Learning Commons candidates (a Learning Commons row and
@@ -460,5 +465,7 @@ Caches for per-stage resumption. Key files:
   and seed counts, read by stage `status`). `raw` ignores seeds; only `band`
   holds the seed order, and `skills.tsv` adds the chain lift.
 - `5_prereqs.tsv` — LLM picks: `skill<TAB>p1,p2` or `skill<TAB>none`.
+- `5b_expand.tsv` — named prereqs: `skill<TAB>name; name` or `skill<TAB>none`.
+  `5c_snap.tsv` — `name-slug<TAB>skill-id` or `name-slug<TAB>none`.
 - `6_edges.tsv` — post-processed DAG edges (skill_id, prereq_id), transitively
   reduced: no edge is implied by a path of other edges.

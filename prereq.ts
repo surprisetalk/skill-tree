@@ -10,6 +10,7 @@ import {
   EMBED_DIM,
   embedBatch,
   embeddingFallback,
+  EXPAND,
   expertScores,
   FRAMEWORK_RE,
   loadAliasesCollapsed,
@@ -33,6 +34,7 @@ import {
   skillIndex,
   SKILLS_OUT,
   slugify,
+  SNAP,
   STOPWORDS,
   stronglyConnected,
   TAGGED,
@@ -44,6 +46,7 @@ import {
   writeTable,
   YEAR_RE,
 } from "./lib.ts";
+import type { Columns, Schema } from "./lib.ts";
 
 // ---------- stage prereq ----------
 
@@ -194,9 +197,48 @@ function ivfIndex(vecs: Float32Array, n: number) {
   return { cent, lists };
 }
 
-function computePrereqCandidates(): Map<string, number[]> {
+// The k best rows by cosine to q among those that pass ok, from the members of
+// q's nearest IVF_PROBE lists, or more lists until k pass. Best first.
+function ivfTop(
+  ivf: ReturnType<typeof ivfIndex>,
+  vecs: Float32Array,
+  q: Float32Array,
+  k: number,
+  ok: (j: number) => boolean,
+): { idx: number; score: number }[] {
+  const cs = new Float32Array(ivf.lists.length);
+  for (let c = 0; c < cs.length; c++) {
+    let sc = 0;
+    const cOff = c * EMBED_DIM;
+    for (let d = 0; d < EMBED_DIM; d++) sc += q[d] * ivf.cent[cOff + d];
+    cs[c] = sc;
+  }
+  const order = [...cs.keys()].sort((a, b) => cs[b] - cs[a]);
+  // Ascending, so top[0] is the worst kept row.
+  const top: { idx: number; score: number }[] = [];
+  for (let r = 0; r < order.length && (r < IVF_PROBE || top.length < k); r++) {
+    for (const j of ivf.lists[order[r]]) {
+      if (!ok(j)) continue;
+      let sc = 0;
+      const off = j * EMBED_DIM;
+      for (let d = 0; d < EMBED_DIM; d++) sc += q[d] * vecs[off + d];
+      if (top.length < k) {
+        top.push({ idx: j, score: sc });
+        if (top.length === k) top.sort((a, b) => a.score - b.score);
+      } else if (sc > top[0].score) {
+        top[0] = { idx: j, score: sc };
+        top.sort((a, b) => a.score - b.score);
+      }
+    }
+  }
+  return top.sort((a, b) => b.score - a.score);
+}
+
+function computePrereqCandidates(
+  vecs: Float32Array,
+  ivf: ReturnType<typeof ivfIndex>,
+): Map<string, number[]> {
   const { skills, diff, raw } = parseSkillsWithDifficulty();
-  const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
   const topicIdx = new Map<string, number[]>();
   for (let i = 0; i < skills.length; i++) {
     for (const t of skills[i].topics.split(",")) {
@@ -271,13 +313,6 @@ function computePrereqCandidates(): Map<string, number[]> {
     return raw[j] < raw[i] || diff[j] < diff[i]; // DR1 hard guard, as `easier`
   };
 
-  const tIvf = performance.now();
-  const ivf = ivfIndex(vecs, skills.length);
-  console.log(
-    `[prereq] ivf: ${ivf.lists.length} lists in ${
-      ((performance.now() - tIvf) / 1000).toFixed(1)
-    } s`,
-  );
   const out = new Map<string, number[]>();
   const t0 = performance.now();
   // Seconds per part, summed over skills: the CSP scale needs the slow one.
@@ -387,25 +422,15 @@ function computePrereqCandidates(): Map<string, number[]> {
     if (cands && cands.length <= IVF_EXACT_MAX) cands.forEach(consider);
     else {
       const inPool = cands ? new Set(cands) : null;
-      const cs = new Float32Array(ivf.lists.length);
-      for (let c = 0; c < cs.length; c++) {
-        let sc = 0;
-        const cOff = c * EMBED_DIM;
-        for (let d = 0; d < EMBED_DIM; d++) {
-          sc += vecs[sOff + d] * ivf.cent[cOff + d];
-        }
-        cs[c] = sc;
-      }
-      const order = [...cs.keys()].sort((a, b) => cs[b] - cs[a]);
-      for (
-        let k = 0;
-        k < order.length && (k < IVF_PROBE || top.length < inTopicSlots);
-        k++
-      ) {
-        for (const j of ivf.lists[order[k]]) {
-          if (inPool ? inPool.has(j) : candOk(i, j)) consider(j);
-        }
-      }
+      top.push(
+        ...ivfTop(
+          ivf,
+          vecs,
+          vecs.subarray(sOff, sOff + EMBED_DIM),
+          inTopicSlots,
+          (j) => !ancestorSet.has(j) && (inPool ? inPool.has(j) : candOk(i, j)),
+        ),
+      );
     }
     top.sort((a, b) => b.score - a.score);
     lap("cosine_top");
@@ -557,40 +582,57 @@ function parsePrereqResponse(text: string, n: number): number[] | null {
   return ks.map((k) => k - 1).slice(0, PREREQ_PICK_CAP);
 }
 
+// Rewrites a cache without its stale rows, so their prompts go out again. A
+// repeated key (a torn append) keeps one row, as loadTsvCache reads it.
+function prune<C extends Columns>(
+  t: Schema<C>,
+  keep: (key: string, value: string) => boolean,
+): void {
+  const cache = loadTsvCache(t.path);
+  if (!cache.size) return;
+  const lines = Deno.readTextFileSync(t.path).split("\n").length - 1;
+  const fresh = [...cache].filter(([k, v]) => keep(k, v));
+  if (fresh.length === lines) return;
+  // An empty table does not write; a missing cache reads as empty.
+  if (fresh.length) writeTable(t, fresh);
+  else Deno.removeSync(t.path);
+  console.log(
+    `[prereq] dropped ${
+      lines - fresh.length
+    } of ${lines} rows of ${t.path}: a gone id, a stale pick, or a repeated key`,
+  );
+}
+
 export async function stagePrereq() {
   const { skills, diff, raw } = parseSkillsWithDifficulty();
   // A cache row is stale when it names an id outside this build (a rename or
   // a merge), or a pick no easier than its skill: raw difficulty moved, and
-  // the pool the pick came from is gone. Drop it, so its prompt goes out again.
+  // the pool the pick came from is gone.
   const dOf = new Map(
     skills.map((s, i) => [s.id, { band: diff[i], raw: raw[i] }]),
   );
-  // A repeated key (a torn append) keeps one row, as loadTsvCache reads it.
-  const cache = loadTsvCache(PREREQ_CACHE);
-  const lines = cache.size &&
-    Deno.readTextFileSync(PREREQ_CACHE).split("\n").length - 1;
-  const fresh = [...cache].filter(([s, ps]) => {
+  prune(PREREQS, (s, ps) => {
     const ds = dOf.get(s);
     return ds !== undefined &&
       (ps === "none" || ps.split(",").every((p) => easier(dOf.get(p), ds)));
   });
-  if (fresh.length < lines) {
-    // A missing cache reads as empty; an empty table does not write.
-    if (fresh.length) writeTable(PREREQS, fresh);
-    else Deno.removeSync(PREREQ_CACHE);
-    console.log(
-      `[prereq] dropped ${
-        lines - fresh.length
-      } of ${lines} cache rows: a gone id, a pick no easier than its skill, or a repeated key`,
-    );
-  }
-  // SKIP_LLM=1 reuses the cache, less stale rows: a regression build needs no
+  prune(EXPAND, (s) => dOf.has(s));
+  prune(SNAP, (_, m) => m === "none" || dOf.has(m));
+  // SKIP_LLM=1 reuses the caches, less stale rows: a regression build needs no
   // generator.
   if (Deno.env.get("SKIP_LLM") === "1") {
-    console.log("[prereq] SKIP_LLM=1: using existing cache only");
+    console.log("[prereq] SKIP_LLM=1: using existing caches only");
     return;
   }
-  const candidates = computePrereqCandidates();
+  const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
+  const tIvf = performance.now();
+  const ivf = ivfIndex(vecs, skills.length);
+  console.log(
+    `[prereq] ivf: ${ivf.lists.length} lists in ${
+      ((performance.now() - tIvf) / 1000).toFixed(1)
+    } s`,
+  );
+  const candidates = computePrereqCandidates(vecs, ivf);
   const jobs = skills.flatMap((s) => {
     const cands = candidates.get(s.id);
     return cands?.length ? [{ ...s, cands }] : [];
@@ -616,6 +658,92 @@ export async function stagePrereq() {
         return picks.map((p) => skills[job.cands[p]].id).join(",") || "none";
       },
     },
+  );
+
+  // REVIEW: Claude also names each skill's prereqs, and each name snaps to a
+  // skill: retrieval cannot reach a cross-domain prereq (linear-algebra →
+  // computer-vision). On the 85 dependents of 252 missed expert pairs (11 Nov,
+  // Haiku 5.5) it named 28 of them. Haiku runs both steps, as in the trial.
+  // Alternative: Sonnet 5.5 for the names, as the pilot does; a few times the
+  // cost over every skill.
+  await resumableClaude(
+    "prereq:expand",
+    EXPAND.path,
+    skills,
+    (s) =>
+      `${EXPAND_PROMPT}\n\nSkill: ${s.title}${
+        s.description ? `\nDescription: ${s.description.slice(0, 2500)}` : ""
+      }`,
+    {
+      numPredict: 200,
+      schema: EXPAND_SCHEMA,
+      clean: (raw) => {
+        const names = parseExpand(raw);
+        return names === null ? "" : names.join("; ") || "none";
+      },
+    },
+  );
+  const idx = skillIndex(skills);
+  const snapped = loadTsvCache(SNAP.path);
+  const exact: string[][] = [];
+  const toSnap = new Map<string, { id: string; name: string; dep: string }>();
+  for (const [dep, names] of loadTsvCache(EXPAND.path)) {
+    if (names === "none" || !dOf.has(dep)) continue;
+    for (const name of names.split("; ")) {
+      const key = slugify(name);
+      if (snapped.has(key) || toSnap.has(key)) continue;
+      const id = resolveConcept(name, idx);
+      if (id) {
+        snapped.set(key, id);
+        exact.push([key, id]);
+      } else toSnap.set(key, { id: key, name, dep });
+    }
+  }
+  // An exact match needs no prompt; it joins the cache as an answer.
+  if (exact.length) {
+    Deno.writeTextFileSync(
+      SNAP.path,
+      exact.map((r) => r.join("\t") + "\n").join(""),
+      { append: true },
+    );
+  }
+  const byId = new Map(skills.map((s) => [s.id, s]));
+  const ask = [...toSnap.values()];
+  console.log(
+    `[prereq:snap] ${exact.length} exact, ${ask.length} to snap`,
+  );
+  const vecsOf = await embedBatch(
+    ask.map((t) =>
+      t.name.length < 40 ? `${t.name}. Skill: ${t.name}. ${t.name}.` : t.name
+    ),
+    "prereq:snap",
+  );
+  const snapJobs = ask.map((t, k) => ({
+    ...t,
+    cands: ivfTop(
+      ivf,
+      vecs,
+      normalize(vecsOf[k], `prereq name "${t.name}"`),
+      SNAP_K,
+      () => true,
+    ).map((c) => skills[c.idx].id),
+  }));
+  await resumableClaude(
+    "prereq:snap",
+    SNAP.path,
+    snapJobs,
+    (j) =>
+      `${SNAP_PROMPT}\n\nSkill: ${j.name} (a prerequisite of ${
+        byId.get(j.dep)!.title
+      })\n\nCandidates:\n${
+        j.cands.map((id, i) => {
+          const c = byId.get(id)!;
+          return `${i + 1}. ${c.title}${
+            c.description ? ` — ${c.description.slice(0, 100)}` : ""
+          }`;
+        }).join("\n")
+      }`,
+    { numPredict: 20, schema: SNAP_SCHEMA, clean: snapClean },
   );
 }
 
@@ -695,7 +823,43 @@ export function stagePostproc() {
     inSkills(r.src_id, SEEDS.path, i + 2);
     inSkills(r.dst_id, SEEDS.path, i + 2);
   });
-  console.log(`[postproc] raw edges: ${raw.length}`);
+  // Named prereqs: stage prereq's expand names, snapped to skills.
+  const snapOf = new Map<string, string>();
+  readTable(SNAP).forEach(({ name, match }, i) => {
+    if (match !== "none") inSkills(match, SNAP.path, i + 1);
+    snapOf.set(name, match);
+  });
+  const named = new Set<string>();
+  let names = 0, unsnapped = 0;
+  readTable(EXPAND).forEach(({ skill: s0, names: ns }, i) => {
+    if (ns === "none") return;
+    inSkills(s0, EXPAND.path, i + 1);
+    const s = alias.get(s0) ?? s0;
+    for (const name of ns.split("; ")) {
+      names++;
+      const m = snapOf.get(slugify(name));
+      if (m === undefined) unsnapped++;
+      if (m === undefined || m === "none") continue;
+      const p = alias.get(m) ?? m;
+      if (p !== s) named.add(`${s}\t${p}`);
+    }
+  });
+  // A rejected snap reply stays unanswered, as a rejected prereq reply does.
+  // More than that means stage prereq did not finish.
+  if (unsnapped > names * 0.05) {
+    throw new Error(
+      `${SNAP.path}: expected an answer for at least 95% of the ${names} names in ${EXPAND.path}, received none for ${unsnapped}. ${
+        rerun(SNAP.path)
+      }`,
+    );
+  }
+  const before = new Set(raw.map(([s, p]) => `${s}\t${p}`));
+  for (const k of named) {
+    if (!before.has(k)) raw.push(k.split("\t") as [string, string]);
+  }
+  console.log(
+    `[postproc] raw edges: ${raw.length} (${named.size} named, ${unsnapped} of ${names} names unsnapped)`,
+  );
 
   // Load seed edges for exemption
   const seeds = readSeeds();
@@ -727,10 +891,24 @@ export function stagePostproc() {
   // Filter 0: band-inverted
   let bandExempt = 0;
   const beforeBand = raw.length;
+  // REVIEW: A named prereq of an unanchored skill skips filters 0 and 0a.
+  // The dependent sits in the band-11 pile, so a true prereq (linear-algebra
+  // for computer-vision) is rarely easier; the chain lift in stage finalize
+  // then orders the bands. In the trial the guard blocked half the named
+  // prereqs, 90% with an unanchored dependent, and all 14 lost expert pairs.
+  // Alternative: the guard for every edge; recall stays under the floor.
+  // You approved this on 11 Nov.
+  const liftable = (s: string, p: string) =>
+    named.has(`${s}\t${p}`) && !diffs.get(s)!.anchored;
+  let namedExempt = 0;
   raw = raw.filter(([s, p]) => {
     if ((band.get(p) ?? 0) <= (band.get(s) ?? 20)) return true;
     if (isSeed(s, p)) {
       bandExempt++;
+      return true;
+    }
+    if (liftable(s, p)) {
+      namedExempt++;
       return true;
     }
     return false;
@@ -754,12 +932,19 @@ export function stagePostproc() {
       rawExempt++;
       return true;
     }
+    if (liftable(s, p)) {
+      namedExempt++;
+      return true;
+    }
     return false;
   });
   console.log(
     `[postproc] dropped ${
       beforeRaw - raw.length
     } raw-inverted (${rawExempt} seed exempt)`,
+  );
+  console.log(
+    `[postproc] filters 0 and 0a kept ${namedExempt} named prereqs of unanchored skills`,
   );
 
   // Filter 0b: domain-skill specificity guard.
@@ -1679,6 +1864,20 @@ const SNAP_SCHEMA = {
   additionalProperties: false,
 };
 
+// A snap reply's skill id, "none", or "" (rejected) for any other reply.
+function snapClean(raw: string, j: { cands: string[] }): string {
+  let match: unknown;
+  try {
+    match = (JSON.parse(raw) as { match?: unknown })?.match;
+  } catch {
+    return "";
+  }
+  if (match === "none") return "none";
+  return typeof match === "string" && /^[1-9]\d?$/.test(match)
+    ? j.cands[Number(match) - 1] ?? ""
+    : "";
+}
+
 // The names of an expand reply, or null when a name is a sentence (over 8
 // words) or has no slug. The schema fixes the shape.
 // The cache joins names with "; " and reads "none" as no prereqs, so a ";"
@@ -1904,18 +2103,7 @@ export async function stagePilot() {
         {
           numPredict: 20,
           schema: SNAP_SCHEMA,
-          clean: (raw, j) => {
-            let match: unknown;
-            try {
-              match = (JSON.parse(raw) as { match?: unknown })?.match;
-            } catch {
-              return "";
-            }
-            if (match === "none") return "none";
-            return typeof match === "string" && /^[1-9]\d?$/.test(match)
-              ? j.cands[Number(match) - 1] ?? ""
-              : "";
-          },
+          clean: snapClean,
         },
       );
     }

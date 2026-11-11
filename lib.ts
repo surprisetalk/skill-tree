@@ -83,6 +83,8 @@ const STAGE_OF: Record<string, string> = {
   [`${BUILD}/4_difficulty.tsv`]: "difficulty",
   [`${BUILD}/4_stats.json`]: "difficulty",
   [`${BUILD}/5_prereqs.tsv`]: "prereq",
+  [`${BUILD}/5b_expand.tsv`]: "prereq",
+  [`${BUILD}/5c_snap.tsv`]: "prereq",
   [`${BUILD}/6_edges.tsv`]: "postproc",
   "skills.tsv": "finalize",
 };
@@ -358,6 +360,8 @@ export async function resumableClaude<T extends { id: string }>(
     numPredict?: number;
     clean?: (raw: string, item: T) => string;
     model?: string;
+    // A JSON schema for the reply; the API constrains the output to it.
+    schema?: Record<string, unknown>;
   } = {},
 ): Promise<void> {
   const cleanFn = opts.clean ?? cleanDef;
@@ -545,7 +549,12 @@ export async function resumableClaude<T extends { id: string }>(
             model,
             max_tokens: (opts.numPredict ?? 120) + THINK_TOKENS,
             thinking: { type: "adaptive" },
-            output_config: { effort: "low" },
+            output_config: opts.schema
+              ? {
+                effort: "low",
+                format: { type: "json_schema", schema: opts.schema },
+              }
+              : { effort: "low" },
             messages: [{ role: "user", content: prompts.get(h)! }],
           },
         })),
@@ -1286,8 +1295,8 @@ const picks: Cell<string[]> = {
   parse: (s) => s === "none" ? [] : slugs(s),
 };
 
-type Columns = Record<string, Cell<unknown>>;
-type Schema<C extends Columns> = {
+export type Columns = Record<string, Cell<unknown>>;
+export type Schema<C extends Columns> = {
   path: string;
   columns: C;
   key?: keyof C & string;
@@ -1393,6 +1402,26 @@ export const PREREQS = table({
   key: "skill",
   headerless: true,
   columns: { skill: SLUG, picks },
+});
+// Stage prereq's expand step: Claude names the prereqs of a skill, "; "
+// joined, or "none". Its snap step maps each name's slug to a skill or "none".
+export const EXPAND = table({
+  path: `${BUILD}/5b_expand.tsv`,
+  key: "skill",
+  headerless: true,
+  columns: { skill: SLUG, names: filled },
+});
+export const SNAP = table({
+  path: `${BUILD}/5c_snap.tsv`,
+  key: "name",
+  headerless: true,
+  columns: {
+    name: SLUG,
+    match: {
+      as: '"none" or a slug',
+      parse: (v: string) => v === "none" || SLUG.parse(v) ? v : undefined,
+    },
+  },
 });
 export const SKILLS_OUT = table({
   path: "skills.tsv",
