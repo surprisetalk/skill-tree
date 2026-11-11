@@ -35,6 +35,7 @@ import {
 import {
   langTokenOf,
   stageFinalize,
+  stagePilot,
   stagePostproc,
   stagePrereq,
 } from "./prereq.ts";
@@ -483,16 +484,19 @@ const stages: Record<string, () => void | Promise<void>> = {
   status: stageStatus,
 };
 
+// The pilot is an experiment that pays Claude per node, so a full run skips it.
+const commands = { ...stages, pilot: stagePilot };
+
 await Deno.mkdir(BUILD, { recursive: true });
 const arg = Deno.args[0];
 if (arg) {
   // hasOwn: "constructor" and "toString" are inherited, not stages.
-  if (!Object.hasOwn(stages, arg)) {
+  if (!Object.hasOwn(commands, arg)) {
     throw new Error(
-      `unknown stage: ${arg}. known: ${Object.keys(stages).join(", ")}`,
+      `unknown stage: ${arg}. known: ${Object.keys(commands).join(", ")}`,
     );
   }
-  await stages[arg]();
+  await commands[arg as keyof typeof commands]();
 } else {
   for (const [name, fn] of Object.entries(stages)) {
     console.log(`\n=== ${name} ===`);

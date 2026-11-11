@@ -357,9 +357,11 @@ export async function resumableClaude<T extends { id: string }>(
   opts: {
     numPredict?: number;
     clean?: (raw: string, item: T) => string;
+    model?: string;
   } = {},
 ): Promise<void> {
   const cleanFn = opts.clean ?? cleanDef;
+  const model = opts.model ?? GEN_MODEL;
   const statePath = `${cachePath}.batches`;
   const readState = (): string[] => {
     try {
@@ -395,7 +397,7 @@ export async function resumableClaude<T extends { id: string }>(
 
   if (!Deno.env.get("ANTHROPIC_API_KEY")) {
     throw new Error(
-      `[${label}] expected ANTHROPIC_API_KEY in the environment, received none. ${first.length} prompts wait for ${GEN_MODEL}. Export the key (for example from .env: set -a; . ./.env; set +a), then rerun.`,
+      `[${label}] expected ANTHROPIC_API_KEY in the environment, received none. ${first.length} prompts wait for ${model}. Export the key (for example from .env: set -a; . ./.env; set +a), then rerun.`,
     );
   }
   // One retry on a transient error (429, 5xx, network); the SDK does the retry.
@@ -515,7 +517,7 @@ export async function resumableClaude<T extends { id: string }>(
     if (errs.length) throw errs[0];
     if (invalid.length) {
       throw new Error(
-        `[${label}] expected ${GEN_MODEL} to accept every prompt, received invalid_request_error on ${invalid.length}. First: ${firstInvalid}. Fix the request in resumableClaude (lib.ts), then rerun; the cache keeps every answer.`,
+        `[${label}] expected ${model} to accept every prompt, received invalid_request_error on ${invalid.length}. First: ${firstInvalid}. Fix the request in resumableClaude (lib.ts), then rerun; the cache keeps every answer.`,
       );
     }
     // A healthy model answers most prompts; mostly rejects means it is broken.
@@ -523,7 +525,7 @@ export async function resumableClaude<T extends { id: string }>(
       throw new Error(
         `[${label}] expected under 50% rejected answers, received ${rejected}/${done}. First rejected answer: "${
           firstRejected.slice(0, 200)
-        }". Check the prompt and ${GEN_MODEL}, then rerun.`,
+        }". Check the prompt and ${model}, then rerun.`,
       );
     }
   };
@@ -540,7 +542,7 @@ export async function resumableClaude<T extends { id: string }>(
         requests: send.slice(i, i + BATCH_SIZE).map((h) => ({
           custom_id: h,
           params: {
-            model: GEN_MODEL,
+            model,
             max_tokens: (opts.numPredict ?? 120) + THINK_TOKENS,
             thinking: { type: "adaptive" },
             output_config: { effort: "low" },

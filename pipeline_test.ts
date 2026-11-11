@@ -2191,3 +2191,57 @@ Deno.test("resumableClaude: a cached target sends nothing; an uncached one needs
     if (key) Deno.env.set("ANTHROPIC_API_KEY", key);
   }
 });
+
+// Calculus grows down to a grade-1 standard and a primitive. "Times tables"
+// snaps to multiplication, "Multiplying" snaps to its own skill, and
+// "Calculus" under multiplication closes a cycle. The caches hold every
+// answer, so the run pays for nothing.
+const pilotP = early(() =>
+  runIn("pilot", {
+    ...lbFixture(),
+    "skills.tsv": goodBuild()["skills.tsv"],
+    "build/3b_tagged_deduped.tsv": [
+      "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+      "counting\tCounting\t\tfoundation\tgrade:K\t\t",
+      "addition\tAddition\t\tfoundation\tgrade:K,grade:01\t\t",
+      "multiplication\tMultiplication\t\tfoundation\tgrade:3\t\t",
+      "calculus\tCalculus\t\tfoundation\tgrade:12\t\t",
+    ].join("\n") + "\n",
+    "data/_pilot_roots.tsv":
+      "kind\tid\ttitle\tdescription\nsanity\tcalculus\tCalculus\t\n",
+    "data/_sanity.tsv":
+      "id\tsubject\tgrade_from\tgrade_to\twhy\ncalculus\tmath\t12\t12\tx\n",
+    "build/pilot_expand.tsv":
+      "calculus\tmultiplication; Limits; Times tables\nmultiplication\taddition; Calculus; Multiplying\nlimits\tnone\n",
+    "build/pilot_snap.tsv":
+      "limits\tnone\ntimes-tables\tmultiplication\nmultiplying\tmultiplication\n",
+  }, ["build/pilot_stats.json"])
+);
+Deno.test("pilot: grows from the roots, snaps, stops at grade 1, and rejects a cycle", async () => {
+  const out = await pilotP();
+  assertEquals(out.code, 0, out.stderr);
+  const counts = { positives: 1, predicted: 0, hits: 0, recovered: 1 };
+  const scores = { ...counts, precision: null, recall: 1 };
+  assertEquals(JSON.parse(out.files["build/pilot_stats.json"]), {
+    nodes: 4,
+    roots: 1,
+    snapped_nodes: 2,
+    new_nodes: 1,
+    new_share: 1 / 3,
+    prereq_mentions: { exact: 3, snapped: 2, new: 1 },
+    leaves: { k_standard: 1, primitive: 1, cut_by_cycles: 0 },
+    rejected_cycles: 1,
+    self_snaps: 1,
+    per_root: {
+      calculus: {
+        height_max: 2,
+        height_min: 1,
+        nodes_below: 3,
+        reaches_k_standard: true,
+        longest_chain: "Calculus → Multiplication → Addition",
+      },
+    },
+    expert: { reached_pairs: 1, pilot: scores, skills_tsv: scores },
+    sanity: [{ id: "calculus", grades: "12-12", height_max: 2, band: 15 }],
+  });
+});

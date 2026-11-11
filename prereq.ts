@@ -1,32 +1,44 @@
 import {
   ALIASES,
+  ancestorsOf,
   BUILD,
+  col,
   DIFFICULTY,
   EDGES,
   EMBED_DIM,
+  embedBatch,
+  embeddingFallback,
+  expertScores,
   FRAMEWORK_RE,
   gradeToDifficulty,
   loadAliasesCollapsed,
   loadTsvCache,
+  normalize,
   normalizedEmbeddingsForSkills,
   PATHOLOGICAL,
   PREREQ_CACHE,
   PREREQS,
   readDifficulty,
+  readLectureBank,
   readSeeds,
   readTable,
   readTree,
+  readTsv,
   rerun,
+  resolveConcept,
   resumableClaude,
   SEEDS,
   SIG_STOP,
+  skillIndex,
   SKILLS_OUT,
   slugify,
   STOPWORDS,
   stronglyConnected,
+  TAGGED,
   TAGGED_DEDUPED,
   topoOrder,
   WIKI_CAT_RE,
+  writeStats,
   writeTable,
   YEAR_RE,
 } from "./lib.ts";
@@ -1428,4 +1440,413 @@ export function stageFinalize() {
       [...prereqs.values()].reduce((s, a) => s + a.length, 0)
     } edges`,
   );
+}
+
+// ---------- stage pilot ----------
+
+// The pilot grows a prereq tree top-down from data/_pilot_roots.tsv. Claude
+// lists each node's prereqs, and each prereq snaps to a skill of
+// 3b_tagged_deduped.tsv or becomes a new node. It runs on request only.
+const PILOT_ROOTS = "data/_pilot_roots.tsv";
+const EXPAND_CACHE = `${BUILD}/pilot_expand.tsv`;
+const SNAP_CACHE = `${BUILD}/pilot_snap.tsv`;
+const PILOT_DEPTH_CAP = 30;
+// A tree that never converges stops here. The caches keep every answer.
+const PILOT_NODE_CAP = 10_000;
+const SNAP_K = 10;
+// REVIEW: The expand step runs on Claude Sonnet 5.5, the snap step on Haiku
+// 5.5 (the resumableClaude default). The pilot decides the design of the
+// build, so a weak model must not pass for a weak approach. Alternative: Haiku
+// for both. It costs a few times less, but a chain that stops short then
+// says nothing about the approach.
+const EXPAND_MODEL = "claude-sonnet-5-5";
+
+const EXPAND_PROMPT =
+  `You list the prerequisites of a skill, course, or occupation. Return the skills a learner MUST understand before learning it. Be strict — only genuinely foundational dependencies, not merely related or adjacent topics, and not its own subtopics. At most ${PREREQ_PICK_CAP}. Name each in 1-6 words, as a skill a curriculum teaches. Return ONLY the names separated by semicolons (e.g. "fractions; ratios"), or the word "none" when it is a primitive that needs no prior skill (e.g. counting, adding small numbers). No explanation.`;
+
+const SNAP_PROMPT =
+  `You match a skill name to a list of skills. Return the number of the candidate that names the same skill: the same concept at the same scope. A broader, narrower, or merely related skill is not a match. Return ONLY the number, or the word "none". No explanation.`;
+
+// Names from "a; b" or "none", or null for prose: a name over 8 words is a
+// sentence.
+function parseExpand(text: string): string[] | null {
+  const t = text.trim().replace(/\.$/, "");
+  if (/^(none|n\/a)$/i.test(t)) return [];
+  const names = [
+    ...new Set(
+      t.split(";").map((n) =>
+        n.trim().replace(/^\d+[.)]\s*|^["'*-]+|["'*]+$/g, "").trim()
+      ).filter(Boolean),
+    ),
+  ];
+  if (
+    !names.length ||
+    names.some((n) => n.split(/\s+/).length > 8 || !slugify(n))
+  ) return null;
+  return names.slice(0, PREREQ_PICK_CAP);
+}
+
+type PilotNode = {
+  id: string;
+  title: string;
+  description: string;
+  kind: "root" | "skill" | "new";
+  via: string | null;
+};
+
+export async function stagePilot() {
+  const vocab = readTable(TAGGED_DEDUPED);
+  const byId = new Map(vocab.map((s) => [s.id, s]));
+  const idx = skillIndex(vocab);
+  // A K or grade-1 standard: every grade tag sits at grade 1 or below.
+  const early = (id: string) => {
+    const ds = [...(byId.get(id)?.tags ?? "").matchAll(/grade:([^,]+)/g)]
+      .map((m) => gradeToDifficulty(m[1]));
+    return ds.length > 0 && ds.every((d) => d !== null && d <= 2);
+  };
+
+  const nodes = new Map<string, PilotNode>();
+  const prereqs = new Map<string, string[]>();
+  const leaf = new Map<string, "k-standard" | "primitive">();
+  const mentions = { exact: 0, snapped: 0, new: 0 };
+  let rejectedCycles = 0, selfSnaps = 0;
+
+  const rows = readTsv(PILOT_ROOTS);
+  const [iKind, iId, iTitle, iDesc] = ["kind", "id", "title", "description"]
+    .map((c) => col(rows, c, PILOT_ROOTS));
+  const roots = rows.slice(1).map((r, k) => {
+    if (!["course", "occupation", "job", "sanity"].includes(r[iKind])) {
+      throw new Error(
+        `${PILOT_ROOTS}:${
+          k + 2
+        }: expected kind course, occupation, job, or sanity, received "${
+          r[iKind]
+        }".`,
+      );
+    }
+    if (r[iKind] === "sanity" && !byId.has(r[iId])) {
+      throw new Error(
+        `${PILOT_ROOTS}:${k + 2}: expected a skill id of ${TAGGED}, received "${
+          r[iId]
+        }". A rename moved it: put its new id in the file.`,
+      );
+    }
+    if (nodes.has(r[iId])) {
+      throw new Error(
+        `${PILOT_ROOTS}:${k + 2}: expected a unique id, received "${
+          r[iId]
+        }" twice.`,
+      );
+    }
+    nodes.set(r[iId], {
+      id: r[iId],
+      title: r[iTitle],
+      description: r[iDesc],
+      kind: "root",
+      via: null,
+    });
+    return r[iId];
+  });
+
+  // Does `from` reach `to` along prereq edges?
+  const reaches = (from: string, to: string) => {
+    const seen = new Set<string>();
+    const stack = [from];
+    while (stack.length) {
+      const u = stack.pop()!;
+      if (u === to) return true;
+      if (seen.has(u)) continue;
+      seen.add(u);
+      stack.push(...prereqs.get(u) ?? []);
+    }
+    return false;
+  };
+  const pathTo = (id: string) => {
+    const path = [id];
+    for (let v = nodes.get(id)!.via; v; v = nodes.get(v)!.via) path.push(v);
+    return path.reverse();
+  };
+
+  let mat: Float32Array | null = null;
+  const shortlist = async (names: string[]): Promise<string[][]> => {
+    mat ??= normalizedEmbeddingsForSkills(vocab.map((s) => s.id));
+    // Stage embed pads short text the same way; nomic-embed-text collapses it.
+    const vecs = await embedBatch(
+      names.map((n) => n.length < 40 ? `${n}. Skill: ${n}. ${n}.` : n),
+      "pilot:snap",
+    );
+    return vecs.map((raw, li) => {
+      const v = normalize(raw, `prereq name "${names[li]}"`);
+      const top: { i: number; s: number }[] = [];
+      for (let i = 0; i < vocab.length; i++) {
+        let dot = 0;
+        const off = i * EMBED_DIM;
+        for (let k = 0; k < EMBED_DIM; k++) dot += v[k] * mat![off + k];
+        if (top.length < SNAP_K || dot > top[top.length - 1].s) {
+          top.push({ i, s: dot });
+          top.sort((a, b) => b.s - a.s);
+          if (top.length > SNAP_K) top.pop();
+        }
+      }
+      return top.map((t) => vocab[t.i].id);
+    });
+  };
+
+  let frontier = roots.filter((id) => {
+    if (early(id)) leaf.set(id, "k-standard");
+    return !early(id);
+  });
+  for (let depth = 0; frontier.length; depth++) {
+    if (depth >= PILOT_DEPTH_CAP) {
+      const path = pathTo(frontier[0]);
+      throw new Error(
+        `pilot: expected every chain to end within ${PILOT_DEPTH_CAP} levels, received ${frontier.length} open nodes at depth ${depth}. Root "${
+          path[0]
+        }", path ${
+          path.join(" → ")
+        }. Read the answers along that path in ${EXPAND_CACHE}.`,
+      );
+    }
+    console.log(
+      `[pilot] depth ${depth}: expand ${frontier.length}, nodes ${nodes.size}`,
+    );
+    await resumableClaude(
+      "pilot:expand",
+      EXPAND_CACHE,
+      frontier.map((id) => nodes.get(id)!),
+      (n) =>
+        `${EXPAND_PROMPT}\n\nSkill: ${n.title}${
+          n.description ? `\nDescription: ${n.description.slice(0, 2500)}` : ""
+        }\n\nPrerequisites (or "none"):`,
+      {
+        numPredict: 200,
+        model: EXPAND_MODEL,
+        clean: (raw) => {
+          const names = parseExpand(raw);
+          return names === null ? "" : names.join("; ") || "none";
+        },
+      },
+    );
+    const answers = loadTsvCache(EXPAND_CACHE);
+    const missing = frontier.filter((id) => !answers.has(id));
+    if (missing.length) {
+      throw new Error(
+        `pilot: expected an answer for every open node, received none for ${missing.length}, first "${
+          missing[0]
+        }". The model gave prose or a list over ${PREREQ_PICK_CAP} names. Rerun to ask again; ${EXPAND_CACHE} keeps the rest.`,
+      );
+    }
+    const asked = frontier.map((id) => {
+      const a = answers.get(id)!;
+      return [id, a === "none" ? [] : a.split("; ")] as const;
+    });
+
+    const snaps = loadTsvCache(SNAP_CACHE);
+    const resolved = new Map<string, string | null>();
+    const how = new Map<string, keyof typeof mentions>();
+    const toSnap = new Map<string, { id: string; name: string; dep: string }>();
+    for (const [dep, names] of asked) {
+      for (const name of names) {
+        if (resolved.has(name)) continue;
+        const exact = resolveConcept(name, idx);
+        how.set(name, "exact");
+        if (exact) {
+          resolved.set(name, exact);
+          continue;
+        }
+        const key = slugify(name);
+        if (!toSnap.has(key)) toSnap.set(key, { id: key, name, dep });
+        resolved.set(name, null);
+      }
+    }
+    const ask = [...toSnap.values()].filter((t) => !snaps.has(t.id));
+    if (ask.length) {
+      const lists = await shortlist(ask.map((t) => t.name));
+      const jobs = ask.map((t, i) => ({ ...t, cands: lists[i] }));
+      await resumableClaude(
+        "pilot:snap",
+        SNAP_CACHE,
+        jobs,
+        (j) =>
+          `${SNAP_PROMPT}\n\nSkill: ${j.name} (a prerequisite of ${
+            nodes.get(j.dep)!.title
+          })\n\nCandidates:\n${
+            j.cands.map((id, i) => {
+              const s = byId.get(id)!;
+              return `${i + 1}. ${s.title}${
+                s.description ? ` — ${s.description.slice(0, 100)}` : ""
+              }`;
+            }).join("\n")
+          }\n\nNumber (or "none"):`,
+        {
+          numPredict: 20,
+          clean: (raw, j) => {
+            const t = raw.trim().toLowerCase().replace(/\.$/, "");
+            if (t === "none") return "none";
+            const k = /^\d+$/.test(t) ? Number(t) : 0;
+            return k >= 1 && k <= j.cands.length ? j.cands[k - 1] : "";
+          },
+        },
+      );
+    }
+    const snapped = loadTsvCache(SNAP_CACHE);
+    for (const [name, exact] of resolved) {
+      if (exact) continue;
+      const key = slugify(name);
+      const v = snapped.get(key);
+      if (v === undefined) {
+        throw new Error(
+          `pilot: expected a snap answer for "${name}", received none. The model gave prose. Rerun to ask again; ${SNAP_CACHE} keeps the rest.`,
+        );
+      }
+      if (v !== "none" && !byId.has(v)) {
+        throw new Error(
+          `${SNAP_CACHE}: expected a skill id of ${TAGGED} for "${key}", received "${v}". A rebuild renamed it: delete that row and rerun.`,
+        );
+      }
+      if (v !== "none") resolved.set(name, v);
+      how.set(name, v === "none" ? "new" : "snapped");
+    }
+
+    const next: string[] = [];
+    for (const [dep, names] of asked) {
+      if (!names.length) leaf.set(dep, "primitive");
+      for (const name of names) {
+        const sid = resolved.get(name) ?? null;
+        const id = sid ?? slugify(name);
+        mentions[how.get(name)!]++;
+        if (id === dep) {
+          selfSnaps++;
+          continue;
+        }
+        if (prereqs.get(dep)?.includes(id)) continue;
+        if (reaches(id, dep)) {
+          rejectedCycles++;
+          continue;
+        }
+        (prereqs.get(dep) ?? prereqs.set(dep, []).get(dep)!).push(id);
+        if (nodes.has(id)) continue;
+        const s = sid ? byId.get(sid)! : null;
+        nodes.set(id, {
+          id,
+          title: s?.title ?? name,
+          description: s?.description ?? "",
+          kind: s ? "skill" : "new",
+          via: dep,
+        });
+        if (nodes.size > PILOT_NODE_CAP) {
+          throw new Error(
+            `pilot: expected at most ${PILOT_NODE_CAP} nodes, received ${nodes.size} at depth ${depth}. The tree does not converge: read ${EXPAND_CACHE} for prereqs that are no simpler than their skill.`,
+          );
+        }
+        if (sid && early(sid)) leaf.set(id, "k-standard");
+        else next.push(id);
+      }
+    }
+    frontier = next;
+  }
+
+  // Height: the longest and the shortest path down to a node with no prereq.
+  const hi = new Map<string, number>(), lo = new Map<string, number>();
+  const height = (id: string): [number, number] => {
+    if (!hi.has(id)) {
+      const ps = prereqs.get(id) ?? [];
+      const hs = ps.map(height);
+      hi.set(id, ps.length ? 1 + Math.max(...hs.map((h) => h[0])) : 0);
+      lo.set(id, ps.length ? 1 + Math.min(...hs.map((h) => h[1])) : 0);
+    }
+    return [hi.get(id)!, lo.get(id)!];
+  };
+  const above = ancestorsOf(prereqs);
+  const chain = (id: string) => {
+    const out = [nodes.get(id)!.title];
+    for (let ps = prereqs.get(id) ?? []; ps.length;) {
+      id = ps.reduce((a, b) => height(b)[0] > height(a)[0] ? b : a);
+      out.push(nodes.get(id)!.title);
+      ps = prereqs.get(id) ?? [];
+    }
+    return out.join(" → ");
+  };
+  const all = [...nodes.values()];
+  const count = (k: PilotNode["kind"]) =>
+    all.filter((n) => n.kind === k).length;
+  const below = all.length - roots.length;
+
+  // Expert pairs both ends of which the pilot reached, scored on the pilot
+  // and on skills.tsv.
+  const { pairs } = readLectureBank();
+  const labels = [...new Set(pairs.flatMap((p) => [p.pre, p.dep]))];
+  const lbIdx = skillIndex([...vocab, ...all.filter((n) => n.kind === "new")]);
+  const ids = new Map(labels.map((l) => [l, resolveConcept(l, lbIdx)]));
+  const misses = labels.filter((l) => !ids.get(l));
+  if (misses.length) {
+    const fb = await embeddingFallback(misses, vocab, "pilot");
+    for (const [l, id] of fb.matched) ids.set(l, id);
+  }
+  const reached = pairs.flatMap((p) => {
+    const pre = ids.get(p.pre), dep = ids.get(p.dep);
+    return pre && dep && nodes.has(pre) && nodes.has(dep)
+      ? [{ pre, dep, positive: p.positive }]
+      : [];
+  });
+  const built = readTable(SKILLS_OUT);
+  const ratio = (a: number, b: number) => b ? a / b : null;
+  const score = (g: Map<string, string[]>) => {
+    const r = expertScores(g, reached);
+    return {
+      ...r,
+      precision: ratio(r.hits, r.predicted),
+      recall: ratio(r.recovered, r.positives),
+    };
+  };
+
+  const sanityPath = "data/_sanity.tsv";
+  const sanity = readTsv(sanityPath);
+  const [sId, sFrom, sTo] = ["id", "grade_from", "grade_to"].map((c) =>
+    col(sanity, c, sanityPath)
+  );
+  const bandOf = new Map(built.map((s) => [s.id, s.difficulty]));
+
+  writeStats("pilot", {
+    nodes: all.length,
+    roots: roots.length,
+    snapped_nodes: count("skill"),
+    new_nodes: count("new"),
+    new_share: ratio(count("new"), below),
+    prereq_mentions: mentions,
+    leaves: {
+      k_standard: [...leaf.values()].filter((r) => r === "k-standard").length,
+      primitive: [...leaf.values()].filter((r) => r === "primitive").length,
+      // Every prereq it named closed a cycle.
+      cut_by_cycles: all.filter((n) =>
+        !leaf.has(n.id) && !prereqs.get(n.id)?.length
+      ).length,
+    },
+    rejected_cycles: rejectedCycles,
+    // A prereq that snapped to its own skill.
+    self_snaps: selfSnaps,
+    per_root: Object.fromEntries(roots.map((r) => {
+      const [h, l] = height(r);
+      const up = above(r);
+      return [r, {
+        height_max: h,
+        height_min: l,
+        nodes_below: up.size,
+        reaches_k_standard: [...up].some((id) => leaf.get(id) === "k-standard"),
+        longest_chain: chain(r),
+      }];
+    })),
+    expert: {
+      // Distinct pairs: the four sets annotate some pairs more than once.
+      reached_pairs: new Set(reached.map((p) => `${p.pre}\t${p.dep}`)).size,
+      pilot: score(prereqs),
+      skills_tsv: score(new Map(built.map((s) => [s.id, s.prereqs]))),
+    },
+    sanity: sanity.slice(1).filter((r) => nodes.has(r[sId])).map((r) => ({
+      id: r[sId],
+      grades: `${r[sFrom]}-${r[sTo]}`,
+      height_max: height(r[sId])[0],
+      band: bandOf.get(r[sId]) ?? null,
+    })),
+  });
 }

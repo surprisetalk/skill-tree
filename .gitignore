@@ -18,6 +18,8 @@ build/*
 !build/1g_bncc_translate.tsv
 !build/3b_aliases.tsv
 !build/5_prereqs.tsv
+!build/pilot_expand.tsv
+!build/pilot_snap.tsv
 skills.tsv
 skills.tsv.gz
 skills.tsv.tmp
