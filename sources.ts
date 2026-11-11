@@ -432,10 +432,10 @@ const SCAFFOLDING_SIMPLE_RE = new RegExp(
 // support* ask and answer questions"). The skill is the text after the lead.
 // A lead with no comma or marker after it names no skill, and stays.
 const LEAD_WORD =
-  "(?:verbal\\s+)?(?:modeling|prompting|prompts|guidance|support)";
+  "(?:verbal\\s+)?(?:modeling|prompting|prompts|guidance|support)\\b";
 const SCAFFOLD_LEAD = new RegExp(
   `^[*_]*with\\s+${LEAD_WORD}(?:(?:\\s*,\\s*|\\s+)(?:(?:and|or)\\s+)?${LEAD_WORD})*` +
-    `(?:\\s+as\\s+needed|\\s+from\\s[^,*_]*)?\\s*[,*_][,*_\\s]*`,
+    `[^,*_]*[,*_][,*_\\s]*`,
   "i",
 );
 const EMPHASIS =
@@ -1986,17 +1986,26 @@ export function digcompSeedEdges(
 ): { src: string; dst: string; raw: string }[] {
   const byComp = new Map<string, string[][]>();
   for (const s of tagged) {
-    const comp = s.tags.match(/(?:^|,)digcomp:competence:([^,]+)/)?.[1];
-    const level = s.tags.match(/(?:^|,)digcomp:level:([^,]+)/)?.[1];
-    if (!comp && !level) continue;
-    const k = DIGCOMP_LEVELS.indexOf(level ?? "");
-    if (!comp || k < 0) {
+    const comps = new Set(
+      [...s.tags.matchAll(/(?:^|,)digcomp:competence:([^,]+)/g)].map((m) =>
+        m[1]
+      ),
+    );
+    const ks = [...s.tags.matchAll(/(?:^|,)digcomp:level:([^,]+)/g)].map((
+      m,
+    ) => DIGCOMP_LEVELS.indexOf(m[1]));
+    if (!comps.size && !ks.length) continue;
+    // Dedupe merges one statement at two levels; it is first learnable at
+    // the lower one.
+    const k = Math.min(...ks);
+    if (comps.size !== 1 || !ks.length || ks.includes(-1)) {
       throw new Error(
-        `${TAGGED_DEDUPED.path}: expected a DigComp skill to carry one digcomp:competence:* tag and a digcomp:level:* tag of ${
+        `${TAGGED_DEDUPED.path}: expected a DigComp skill to carry one digcomp:competence:* tag and digcomp:level:* tags of ${
           DIGCOMP_LEVELS.join(", ")
         }, received "${s.tags}" on "${s.id}". Rerun: deno run -A pipeline.ts list`,
       );
     }
+    const comp = [...comps][0];
     const levels = byComp.get(comp) ??
       byComp.set(comp, DIGCOMP_LEVELS.map(() => [])).get(comp)!;
     levels[k].push(s.id);

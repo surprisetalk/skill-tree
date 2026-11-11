@@ -632,7 +632,16 @@ export async function claudeNow<T extends { id: string }>(
         ? m.content.flatMap((c) => c.type === "text" ? [c.text] : []).join(" ")
           .replace(/[\t\n\r]/g, " ").trim()
         : "";
-      const cleaned = raw && opts.clean(raw, t);
+      let cleaned: string;
+      try {
+        cleaned = raw && opts.clean(raw, t);
+      } catch (e) {
+        throw new Error(
+          `target "${t.id}": clean threw on reply "${raw.slice(0, 200)}": ${
+            String(e)
+          }`,
+        );
+      }
       done++;
       if (cleaned) fh.writeSync(enc.encode(`${t.id}\t${cleaned}\n`));
       else {
@@ -644,7 +653,7 @@ export async function claudeNow<T extends { id: string }>(
   await Promise.all(
     Array.from({ length: 8 }, () =>
       worker().catch((e) => {
-        failure ??= e;
+        failure ??= e instanceof Error ? e : new Error(String(e));
       })),
   );
   fh.close();

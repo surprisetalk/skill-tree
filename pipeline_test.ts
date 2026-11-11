@@ -2247,7 +2247,7 @@ Deno.test("pilot: grows from the roots, snaps, stops at grade 1, and rejects a c
     negatives_in_closure: 0,
   };
   assertEquals(JSON.parse(out.files["build/pilot_stats.json"]), {
-    open_at_depth_cap: 0,
+    open_at_cap: 0,
     nodes: 4,
     roots: 1,
     snapped_nodes: 2,
@@ -2283,6 +2283,8 @@ Deno.test("digcompSeedEdges: each level of a competence is a prereq of the next;
     { id: "c1", tags: t("search", "highly-advanced") },
     { id: "x1", tags: t("privacy", "basic") },
     { id: "x2", tags: t("privacy", "intermediate") },
+    // A merge at two levels sits at the lower one.
+    { id: "x3", tags: `${t("privacy", "advanced")},digcomp:level:basic` },
     { id: "plain", tags: "grade:3" },
   ]);
   // No advanced outcome of "search": intermediate and highly advanced stay
@@ -2291,6 +2293,7 @@ Deno.test("digcompSeedEdges: each level of a competence is a prereq of the next;
     "a1>b1",
     "a2>b1",
     "x1>x2",
+    "x3>x2",
   ]);
   let msg = "";
   try {

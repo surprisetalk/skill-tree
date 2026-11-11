@@ -221,8 +221,10 @@ async function stageStatus() {
     }],
     // A transitively reduced DAG drops a seed edge that a path implies: the
     // path keeps the seed's order, so the seed counts as kept.
+    // Stage postproc drops a subject area's edges on purpose, seeds included.
     ["At least 80% of seed edges survive into skills.tsv.", () => {
-      const all = seeds();
+      const areas = subjectAreas(skills());
+      const all = seeds().filter((e) => !areas.has(e.pre) && !areas.has(e.dep));
       const kept = all.filter((e) => above()(e.dep).has(e.pre));
       return grade(kept.length / all.length, 0.8, 0);
     }],

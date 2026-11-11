@@ -527,7 +527,7 @@ export function subjectAreas(
 ): Set<string> {
   const n = new Map<string, number>();
   for (const s of skills) {
-    for (const t of s.topics) n.set(t, (n.get(t) ?? 0) + 1);
+    for (const t of new Set(s.topics)) n.set(t, (n.get(t) ?? 0) + 1);
   }
   return new Set(
     skills.filter((s) => (n.get(s.id) ?? 0) >= SUBJECT_MIN).map((s) => s.id),
@@ -944,12 +944,12 @@ export function stagePostproc() {
     const areas = subjectAreas(
       [...skill].map(([id, s]) => ({ id, topics: [...s.topics] })),
     );
-    const before = final.length;
+    const gone = final.filter(([s, p]) => areas.has(s) || areas.has(p));
     final = final.filter(([s, p]) => !areas.has(s) && !areas.has(p));
     console.log(
-      `[postproc] subject areas: ${areas.size} skills, dropped ${
-        before - final.length
-      } edges`,
+      `[postproc] subject areas: ${areas.size} skills, dropped ${gone.length} edges (${
+        gone.filter(([s, p]) => isSeed(s, p)).length
+      } seed)`,
     );
   }
 
@@ -1483,6 +1483,8 @@ export function stageFinalize() {
 // lists each node's prereqs, and each prereq snaps to a skill of
 // 3b_tagged_deduped.tsv or becomes a new node. It runs on request only.
 const PILOT_ROOTS = "data/_pilot_roots.tsv";
+// Both caches key on the node, not the prompt: after a change to a prompt,
+// a schema, or EXPAND_MODEL, delete them, or the pilot reports old answers.
 const EXPAND_CACHE = `${BUILD}/pilot_expand.tsv`;
 const SNAP_CACHE = `${BUILD}/pilot_snap.tsv`;
 const PILOT_DEPTH_CAP = 30;
@@ -1523,9 +1525,25 @@ const SNAP_SCHEMA = {
 
 // The names of an expand reply, or null when a name is a sentence (over 8
 // words) or has no slug. The schema fixes the shape.
+// The cache joins names with "; " and reads "none" as no prereqs, so a ";"
+// splits a name, and a name "none" is no name.
 function parseExpand(raw: string): string[] | null {
-  const { prereqs } = JSON.parse(raw) as { prereqs: string[] };
-  const names = [...new Set(prereqs.map((n) => n.trim()).filter(Boolean))];
+  let reply: unknown;
+  try {
+    reply = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const prereqs = (reply as { prereqs?: unknown })?.prereqs;
+  if (!Array.isArray(prereqs) || prereqs.some((n) => typeof n !== "string")) {
+    return null;
+  }
+  const names = [
+    ...new Set(
+      (prereqs as string[]).flatMap((n) => n.split(/[;\t\r\n]/))
+        .map((n) => n.trim()).filter((n) => n && !/^none$/i.test(n)),
+    ),
+  ];
   if (names.some((n) => n.split(/\s+/).length > 8 || !slugify(n))) {
     return null;
   }
@@ -1642,9 +1660,9 @@ export async function stagePilot() {
     if (early(id)) leaf.set(id, "k-standard");
     return !early(id);
   });
-  // The report is written before the depth crash, so the crash carries data.
+  // The report is written before a cap crash, so the crash carries data.
   let capped: Error | null = null;
-  for (let depth = 0; frontier.length; depth++) {
+  grow: for (let depth = 0; frontier.length; depth++) {
     if (depth >= PILOT_DEPTH_CAP) {
       const path = pathTo(frontier[0]);
       capped = new Error(
@@ -1681,9 +1699,9 @@ export async function stagePilot() {
     const missing = frontier.filter((id) => !answers.has(id));
     if (missing.length) {
       throw new Error(
-        `pilot: expected an answer for every open node, received none for ${missing.length}, first "${
-          missing[0]
-        }". The model gave a name over 8 words, or a reply cut at max_tokens; the log above shows the first. Rerun to ask again; ${EXPAND_CACHE} keeps the rest.`,
+        `pilot: expected an answer for every open node, received none for ${missing.length}: ${
+          missing.slice(0, 5).join(", ")
+        }. The model gave a name over 8 words, or a reply cut at max_tokens; the log above shows the first. Rerun to ask again; ${EXPAND_CACHE} keeps the rest.`,
       );
     }
     const asked = frontier.map((id) => {
@@ -1732,9 +1750,16 @@ export async function stagePilot() {
           numPredict: 20,
           schema: SNAP_SCHEMA,
           clean: (raw, j) => {
-            const { match } = JSON.parse(raw) as { match: string };
+            let match: unknown;
+            try {
+              match = (JSON.parse(raw) as { match?: unknown })?.match;
+            } catch {
+              return "";
+            }
             if (match === "none") return "none";
-            return j.cands[Number(match) - 1] ?? "";
+            return typeof match === "string" && /^[1-9]\d?$/.test(match)
+              ? j.cands[Number(match) - 1] ?? ""
+              : "";
           },
         },
       );
@@ -1785,9 +1810,10 @@ export async function stagePilot() {
           via: dep,
         });
         if (nodes.size > PILOT_NODE_CAP) {
-          throw new Error(
-            `pilot: expected at most ${PILOT_NODE_CAP} nodes, received ${nodes.size} at depth ${depth}. The tree does not converge: read ${EXPAND_CACHE} for prereqs that are no simpler than their skill.`,
+          capped = new Error(
+            `pilot: expected at most ${PILOT_NODE_CAP} nodes, received ${nodes.size} at depth ${depth}. The tree does not converge: read ${EXPAND_CACHE} for prereqs that are no simpler than their skill; ${BUILD}/pilot_stats.json holds the report.`,
           );
+          break grow;
         }
         if (sid && early(sid)) leaf.set(id, "k-standard");
         else next.push(id);
@@ -1875,8 +1901,8 @@ export async function stagePilot() {
   const bandOf = new Map(built.map((s) => [s.id, s.difficulty]));
 
   writeStats("pilot", {
-    // Nodes still open when the depth cap stopped the run; 0 when it ended.
-    open_at_depth_cap: capped ? frontier.length : 0,
+    // Nodes still open when a cap stopped the run; 0 when it ended.
+    open_at_cap: capped ? frontier.length : 0,
     nodes: all.length,
     roots: roots.length,
     snapped_nodes: count("skill"),

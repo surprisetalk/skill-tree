@@ -325,7 +325,7 @@ A new build table gets a schema; a new id goes through `slugify`.
   sub-objectives; a title with no Latin letter is dropped and counted. Each
   DigComp LearningOutcome is one skill with tags `digcomp:outcome`,
   `digcomp:area:*`, `digcomp:competence:*`, and `digcomp:level:*`; stage
-  `difficulty` anchors the level at job zone 1-4. An OpenSALT item with no
+  `seed-edges` turns the levels into seed order. An OpenSALT item with no
   `educationLevel` takes its nearest `isChildOf` ancestor's. Each item of a
   framework that grades no item (SCED, Praxis) gets
   `opensalt:ungraded-framework`. OpenSALT statements parse as HTML with
@@ -339,7 +339,9 @@ A new build table gets a schema; a new id goes through `slugify`.
   `<…>` as text.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, course
   prerequisites, OpenSALT precedes, OpenSALT within-framework grade ordering,
-  Learning Commons `buildsTowards`. The last resolves through
+  Learning Commons `buildsTowards`, DigComp level order (within one competence,
+  each outcome of a level precedes each outcome of the next; a merged outcome
+  sits at its lowest level). Learning Commons resolves through
   `build/1m_lc_ids.tsv` and `3b_aliases.tsv`, not by label. A pair with an end
   that stage `list` dropped goes to `build/1e_unresolved.tsv` with reason
   `no-skill`. Pairs resolve to skill IDs by exact match, then by embedding
@@ -408,17 +410,20 @@ Columns:
   collision).
 - `display_title` — title truncated to ≤80 chars (or `code:XXX` tag for OpenSALT
   codes); for UIs that can't render long compliance statements.
-- `difficulty` — integer band 1-20 derived from grade anchors (OpenSALT
-  `educationLevel` + Khan V-Position) DigComp levels, and O\*NET job zones via
-  kNN smoothing and isotonic PAV calibration. One pass then puts each expert
-  seed prereq at least one band below its dependent. A skill with its own label
-  (grade, Khan position, DigComp level) sits in that label's band and never
-  moves; kNN sets the others, job-zone skills included. Pairs join in file order
-  while every skill still fits a band; a pair that cannot fit, or sits in a
-  cycle, is dropped and counted in `4_stats.json` (`seed_anchor_ties` when two
+- `difficulty` — integer band 1-20: when a typical learner can first learn the
+  skill. Grade anchors (OpenSALT `educationLevel`, Learning Commons and BNCC
+  grades) and Khan V-Position set it through kNN smoothing and isotonic PAV
+  calibration; job zones and DigComp levels anchor nothing. One pass then puts
+  each expert seed prereq at least one band below its dependent. A skill with
+  its own label (grade, Khan position) sits in that label's band and never
+  moves; kNN sets the others, workplace skills included. Pairs join in file
+  order while every skill still fits a band; a pair that cannot fit, or sits in
+  a cycle, is dropped and counted in `4_stats.json` (`seed_anchor_ties` when two
   anchors share a band, else `seed_anchor_conflicts`, per source in
   `seed_anchor_conflicts_by_source`). Stage `postproc` keeps every seed edge
-  either way, as an edge or as a path after the transitive reduction.
+  either way, as an edge or as a path after the transitive reduction, except an
+  edge that touches a subject area: a skill whose id is the topic of 50 or more
+  skills (`SUBJECT_MIN`) has no prereqs and no dependents.
 - `prereqs` — comma-separated prereq IDs. Strict DAG, no self-loops, all IDs
   resolve within the file.
 - `occupations` / `topics` — comma-separated slugs from embedding match +
