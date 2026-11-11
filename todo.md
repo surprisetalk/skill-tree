@@ -4,23 +4,21 @@ Each entry below is a `deno task status` condition that fails, or a stage that
 is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
-- [ ] No skill has a hex-overflow id. Today 96 (from 4,830 on 9 Nov).
-  1. List the 96 in `skills.tsv` (id of 70+ characters ending in a 6-hex
-     suffix). Expect two causes: a cached summary that still overflows 80
-     characters, and a row whose id carries a collision suffix, so `list` looks
-     up `slugify(title)` and misses its summary.
-  2. Ask again for a summary that overflows; key the lookup by the row's id.
+- [ ] No skill has a hex-overflow id. Today 38 (from 4,830 on 9 Nov).
+  1. List the 38 and their cause, as on 10 Nov: summary chains now apply, and a
+     summary over 15 words is asked again.
 
-- [ ] Difficulty bands agree with seeds. Build of 10 Nov: 130/3725 seed pairs
-      fail to fit bands 1–20 (3.5%, floor 1%; khan 36, learningcommons 30,
-      courses 24, foundation 13, opensalt_grade 12). The transitive-band
-      condition scores 0.96 (floor 95% of skills): a seed edge with its prereq
-      above its dependent puts every descendant below a transitive prereq, so
-      the conflicts drive both.
-  1. Print the conflicting Khan and Learning Commons pairs with both anchors (a
-     sample list in `4_stats.json`, like `grade_band_inversion_samples`).
-  2. Where the pair contradicts two grade anchors, decide per source which side
-     is wrong: drop the pair in `seed-edges`, or fix the anchor's tag.
+- [ ] Difficulty bands agree with seeds. Evening build of 10 Nov: 130/3725 seed
+      pairs fail to fit bands 1–20 (3.5%, floor 1%); the transitive-band
+      condition scores 0.997.
+  1. `seed_anchor_conflict_samples` in `build/4_stats.json` shows the cause: a
+     dependent pinned at K that is clearly later ("round decimals to any place",
+     grade 5, band 2). Merges give it a K-5 or K-8 span, and the lowest-grade
+     anchor pins it at K. The K-12 rule misses those spans.
+  2. Find the spans that cause it: count anchored skills by grade span, and by
+     the source of their lowest grade tag.
+  3. Fix at the source of the stray K tag, or anchor a wide span (over 4 grades)
+     at no grade, as Learning Commons components already are.
 
 - [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 11/258 positive
       LectureBank pairs (0.043) sit in the transitive closure; it needs 13.
