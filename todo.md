@@ -54,9 +54,10 @@ first for `enrich` and `prereq`).
 
 - [ ] Skills from every Common Standards Project (CSP) set appear in
       `skills.tsv`, after the performance entry above and your review. Decision:
-      every current, licensed set. Measured 10 Nov in side commit `lopuqmnx`:
-      967,098 leaf standards, 557,346 dropped as long titles, 173,895 merged by
-      key; `1_skills.tsv` grows from 95,375 to 364,519 rows (269,285 CSP only,
+      every current set. The 1,508 sets that state no licence count as permitted
+      for now (you, 10 Nov). Measured 10 Nov in side commit `lopuqmnx`: 967,098
+      leaf standards, 557,346 dropped as long titles, 173,895 merged by key;
+      `1_skills.tsv` grows from 95,375 to 364,519 rows (269,285 CSP only,
       252,501 with a grade tag).
   1. Rebase `lopuqmnx` onto main. It parses leaf standards of current sets,
      treats a parent as a heading, tags grades when a set names at most 4, and

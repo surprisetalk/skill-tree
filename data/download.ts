@@ -688,11 +688,6 @@ async function certAtlas() {
 // Cert Atlas. It costs a full recrawl whenever stage list needs another field.
 const CSP_API = "https://api.commonstandardsproject.com/api/v1";
 const CSP_DIR = DATA + "csp/";
-// REVIEW: A set whose `license.title` is empty (1,508 of 24,965) goes to this
-// gitignored folder, since the repo is public and the set grants no reuse.
-// Stage list reads only CSP_DIR. Alternative: commit every set. It
-// republishes standards that no licence covers.
-const CSP_UNLICENSED_DIR = DATA + "csp-unlicensed/";
 // The largest sets (2.7 MB) take 21 s on a quiet line.
 const CSP_TIMEOUT_MS = 120_000;
 // A small nonprofit host: keep the request rate low.
@@ -738,7 +733,6 @@ async function pool<T>(items: T[], fn: (t: T) => Promise<void>) {
 
 async function csp() {
   await mkdir(CSP_DIR);
-  await mkdir(CSP_UNLICENSED_DIR);
   const list = await cspGet("/jurisdictions") as unknown as { id: string }[];
   if (!Array.isArray(list) || !list.length) {
     throw new Error(
@@ -760,7 +754,7 @@ async function csp() {
     for (const s of j.standardSets as { id: string }[]) setIds.push(s.id);
   });
   console.log(`  ${list.length} jurisdictions, ${setIds.length} standard sets`);
-  let fetched = 0, skipped = 0, unlicensed = 0;
+  let fetched = 0, skipped = 0;
   const failed: string[] = [];
   const t0 = performance.now();
   await pool(setIds, async (id) => {
@@ -772,10 +766,8 @@ async function csp() {
         }: expected [A-Za-z0-9_-]. Update csp() in data/download.ts to map it to a safe file name.`,
       );
     }
-    const name = `${id}.json.gz`;
-    if (
-      await exists(CSP_DIR + name) || await exists(CSP_UNLICENSED_DIR + name)
-    ) {
+    const dest = `${CSP_DIR}${id}.json.gz`;
+    if (await exists(dest)) {
       skipped++;
       return;
     }
@@ -787,12 +779,7 @@ async function csp() {
       failed.push((e as Error).message);
       return;
     }
-    const licensed = Boolean((body.license as Json | undefined)?.title);
-    if (!licensed) unlicensed++;
-    await writeGzip(
-      (licensed ? CSP_DIR : CSP_UNLICENSED_DIR) + name,
-      JSON.stringify(body),
-    );
+    await writeGzip(dest, JSON.stringify(body));
     if (++fetched % 500 === 0) {
       console.log(
         `  ${fetched + skipped}/${setIds.length} sets, ${
@@ -801,9 +788,7 @@ async function csp() {
       );
     }
   });
-  console.log(
-    `  ${fetched} sets fetched (${unlicensed} with no licence, to ${CSP_UNLICENSED_DIR}), ${skipped} skipped (exist)`,
-  );
+  console.log(`  ${fetched} sets fetched, ${skipped} skipped (exist)`);
   if (failed.length) {
     throw new Error(
       `${failed.length} of ${setIds.length} CSP sets failed. First: ${
