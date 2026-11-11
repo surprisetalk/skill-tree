@@ -4,6 +4,34 @@ Each entry below is a `deno task status` condition that fails, or a stage that
 is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
+- [ ] A pilot shows whether an LLM can grow the tree top-down: 20 roots
+      decompose into prereqs, each prereq snaps to an existing skill when one
+      fits, and recursion stops at primitives like adding small numbers. Its
+      result decides the band, topic, and CSP entries below. Decision (you, 10
+      Nov): try generating the tree with LLMs, then correct and fill it from the
+      datasets.
+  1. Roots: 5 college courses (`data/courses`), 5 occupations (O*NET
+     `Occupation Data.txt`), 5 job descriptions (O*NET task lists of those
+     occupations), and 5 rows of `data/_sanity.tsv`. Commit the list in
+     `data/_pilot_roots.tsv`.
+  2. Expand: one Claude call per skill returns at most 8 strictly required
+     prereqs, the same "must be understood first" rule as `PREREQ_PROMPT`. Cache
+     each answer by skill, as `resumableClaude` does.
+  3. Snap: for each prereq, shortlist the 10 nearest skills of
+     `3b_tagged_deduped.tsv` by embedding, then one Claude call answers which
+     one names the same skill, or none. Only "none" makes a new node.
+  4. Stop at a skill that snaps to a K or grade-1 standard, or that gets no
+     prereq. Depth over 30 crashes with the root, the path, and the depth.
+  5. Reject an edge that closes a cycle, and count it.
+  6. Report in `build/pilot_stats.json`: nodes, the share snapped vs new, depth
+     to a leaf per root, rejected cycles, expert precision and recall on pairs
+     both ends of which the pilot reached, and the sanity skills' depth beside
+     their expected grades.
+  7. Stop for review with the report and the overview page updated. If new nodes
+     stay a modest share and chains reach K standards, plan the switch: stages
+     `list` to `dedupe` build the snap vocabulary, and the expansion replaces
+     `prereq` and `difficulty`.
+
 - [ ] A skill's band says when a typical learner can first learn it. Today a job
       zone anchors a workplace skill at 11.5 + 1.5 × zone, so even zone 1
       ("little or no preparation") sits above grade 12: 37,409 skills (41%) are
