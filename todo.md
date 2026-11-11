@@ -4,51 +4,37 @@ Each entry below is a `deno task status` condition that fails, or a stage that
 is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
-- [ ] A skill's band says when a typical learner can first learn it. Today a job
-      zone anchors a workplace skill at 11.5 + 1.5 × zone, so even zone 1 sits
-      above grade 12, and kNN pulls ungraded concepts up (`arithmetic` band 11).
-      Decision (you, 10 Nov): neither high-school nor workplace skills are
-      strictly that level.
-  1. Stage `difficulty`: drop job-zone anchors. Workplace skills get kNN bands
-     from school anchors plus the seed order.
-  2. DigComp levels stop anchoring at the job-zone scale. Emit level order
-     (basic before intermediate before advanced, per competence) as seeds.
-  3. Rerun from `difficulty`; `prereq` re-asks picks that drift. Compare the
-     band chart, the Pythagorean slice, and every status condition. The sanity
-     set (`data/_sanity.tsv`) is the scoreboard: goal 80%. Do not tune to it;
-     add skills instead.
+- [ ] A skill's band says when a typical learner can first learn it. Job zones
+      and DigComp levels no longer anchor; 12/23 sanity skills fit (goal 80%).
+      Most misses sit at band 11-12: 42k unanchored skills pile into band 11,
+      because kNN averages 15 neighbors (weight cos²) toward the high-school
+      mean (`drawing` K-2 at band 10, `machine-learning` at 11).
+  1. In stage `difficulty`, print the band histogram of unanchored skills beside
+     anchored ones, and the share of each band's skills set by the global
+     fallback.
+  2. Cut the averaging: fewer neighbors, or a steeper weight. Keep the change
+     whose anchored-skill τ and miss rate hold. Do not tune to the sanity set;
+     add skills to it instead.
 
-- [ ] A subject area is a topic, not a skill. 224 skills have an id that 50+
-      skills use as a topic (`problem-solving`, `geometry`, `mathematics`); as
-      prereqs they add edges like `mathematics → arithmetic` that order nothing.
-  1. In stage `postproc`, drop such a skill from the prereq graph (keep it as a
-     topic). Note the cutoff of 50 next to the code as a decision.
-  2. Add a status condition: no skill whose id is a topic of 50+ skills has a
-     dependent.
-  3. Clean titles that carry source markup ("_With modeling, prompting, and
-     support_ ..."): two are top-5 hubs.
-
-- [ ] No skill has a hex-overflow id. Cause: a cached summary that still
-      overflowed 80 slug characters never left the cache. Enrich now drops it
-      and asks again.
-  1. Rerun `enrich`, then `list`, until no id in `1_skills.tsv` carries a hex
-     suffix; then the full chain from `list`.
+- [ ] No skill has a hex-overflow id. Today 9. Haiku reworded their titles
+      without shortening them; the summarize prompt now names a list by its
+      category, and a probe fit all 9.
+  1. Run the chain from `enrich`, then check that `1_skills.tsv` has no id with
+     a hex suffix.
 
 - [ ] Difficulty bands agree with seeds: under 1% of seed pairs fail to fit
-      bands 1–20.
-  1. `seed_anchor_conflict_samples` in `build/4_stats.json` shows the cause: a
-     dependent pinned at K that is clearly later ("round decimals to any place",
-     grade 5, band 2). Merges give it a K-5 or K-8 span, and the lowest-grade
-     anchor pins it at K.
-  2. Count anchored skills by grade span, and by the source of their lowest
-     grade tag.
-  3. Fix at the source of the stray K tag, or anchor a wide span (over 4 grades)
-     at no grade, as Learning Commons components already are.
+      bands 1–20. Today 76/5,876 (1.3%): khan 34, learningcommons 13, foundation
+      10, opensalt_grade 8, courses 7.
+  1. Read `seed_anchor_conflict_samples` in `build/4_stats.json` per source.
+     Khan pairs such as
+     `add-within-20(3) > solving-addition-and-subtraction-word-problems(2)` come
+     from a merge of a K and a grade-1 standard; fix the merge or the anchor at
+     its source.
 
-- [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 11/258 positive
-      LectureBank pairs sit in the transitive closure; it needs 13.
-  1. Of the missed positives, most have the prereq outside the dependent's
-     candidate pool and share no topic with it. Cosine slots buy about 5 pairs.
+- [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 7/258 positive
+      LectureBank pairs sit in the transitive closure (11 before the band
+      change); it needs 13.
+  1. List the 4 pairs that the band change lost, and their candidate pools.
   2. Widen the pool with a cross-topic slot for foundation skills
      (`probability`, `linear-algebra`) that many dependents share.
   3. A new pool reaches cached skills only after a clear of
@@ -58,9 +44,10 @@ first for `enrich` and `prereq`).
       skills, about 290k grade anchors. Today `difficulty` and the `prereq`
       candidate pools scan skills times anchors. Decision (you, 10 Nov):
       performance first, then a review together, then all of CSP.
-  1. Time each part of `difficulty` (kNN, PAV, seed pass) and of
-     `computePrereqCandidates` (topic pool, full-scan fallback, cross-topic
-     pool). Print the timings in each stage log.
+  1. Timings at 93k (stage logs print them): `difficulty` kNN 326 s of 326 s,
+     with 19,003 skills on the global fallback over 30k anchors. Candidates:
+     cosine top 744 s, cross-topic 271 s, topic pool 32 s, full scan 27 s;
+     27,613 of 93,485 skills take the full scan.
   2. Bound the scans that grow as skills times skills: the kNN global fallback
      and the candidate full-scan fallback. A topic or token index, or a bounded
      random sample of anchors, keeps the output close. Check that the 93k bands
