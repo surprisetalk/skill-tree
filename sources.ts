@@ -1685,7 +1685,7 @@ export async function stageEnrich() {
     SUMMARIZE_CACHE,
     sumTargets,
     (t) =>
-      `Extract the core skill as a concise 3-7 word noun phrase of at most 70 characters. Extract only concepts present in the input; do not add or assume. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n\nStandard: ${t.title}\n\nName:`,
+      `Extract the core skill as a concise 3-7 word noun phrase of at most 70 characters. Extract only concepts present in the input; do not add or assume. Name a list of items by its category. Output only the phrase — no preamble, no quotes, no trailing period. Examples:\n"Use place value understanding to round multi-digit whole numbers." → Rounding multi-digit whole numbers\n"Draw triangles with given conditions." → Drawing triangles with given conditions\n"Overhaul or replace carburetors, blowers, generators, distributors, starters, and pumps." → Overhauling engine components\n\nStandard: ${t.title}\n\nName:`,
     {
       numPredict: 60,
       clean: (raw) => {
