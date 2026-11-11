@@ -206,6 +206,12 @@ const goodBuild = (): Fixture => {
       "id\ttitle\tdescription\tsources\ttags\naddition\tAddition\t\topensalt\tgrade:1\nlicensure\tLicensure\t\topensalt\topensalt:ungraded-framework\n",
     "build/1e_seed_edges.tsv":
       "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback\ncounting\taddition\tkhan\t1.00\t0\t0\n",
+    "build/6_edges.tsv": [
+      "skill_id\tprereq_id",
+      ...skills.filter(([, , pre]) => pre).map(([id, , pre]) =>
+        `${id}\t${pre}`
+      ),
+    ].join("\n") + "\n",
     "build/2_ids.tsv": skills.map(([id]) => id).join("\n") + "\n",
     "build/2_embeddings.bin": new Uint8Array(emb.buffer),
     "build/3b_aliases.tsv": "dropped_id\tcanonical_id\n",
@@ -307,10 +313,11 @@ Deno.test(
     build["skills.tsv"] += defects.map(([id, band, pre]) =>
       [id, id, id, "", band, pre, "", "", "", ""].join("\t")
     ).join("\n") + "\n";
-    // french-i rose from band 1 to 5 in the chain lift.
     build["build/4_difficulty.tsv"] += defects.map(([id, band]) =>
-      `${id}\t${id === "french-i" ? 1 : band}\t${band}\t0\n`
+      `${id}\t${band}\t${band}\t0\n`
     ).join("");
+    // The chain lift dropped calculus ← biology.
+    build["build/6_edges.tsv"] += "calculus\tbiology\n";
     // Seeds: counting > addition is an edge, counting > multiplication is a
     // path, and calculus > counting is neither.
     build["build/1e_seed_edges.tsv"] +=
@@ -330,9 +337,9 @@ Deno.test(
       score("No language skill has another language as a prereq."),
       1 - 1 / 11,
     );
-    assert(
-      score("Under 1% of skills rise more than 3 bands in the chain lift.")! <
-        1,
+    assertEquals(
+      score("Under 10% of postproc edges drop in the chain lift."),
+      1 - (1 / 6 - 0.1) / 0.9,
     );
     assertEquals(
       score("Addition is a transitive prereq of multiplication."),
@@ -570,6 +577,7 @@ const finalBuild = (): Fixture => {
     "build/1k_dbpedia_tree.tsv": "addition\tarithmetic\n",
     "build/5b_expand.tsv": "counting\tnone\n",
     "build/5c_snap.tsv": "number-sense\tnone\n",
+    "build/1e_seed_edges.tsv": seedHeader,
   };
 };
 
@@ -684,23 +692,28 @@ Deno.test("postproc: a subject area is no prereq of a skill inside it, seed edge
 const namedP = [0, 1].map((anchored) =>
   early(() => {
     const b = finalBuild();
-    b["build/3b_tagged_deduped.tsv"] +=
-      "calculus\tCalculus\tThe arithmetic skill calculus.\tfoundation\tgrade:1\t\tarithmetic,mathematics\n";
+    b["build/3b_tagged_deduped.tsv"] += ["calculus", "latin", "french-i"].map((
+      id,
+    ) =>
+      `${id}\t${id}\tThe skill ${id}.\tfoundation\tgrade:1\t\tarithmetic,mathematics\n`
+    ).join("");
     b["build/4_difficulty.tsv"] =
       (b["build/4_difficulty.tsv"] as string).replace(
         "addition\t2\t2\t0",
         `addition\t2\t2\t${anchored}`,
-      ) + "calculus\t4\t4\t0\n";
+      ) + "calculus\t4\t4\t0\nlatin\t1\t1\t0\nfrench-i\t3\t3\t0\n";
     return runIn("postproc", {
       ...b,
       "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\taddition\n",
-      "build/5b_expand.tsv": "addition\tCalculus; Ghost Skill\n",
-      "build/5c_snap.tsv": "calculus\tcalculus\nghost-skill\tnone\n",
+      "build/5b_expand.tsv":
+        "addition\tCalculus; Ghost Skill\nfrench-i\tLatin\n",
+      "build/5c_snap.tsv":
+        "calculus\tcalculus\nghost-skill\tnone\nlatin\tlatin\n",
       "build/1e_seed_edges.tsv": seedHeader,
     }, ["build/6_edges.tsv"]);
   })
 );
-Deno.test("postproc: a named prereq of an unanchored skill skips the easier guard", async () => {
+Deno.test("postproc: a named prereq of an unanchored skill skips the easier guard; a cross-language one drops", async () => {
   const [free, anchored] = await Promise.all(namedP.map((p) => p()));
   assertEquals(free.code, 0, free.stderr);
   assertEquals(
@@ -775,32 +788,47 @@ Deno.test(
   }),
 );
 
-// counting ← addition ← multiplication, all in band 5. Unanchored, each skill
-// sits a band above its prereq. An anchored multiplication caps the chain
-// below it.
+// counting ← addition ← multiplication. Unanchored, each skill sits a band
+// above its prereq. An anchored multiplication caps the chain below it. A lift
+// past LIFT_CAP (3) drops the edge, unless the edge is a seed.
 Deno.test(
-  "finalize: the chain lift puts a skill above its prereq, below an anchored dependent",
+  "finalize: the chain lift orders bands under anchors and the cap, or drops the edge",
   early(async () => {
-    const bands = async (mult: string) => {
+    const lift = async (rows: string, seeds = "") => {
       const build = finalBuild();
       build["build/4_difficulty.tsv"] =
-        "id\tdifficulty\tdifficulty_raw\tanchored\n" +
-        `counting\t5\t5\t0\naddition\t5\t5\t0\nmultiplication\t${mult}\n`;
+        "id\tdifficulty\tdifficulty_raw\tanchored\n" + rows;
+      build["build/1e_seed_edges.tsv"] += seeds;
       const { code, stderr, files } = await runIn("finalize", build);
       assertEquals(code, 0, stderr);
       return files["skills.tsv"].split("\n").slice(1).filter((l) => l)
-        .map((l) => l.split("\t")).map((c) => `${c[0]} ${c[4]}`).sort();
+        .map((l) => l.split("\t")).map((c) => `${c[0]} ${c[4]} ${c[5]}`)
+        .sort();
     };
-    assertEquals(await bands("5\t5\t0"), [
-      "addition 6",
-      "counting 5",
-      "multiplication 7",
+    const u = (c: number, a: number, m: string) =>
+      `counting\t${c}\t${c}\t0\naddition\t${a}\t${a}\t0\nmultiplication\t${m}\n`;
+    assertEquals(await lift(u(5, 5, "5\t5\t0")), [
+      "addition 6 counting",
+      "counting 5 ",
+      "multiplication 7 addition",
     ]);
-    assertEquals(await bands("6\t6\t1"), [
-      "addition 5",
-      "counting 5",
-      "multiplication 6",
+    assertEquals(await lift(u(5, 5, "6\t6\t1")), [
+      "addition 5 counting",
+      "counting 5 ",
+      "multiplication 6 addition",
     ]);
+    assertEquals(await lift(u(9, 5, "5\t5\t0")), [
+      "addition 5 ",
+      "counting 9 ",
+      "multiplication 6 addition",
+    ]);
+    assertEquals(
+      await lift(
+        u(9, 5, "5\t5\t0"),
+        "counting\taddition\tkhan\t1.00\t0\t0\n",
+      ),
+      ["addition 8 counting", "counting 9 ", "multiplication 8 addition"],
+    );
   }),
 );
 

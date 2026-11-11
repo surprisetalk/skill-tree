@@ -367,11 +367,11 @@ big pools), then the LLM picks true prerequisites. Then Claude names each
 skill's prereqs (`5b_expand.tsv`), and each name snaps to a skill: an exact
 match, else Claude picks from the name's 10 nearest skills (`5c_snap.tsv`, keyed
 by name slug). Stage `postproc` adds these named edges; one whose dependent has
-no anchor skips the easier-than check, and the chain lift orders its bands.
-Resumable via the three caches; a row that names an id outside the build, or a
-pick no easier than its skill, drops, and its prompt goes out again.
-`SKIP_LLM=1` reuses the caches, less the stale rows, for a regression build
-without the generator.
+no anchor skips the easier-than check, and the chain lift orders its bands. One
+across two languages drops. Resumable via the three caches; a row that names an
+id outside the build, or a pick no easier than its skill, drops, and its prompt
+goes out again. `SKIP_LLM=1` reuses the caches, less the stale rows, for a
+regression build without the generator.
 
 **Merge step** (stage `dedupe`): token-sort signature merge + per-topic
 Jaccard+cosine merge + Learning Commons candidates (a Learning Commons row and
@@ -433,7 +433,8 @@ Columns:
   `SUBJECT_MIN`) to a skill that carries it as a topic. Stage `finalize` then
   lifts along the final edges: an unanchored skill sits at least one band above
   each prereq, and below each anchored skill above it, so a long chain carries a
-  skill past grade 12.
+  skill past grade 12. The lift moves a skill at most 3 bands (`LIFT_CAP`); an
+  edge it cannot order drops, except a seed.
 - `prereqs` — comma-separated prereq IDs. Strict DAG, no self-loops, all IDs
   resolve within the file.
 - `occupations` / `topics` — comma-separated slugs from embedding match +

@@ -5,35 +5,23 @@ is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
 - [ ] A skill's band says when a typical learner can first learn it. Today 10/23
-      sanity skills fit (goal 80%). 42k unanchored skills pile into band 11: no
-      anchor sits above grade 12. Decision (you, 11 Nov): no college-level
-      anchors; long chains carry skills past 12. Stage `finalize` now lifts each
-      unanchored skill a band above its prereqs. On the 11 Nov graph it moves
-      21k skills 1-2 bands and no sanity row: chains are short
-      (`machine-learning ← economic-statistics ← numeracy`). Recall builds them.
-  1. After the recall entry lands, rebuild and read the sanity rows again.
+      sanity skills fit (goal 80%). Decision (you, 11 Nov): no college-level
+      anchors; long chains carry skills past 12. The chain lift only raises a
+      band, and most misses sit too high: their kNN band puts early skills in
+      the band-11 pile (`drawing` 10 for K-2, `grammar` 13, `nutrition` 12).
+  1. Print the kNN neighbours and weights of the 13 missed rows; find why an
+     early skill borrows a high band.
   2. Correct the sanity rows only if a row is wrong, as the `REVIEW:` note in
      `pipeline.ts` asks; never to fit the build.
 
-- [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 6/258; it
-      needs 13. Retrieval cannot reach cross-domain prereqs. Trial (11 Nov,
-      Haiku 5.5, scratch caches): Claude names up to 8 prereqs per skill, each
-      snaps to a skill. On the 85 dependents of the 252 missed pairs it named 28
-      expert prereqs; 14 pass the `easier` guard. Of its picks that hit an
-      annotated LectureBank pair, 29 are positive and 37 negative. On 85 control
-      skills, 70% of names snap, and the samples read right
-      (`thermodynamics →
-      develop-energy-saving-concepts`).
-  1. The guard blocks half the picks, 90% of them with an unanchored dependent
-     in the band-11 pile, and all 14 lost expert pairs. Let a named prereq of an
-     unanchored skill skip the guard; the chain lift then orders the bands. Keep
-     the guard when the dependent has an anchor.
-  2. Add the expand-and-snap source to stage `prereq`: its picks join the
-     candidate picks in `5_prereqs.tsv`. Cache snaps by name slug, so names
-     repeat for free.
-  3. A full run sends about 3× the input tokens of a prereq re-ask (3.5k in, 400
-     out per skill). Then rebuild and score recall, precision, and the sanity
-     rows.
+- [ ] A named prereq never puts a specialisation before its general skill.
+      Expert precision is 7/24 (floor 0.25), and samples read backwards:
+      `nutrition ← medical-nutrition-therapy`, `music-theory ← songwriting`,
+      `drawing ← academic-writing`.
+  1. Count the named edges whose dependent's slug tokens sit inside the prereq's
+     (`nutrition` in `medical-nutrition-therapy`); read 30.
+  2. If most are wrong, drop them in stage `postproc` next to the hypernym
+     filter, and rescore precision and recall.
 
 - [ ] A full build finishes in under 2 hours of compute at the CSP scale: 364k
       skills, about 290k grade anchors. Decision (you, 10 Nov): performance

@@ -7,8 +7,8 @@ import {
   ancestorsOf,
   BUILD,
   col,
-  DIFFICULTY,
   easier,
+  EDGES,
   EMBED_DIM,
   embeddingFallback,
   expertScores,
@@ -219,22 +219,16 @@ async function stageStatus() {
       );
       return grade(done.length / labels.size, 1, 0);
     }],
-    // A wrong edge lifts every skill above it (finalize's chain lift). A
-    // 3-band lift moves a skill from middle school to high school.
-    ["Under 1% of skills rise more than 3 bands in the chain lift.", () => {
-      const d = readDifficulty();
-      const far = skills().filter((s) => {
-        const before = d.get(s.id);
-        if (!before) {
-          throw new Error(
-            `skills.tsv: expected skill "${s.id}" in ${DIFFICULTY.path}, received none. The files come from different runs: ${
-              rerun(DIFFICULTY.path)
-            }, then every later stage.`,
-          );
-        }
-        return s.band - before.band > 3;
-      });
-      return grade(far.length / skills().length, 0.01, 1);
+    // A wrong edge lifts every skill above it. Stage finalize caps the lift at
+    // 3 bands and drops each edge it cannot order, so many drops mean noisy
+    // edges.
+    ["Under 10% of postproc edges drop in the chain lift.", () => {
+      const m = byId();
+      const edges = readTable(EDGES);
+      const gone = edges.filter((e) =>
+        !m.get(e.skill_id)?.prereqs.includes(e.prereq_id)
+      );
+      return grade(gone.length / edges.length, 0.10, 1);
     }],
     ["Under 10% of seed edges put the prereq in a higher band.", () => {
       const m = byId();

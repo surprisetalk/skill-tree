@@ -888,6 +888,16 @@ export function stagePostproc() {
     } leaf-pattern edges (${leafExempt} seed exempt)`,
   );
 
+  // Candidate generation drops a cross-language pair; a named prereq skips it.
+  const beforeLang = raw.length;
+  raw = raw.filter(([s, p]) => {
+    const ls = langTokenOf(s), lp = langTokenOf(p);
+    return !ls || !lp || ls === lp || isSeed(s, p);
+  });
+  console.log(
+    `[postproc] dropped ${beforeLang - raw.length} cross-language edges`,
+  );
+
   // Filter 0: band-inverted
   let bandExempt = 0;
   const beforeBand = raw.length;
@@ -1427,6 +1437,10 @@ export function stagePostproc() {
 
 // ---------- stage finalize ----------
 
+// The chain lift moves an unanchored skill at most 3 bands: middle school to
+// high school.
+const LIFT_CAP = 3;
+
 export function stageFinalize() {
   const skills = readTable(TAGGED_DEDUPED);
   const dm = readDifficulty();
@@ -1518,12 +1532,31 @@ export function stageFinalize() {
     }
     ceiling.set(id, Math.max(c, d.band));
   }
+  // REVIEW: An edge the lift cannot order drops: its prereq ends above the
+  // dependent's ceiling or cap. Seeds stay. Each drop counts in status. The
+  // transitive reduction ran before this step, so a dropped edge also loses
+  // each edge its path implied. Alternative: keep the edge inverted; one
+  // inverted edge puts every skill above it below a transitive prereq.
+  const seedKeys = new Set(readSeeds().map((e) => `${e.dep}\t${e.pre}`));
   const diff = new Map<string, number>();
+  let unfit = 0;
   for (const id of order) {
-    let b = bandOf(id).band;
-    for (const p of prereqs.get(id) ?? []) b = Math.max(b, diff.get(p)! + 1);
-    diff.set(id, Math.min(b, ceiling.get(id)!));
+    const d = bandOf(id);
+    const top = d.anchored
+      ? d.band
+      : Math.min(ceiling.get(id)!, d.band + LIFT_CAP);
+    const kept: string[] = [];
+    for (const p of prereqs.get(id) ?? []) {
+      if (diff.get(p)! <= top || seedKeys.has(`${id}\t${p}`)) kept.push(p);
+      else unfit++;
+    }
+    if (kept.length) prereqs.set(id, kept);
+    else prereqs.delete(id);
+    let b = d.band;
+    for (const p of kept) b = Math.max(b, diff.get(p)! + 1);
+    diff.set(id, Math.min(b, top));
   }
+  console.log(`[finalize] chain lift dropped ${unfit} edges it cannot order`);
 
   // Framework/wiki-category filters (module-scope FRAMEWORK_RE, WIKI_CAT_RE, YEAR_RE)
   const STOP = new Set([...STOPWORDS, "these", "those"]);
