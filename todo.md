@@ -4,6 +4,30 @@ Each entry below is a `deno task status` condition that fails, or a stage that
 is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
+- [ ] A skill's band says when a typical learner can first learn it. Today a job
+      zone anchors a workplace skill at 11.5 + 1.5 × zone, so even zone 1
+      ("little or no preparation") sits above grade 12: 37,409 skills (41%) are
+      in band 14+, and their kNN pulls ungraded concepts up (`arithmetic` band
+      11, `line-segment` 9). Decision (you, 10 Nov): neither high-school nor
+      workplace skills are strictly that level.
+  1. Stage `difficulty`: drop job-zone anchors. Workplace skills get kNN bands
+     from school anchors plus the seed order.
+  2. DigComp levels stop anchoring at the job-zone scale. Emit level order
+     (basic before intermediate before advanced, per competence) as seeds.
+  3. Rerun from `difficulty`; `prereq` re-asks picks that drift. Compare the
+     band chart, the Pythagorean slice, and every status condition.
+
+- [ ] A subject area is a topic, not a skill. 224 skills have an id that 50+
+      skills use as a topic (`problem-solving` 4,799, `geometry`, `science`,
+      `management`, `mathematics`); as prereqs they add edges like
+      `mathematics → arithmetic` that order nothing.
+  1. In stage `postproc`, drop such a skill from the prereq graph (keep it as a
+     topic). Note the cutoff of 50 next to the code as a decision.
+  2. Add a status condition: no skill whose id is a topic of 50+ skills has a
+     dependent.
+  3. Also clean titles that carry source markup ("_With modeling, prompting, and
+     support_ ..."): two are top-5 hubs.
+
 - [ ] No skill has a hex-overflow id. Today 38 (from 4,830 on 9 Nov).
   1. List the 38 and their cause, as on 10 Nov: summary chains now apply, and a
      summary over 15 words is asked again.
