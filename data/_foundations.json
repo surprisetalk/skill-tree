@@ -3,7 +3,7 @@
     {"id": "counting", "title": "Counting", "description": "Say number names in order and match each name to one object to find how many objects a set holds.", "grade_start": -1, "grade_end": 0},
     {"id": "addition", "title": "Addition", "description": "Combine two or more quantities into one total, from joining small sets of objects to multi-digit sums.", "grade_start": 0, "grade_end": 2},
     {"id": "subtraction", "title": "Subtraction", "description": "Find the difference between two quantities or how many remain after some are taken away.", "grade_start": 0, "grade_end": 2},
-    {"id": "place-value", "title": "Place value", "description": "Read the value of a digit from its position in a number, such as ones, tens, hundreds, and tenths.", "grade_start": 1, "grade_end": 4},
+    {"id": "place-value", "title": "Place value", "description": "Read the value of a digit from its position in a number, such as ones, tens, hundreds, and tenths.", "grade_start": 0, "grade_end": 4},
     {"id": "multiplication", "title": "Multiplication", "description": "Find the total of equal-sized groups, as repeated addition, arrays, and area models.", "grade_start": 2, "grade_end": 4},
     {"id": "division", "title": "Division", "description": "Split a quantity into equal groups, or find how many equal groups a quantity holds.", "grade_start": 3, "grade_end": 5},
     {"id": "fractions", "title": "Fractions", "description": "Represent parts of a whole or of a set as a numerator over a denominator, and compare and combine them.", "grade_start": 3, "grade_end": 6},

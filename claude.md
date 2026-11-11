@@ -371,9 +371,10 @@ regression build without the generator.
 **Merge step** (stage `dedupe`): token-sort signature merge + per-topic
 Jaccard+cosine merge + Learning Commons candidates (a Learning Commons row and
 an OpenSALT row that share a `code:*` tag, cosine ≥ 0.90; a
-`hasStandardAlignment` pair, cosine ≥ 0.96). Canonical ID = shortest title.
-Dropped IDs become aliases in `3b_aliases.tsv`; stages `postproc` and `finalize`
-remap edges through it.
+`hasStandardAlignment` pair, cosine ≥ 0.96). Two groups whose `grade:*` tags
+share no grade never merge: they are two steps of a progression. Canonical ID =
+shortest title. Dropped IDs become aliases in `3b_aliases.tsv`; stages
+`postproc` and `finalize` remap edges through it.
 
 ### data/download.ts — Dataset Downloader
 
@@ -424,7 +425,10 @@ Columns:
   `seed_anchor_conflicts_by_source`). Stage `postproc` keeps every seed edge
   either way, as an edge or as a path after the transitive reduction, except an
   edge from a subject area (a skill whose id is the topic of 50 or more skills,
-  `SUBJECT_MIN`) to a skill that carries it as a topic.
+  `SUBJECT_MIN`) to a skill that carries it as a topic. Stage `finalize` then
+  lifts along the final edges: an unanchored skill sits at least one band above
+  each prereq, and below each anchored skill above it, so a long chain carries a
+  skill past grade 12.
 - `prereqs` — comma-separated prereq IDs. Strict DAG, no self-loops, all IDs
   resolve within the file.
 - `occupations` / `topics` — comma-separated slugs from embedding match +
@@ -452,9 +456,9 @@ Caches for per-stage resumption. Key files:
 - `2_embeddings.bin` (float32 × 768 × N), `2_ids.tsv`, `2_pathological.tsv` (ids
   whose vectors collide), `2_cache.bin` (SHA256 → vector).
 - `3_tagged.tsv`, then `3b_tagged_deduped.tsv` and `3b_aliases.tsv`.
-- `4_difficulty.tsv` (id, band, raw), `4_stats.json` (anchor agreement and seed
-  counts, read by stage `status`). `raw` ignores seeds; only `band` holds the
-  seed order.
+- `4_difficulty.tsv` (id, band, raw, anchored), `4_stats.json` (anchor agreement
+  and seed counts, read by stage `status`). `raw` ignores seeds; only `band`
+  holds the seed order, and `skills.tsv` adds the chain lift.
 - `5_prereqs.tsv` — LLM picks: `skill<TAB>p1,p2` or `skill<TAB>none`.
 - `6_edges.tsv` — post-processed DAG edges (skill_id, prereq_id), transitively
   reduced: no edge is implied by a path of other edges.

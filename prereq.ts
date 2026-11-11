@@ -150,6 +150,57 @@ const FOUNDATION_IDS = new Set([
   "probability",
 ]);
 
+// REVIEW: An inverted-file index bounds the cosine top of a pool over
+// IVF_EXACT_MAX skills, and of the full scan: a query scans the members of its
+// IVF_PROBE nearest lists. On 938 of 93,795 skills it cut the cosine top from
+// 9.4 s to 1.3 s; mean pool Jaccard vs exact 0.966, 826 pools identical. The
+// index builds in 55 s. Alternative: HNSW (hnswlib-node), a native npm addon
+// and a new dependency; or exact scans, which grow with skills squared.
+const IVF_EXACT_MAX = 4000;
+const IVF_PROBE = 24;
+const IVF_ITERATIONS = 8;
+// Spherical k-means: √n lists, centroids from a stride sample, then trained
+// on at most 50 vectors per list.
+function ivfIndex(vecs: Float32Array, n: number) {
+  const C = Math.max(1, Math.round(Math.sqrt(n)));
+  const cent = new Float32Array(C * EMBED_DIM);
+  for (let c = 0; c < C; c++) {
+    const off = Math.floor(c * n / C) * EMBED_DIM;
+    cent.set(vecs.subarray(off, off + EMBED_DIM), c * EMBED_DIM);
+  }
+  const nearest = (i: number) => {
+    let best = 0, bestSc = -Infinity;
+    const off = i * EMBED_DIM;
+    for (let c = 0; c < C; c++) {
+      let sc = 0;
+      const cOff = c * EMBED_DIM;
+      for (let d = 0; d < EMBED_DIM; d++) sc += vecs[off + d] * cent[cOff + d];
+      if (sc > bestSc) [best, bestSc] = [c, sc];
+    }
+    return best;
+  };
+  const step = Math.max(1, Math.floor(n / (50 * C)));
+  for (let it = 0; it < IVF_ITERATIONS; it++) {
+    const sum = new Float64Array(C * EMBED_DIM);
+    for (let i = 0; i < n; i += step) {
+      const c = nearest(i), off = i * EMBED_DIM, cOff = c * EMBED_DIM;
+      for (let d = 0; d < EMBED_DIM; d++) sum[cOff + d] += vecs[off + d];
+    }
+    for (let c = 0; c < C; c++) {
+      const cOff = c * EMBED_DIM;
+      let norm = 0;
+      for (let d = 0; d < EMBED_DIM; d++) norm += sum[cOff + d] ** 2;
+      // An empty list keeps its centroid.
+      if (norm === 0) continue;
+      norm = Math.sqrt(norm);
+      for (let d = 0; d < EMBED_DIM; d++) cent[cOff + d] = sum[cOff + d] / norm;
+    }
+  }
+  const lists: number[][] = Array.from({ length: C }, () => []);
+  for (let i = 0; i < n; i++) lists[nearest(i)].push(i);
+  return { cent, lists };
+}
+
 function computePrereqCandidates(): Map<string, number[]> {
   const { skills, diff, raw } = parseSkillsWithDifficulty();
   const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
@@ -167,10 +218,22 @@ function computePrereqCandidates(): Map<string, number[]> {
   }
   const pathological = new Set(readTable(PATHOLOGICAL).map((r) => r.id));
   const K = 15;
-  const ANCESTOR_K = 5;
-  const GLOBAL_K = 5;
   // Shorter tokens ("prepar") link prepare-medication to prepare-pasta.
   const TOK_MIN = 7;
+  // Each long topic token → the topics that hold it, in topicIdx order, so a
+  // skill finds its cross-topic pool without a pass over every topic.
+  const topicsOfTok = new Map<string, number[]>();
+  const topicList = [...topicIdx.values()];
+  [...topicIdx.keys()].forEach((t, ti) => {
+    for (const tok of new Set(t.split("-"))) {
+      if (tok.length < TOK_MIN) continue;
+      const arr = topicsOfTok.get(tok) ?? [];
+      arr.push(ti);
+      topicsOfTok.set(tok, arr);
+    }
+  });
+  const ANCESTOR_K = 5;
+  const GLOBAL_K = 5;
   // A skill whose only topics are framework slugs becomes a phantom hub in the
   // global pool.
   const frameworkOnly = new Uint8Array(skills.length);
@@ -215,6 +278,13 @@ function computePrereqCandidates(): Map<string, number[]> {
     return raw[j] < raw[i] || diff[j] < diff[i]; // DR1 hard guard, as `easier`
   };
 
+  const tIvf = performance.now();
+  const ivf = ivfIndex(vecs, skills.length);
+  console.log(
+    `[prereq] ivf: ${ivf.lists.length} lists in ${
+      ((performance.now() - tIvf) / 1000).toFixed(1)
+    } s`,
+  );
   const out = new Map<string, number[]>();
   const t0 = performance.now();
   // Seconds per part, summed over skills: the CSP scale needs the slow one.
@@ -262,7 +332,8 @@ function computePrereqCandidates(): Map<string, number[]> {
       for (const j of arr) if (candOk(i, j) && withinTopicOk(j)) pool.add(j);
     }
     lap("topic_pool");
-    let cands: number[];
+    // null: every skill that passes candOk.
+    let cands: number[] | null;
     if (pool.size >= K) cands = [...pool];
     else if (
       skills[i].sources.split(",").filter(Boolean).length >= 2 && pool.size < 3
@@ -270,8 +341,7 @@ function computePrereqCandidates(): Map<string, number[]> {
       // M1: multi-source skill with sparse pool — skip global fallback, let LLM say "none"
       cands = [...pool];
     } else {
-      cands = [];
-      for (let j = 0; j < skills.length; j++) if (candOk(i, j)) cands.push(j);
+      cands = null;
       fullScans++;
     }
     lap("full_scan");
@@ -308,8 +378,8 @@ function computePrereqCandidates(): Map<string, number[]> {
     const top: { idx: number; score: number }[] = [];
     const globalTop: { idx: number; score: number }[] = [];
     const inTopicSlots = Math.max(1, K - ancestorSet.size - GLOBAL_K);
-    for (const j of cands) {
-      if (ancestorSet.has(j)) continue;
+    const consider = (j: number) => {
+      if (ancestorSet.has(j)) return;
       let sc = 0;
       const aOff = j * EMBED_DIM;
       for (let d = 0; d < EMBED_DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];
@@ -320,6 +390,29 @@ function computePrereqCandidates(): Map<string, number[]> {
         top[0] = { idx: j, score: sc };
         top.sort((a, b) => a.score - b.score);
       }
+    };
+    if (cands && cands.length <= IVF_EXACT_MAX) cands.forEach(consider);
+    else {
+      const inPool = cands ? new Set(cands) : null;
+      const cs = new Float32Array(ivf.lists.length);
+      for (let c = 0; c < cs.length; c++) {
+        let sc = 0;
+        const cOff = c * EMBED_DIM;
+        for (let d = 0; d < EMBED_DIM; d++) {
+          sc += vecs[sOff + d] * ivf.cent[cOff + d];
+        }
+        cs[c] = sc;
+      }
+      const order = [...cs.keys()].sort((a, b) => cs[b] - cs[a]);
+      for (
+        let k = 0;
+        k < order.length && (k < IVF_PROBE || top.length < inTopicSlots);
+        k++
+      ) {
+        for (const j of ivf.lists[order[k]]) {
+          if (inPool ? inPool.has(j) : candOk(i, j)) consider(j);
+        }
+      }
     }
     top.sort((a, b) => b.score - a.score);
     lap("cosine_top");
@@ -329,17 +422,13 @@ function computePrereqCandidates(): Map<string, number[]> {
       i,
     ]);
     if (GLOBAL_K > 0 && (topics.length > 0 || skills[i].occupations)) {
+      const crossTopics = new Set<number>();
+      for (const tok of myToks) {
+        for (const ti of topicsOfTok.get(tok) ?? []) crossTopics.add(ti);
+      }
       const crossPool = new Set<number>();
-      for (const [ot, oi] of topicIdx) {
-        let shared = false;
-        for (const tok of ot.split("-")) {
-          if (tok.length >= TOK_MIN && myToks.has(tok)) {
-            shared = true;
-            break;
-          }
-        }
-        if (!shared) continue;
-        for (const j of oi) crossPool.add(j);
+      for (const ti of [...crossTopics].sort((a, b) => a - b)) {
+        for (const j of topicList[ti]) crossPool.add(j);
       }
       for (const j of crossPool) {
         if (picked.has(j)) continue;
@@ -1162,9 +1251,9 @@ export function stagePostproc() {
 
 export function stageFinalize() {
   const skills = readTable(TAGGED_DEDUPED);
-  const diff = new Map([...readDifficulty()].map(([id, d]) => [id, d.band]));
+  const dm = readDifficulty();
   const skillIdSet = new Set<string>(skills.map((s) => s.id));
-  [...diff.keys()].forEach((id, i) => {
+  [...dm.keys()].forEach((id, i) => {
     if (!skillIdSet.has(id)) {
       throw new Error(
         `${DIFFICULTY.path}:${i + 2}: expected a skill id, received "${id}". ${
@@ -1204,6 +1293,57 @@ export function stageFinalize() {
     if (!arr.includes(p)) arr.push(p);
     prereqs.set(s, arr);
   });
+
+  // REVIEW: Chain lift. In prereq order, an unanchored skill sits at least one
+  // band above each prereq, and below each anchored skill that depends on it
+  // through a chain. A long chain then carries a skill past grade 12 with no
+  // anchor there: algebra (8) → linear algebra → regression → neural networks
+  // (12+). Alternative: college-level anchors (you, 11 Nov: no). Risk: one
+  // wrong edge lifts each skill above it, so status bounds the lifts.
+  const order = topoOrder(
+    skills.map((s) => ({ id: s.id, prereqs: prereqs.get(s.id) ?? [] })),
+  );
+  if (order.length !== skills.length) {
+    throw new Error(
+      `${edgesPath}: expected a DAG over ${skills.length} skills, received a cycle through ${
+        skills.length - order.length
+      } of them. ${rerun(edgesPath)}`,
+    );
+  }
+  const bandOf = (id: string) => {
+    const d = dm.get(id);
+    if (d === undefined) {
+      throw new Error(
+        `${DIFFICULTY.path}: expected a row for skill "${id}", received none. ${
+          rerun(DIFFICULTY.path)
+        }`,
+      );
+    }
+    return d;
+  };
+  const dependents = new Map<string, string[]>();
+  for (const [s, ps] of prereqs) {
+    for (const p of ps) dependents.set(p, [...dependents.get(p) ?? [], s]);
+  }
+  // The highest band each skill may take: one below its lowest anchored
+  // dependent through any chain, and never below its own band.
+  const ceiling = new Map<string, number>();
+  for (const id of order.toReversed()) {
+    const d = bandOf(id);
+    let c = d.anchored ? d.band : 20;
+    if (!d.anchored) {
+      for (const x of dependents.get(id) ?? []) {
+        c = Math.min(c, ceiling.get(x)! - 1);
+      }
+    }
+    ceiling.set(id, Math.max(c, d.band));
+  }
+  const diff = new Map<string, number>();
+  for (const id of order) {
+    let b = bandOf(id).band;
+    for (const p of prereqs.get(id) ?? []) b = Math.max(b, diff.get(p)! + 1);
+    diff.set(id, Math.min(b, ceiling.get(id)!));
+  }
 
   // Framework/wiki-category filters (module-scope FRAMEWORK_RE, WIKI_CAT_RE, YEAR_RE)
   const STOP = new Set([...STOPWORDS, "these", "those"]);
@@ -1282,8 +1422,7 @@ export function stageFinalize() {
   const TOPIC_CAP = 5;
   for (const s of skills) {
     if (isOrphanLeaf(s.id) && isCruft(s)) continue;
-    const d = diff.get(s.id);
-    if (d === undefined) throw new Error(`skill ${s.id} missing difficulty`);
+    const d = diff.get(s.id)!;
     const ps = (prereqs.get(s.id) ?? []).join(",");
     const existing = s.topics.split(",").filter(Boolean);
     const skillTokens = sigTokens(s.id);
@@ -1476,16 +1615,9 @@ export function stageFinalize() {
       `finalize: expected every prereq to name an emitted skill, received ${violations} that do not (first 5 above). skills.tsv is unchanged. Rerun: deno run -A pipeline.ts postproc`,
     );
   }
-  const graph = pending.map((r) => ({
-    id: r.id,
-    prereqs: r.ps ? r.ps.split(",") : [],
-  }));
-  const ordered = topoOrder(graph).length;
-  if (!pending.length || ordered < pending.length) {
+  if (!pending.length) {
     throw new Error(
-      `finalize: expected a DAG of at least one skill, received ${pending.length} skills of which ${
-        pending.length - ordered
-      } sit on or below a cycle. skills.tsv is unchanged. Rerun: deno run -A pipeline.ts postproc`,
+      `finalize: expected at least one skill, received none after the cruft drop. skills.tsv is unchanged. Check isCruft against ${TAGGED_DEDUPED.path}.`,
     );
   }
 

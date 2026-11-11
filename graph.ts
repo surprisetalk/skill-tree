@@ -6,7 +6,6 @@ import {
   DIFFICULTY,
   EMBED_DIM,
   embedBatch,
-  gradeToDifficulty,
   IDS,
   isJunkTopic,
   LC_IDS,
@@ -32,6 +31,7 @@ import {
   Tagged,
   TAGGED_DEDUPED,
   TAGGED_RAW,
+  tagGrades,
   TOPIC_REFS,
   topoOrder,
   writeStats,
@@ -556,13 +556,7 @@ export async function stageTag() {
   for (let i = 0; i < skills.length; i++) {
     const s = skills[i];
     // Khan and low-grade OpenSALT skills get no occupation.
-    const grades: number[] = [];
-    for (const m of s.tags.matchAll(/grade:([^,]+)/g)) {
-      for (const part of m[1].split(".")) {
-        const d = gradeToDifficulty(part);
-        if (d !== null) grades.push(d);
-      }
-    }
+    const grades = tagGrades(s.tags);
     const maxGrade = grades.length ? Math.max(...grades) : -1;
     const khanSlug = /^khan-|-khan-|-khan$/.test(s.id) ||
       s.title.toLowerCase().startsWith("khan");
@@ -822,10 +816,21 @@ export function stageDedupe() {
     }
     return out;
   };
+  // Each group's lowest grade, NaN for none. Two standards that start at
+  // different grades are two steps of a progression ("word problems within
+  // 20", grade 1; "within 100", grade 2), not one skill: the merge would anchor
+  // both at the lower grade, since a band starts at the lowest grade.
+  const lowest = rows.map((r) => Math.min(...tagGrades(r.tags)));
+  let gradeBlocked = 0;
   function union(a: number, b: number): boolean {
     const ra = find(a), rb = find(b);
     if (ra === rb) return false;
     if (antonymClash(rows[ra].title, rows[rb].title)) return false;
+    const la = lowest[ra], lb = lowest[rb];
+    if (Number.isFinite(la) && Number.isFinite(lb) && la !== lb) {
+      gradeBlocked++;
+      return false;
+    }
     const sa = sourceCount(rows[ra]);
     const sb = sourceCount(rows[rb]);
     let keep: number;
@@ -853,6 +858,7 @@ export function stageDedupe() {
       else keep = rows[ra].title.length <= rows[rb].title.length ? ra : rb;
     }
     parent[keep === ra ? rb : ra] = keep;
+    lowest[keep] = Math.min(lowest[ra], lowest[rb]);
     return true;
   }
 
@@ -1041,7 +1047,9 @@ export function stageDedupe() {
       dropped++;
     }
   }
-  console.log(`[dedupe] survivors=${survivors}, dropped=${dropped}`);
+  console.log(
+    `[dedupe] survivors=${survivors}, dropped=${dropped}, blocked ${gradeBlocked} by lowest grade`,
+  );
 
   const groupBy = new Map<number, number[]>();
   for (let i = 0; i < rows.length; i++) {
@@ -1243,13 +1251,7 @@ export function stageDifficulty() {
   anchor.fill(Number.NaN);
   let gradeAnchored = 0, khanAnchored = 0;
   for (let i = 0; i < skills.length; i++) {
-    const grades: number[] = [];
-    for (const m of skills[i].tags.matchAll(/grade:([^,]+)/g)) {
-      for (const part of m[1].split(".")) {
-        const d = gradeToDifficulty(part);
-        if (d !== null) grades.push(d);
-      }
-    }
+    const grades = tagGrades(skills[i].tags);
     // REVIEW: Every grade from K to 12 says "all grades": no anchor, and kNN
     // sets the band. Such a skill is a broad topic ("history") merged with
     // school standards, and the lowest grade would pin it at K. Alternative:
@@ -1621,7 +1623,12 @@ export function stageDifficulty() {
 
   writeTable(
     DIFFICULTY,
-    skills.map((s, i) => [s.id, String(band[i]), out[i].toFixed(4)]),
+    skills.map((s, i) => [
+      s.id,
+      String(band[i]),
+      out[i].toFixed(4),
+      Number.isNaN(anchor[i]) ? "0" : "1",
+    ]),
   );
 
   lap("seeds");
@@ -1653,13 +1660,7 @@ export function stageDifficulty() {
   let gradeAnchoredSkills = 0, inversions = 0, worstInversion = 0;
   const invSamples: string[] = [];
   for (let i = 0; i < skills.length; i++) {
-    const grades: number[] = [];
-    for (const m of skills[i].tags.matchAll(/grade:([^,]+)/g)) {
-      for (const part of m[1].split(".")) {
-        const d = gradeToDifficulty(part);
-        if (d !== null) grades.push(d);
-      }
-    }
+    const grades = tagGrades(skills[i].tags);
     if (!grades.length) continue;
     // A K-12 span sets no anchor, so the audit skips it.
     if (Math.max(...grades) - Math.min(...grades) >= K_TO_12) continue;

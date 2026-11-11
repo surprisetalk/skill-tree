@@ -216,8 +216,8 @@ const goodBuild = (): Fixture => {
       ),
     ].join("\n") + "\n",
     "build/4_difficulty.tsv": [
-      "id\tdifficulty\tdifficulty_raw",
-      ...skills.map(([id, band]) => `${id}\t${band}\t${band}`),
+      "id\tdifficulty\tdifficulty_raw\tanchored",
+      ...skills.map(([id, band]) => `${id}\t${band}\t${band}\t0`),
     ].join("\n") + "\n",
     "build/4_stats.json": JSON.stringify({
       kendall_tau_vs_anchor: 0.8,
@@ -297,15 +297,20 @@ Deno.test(
   "status: graph defects score below 1 and exit 1",
   early(async () => {
     const build = goodBuild();
-    build["skills.tsv"] += [
+    const defects = [
       ["german-i", 4, "counting"],
       ["french-i", 5, "german-i"],
       ["loop-a", 6, "loop-b"],
       ["loop-b", 6, "loop-a"],
       ["self", 6, "self,ghost"],
-    ].map(([id, band, pre]) =>
+    ];
+    build["skills.tsv"] += defects.map(([id, band, pre]) =>
       [id, id, id, "", band, pre, "", "", "", ""].join("\t")
     ).join("\n") + "\n";
+    // french-i rose from band 1 to 5 in the chain lift.
+    build["build/4_difficulty.tsv"] += defects.map(([id, band]) =>
+      `${id}\t${id === "french-i" ? 1 : band}\t${band}\t0\n`
+    ).join("");
     // Seeds: counting > addition is an edge, counting > multiplication is a
     // path, and calculus > counting is neither.
     build["build/1e_seed_edges.tsv"] +=
@@ -324,6 +329,10 @@ Deno.test(
     assertEquals(
       score("No language skill has another language as a prereq."),
       1 - 1 / 11,
+    );
+    assert(
+      score("Under 1% of skills rise more than 3 bands in the chain lift.")! <
+        1,
     );
     assertEquals(
       score("Addition is a transitive prereq of multiplication."),
@@ -457,17 +466,17 @@ Deno.test(
       ],
       [
         "build/4_difficulty.tsv",
-        "id\tdifficulty\tdifficulty_raw\na\t1\tx\n",
+        "id\tdifficulty\tdifficulty_raw\tanchored\na\t1\tx\t0\n",
         'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received "x"',
       ],
       [
         "build/4_difficulty.tsv",
-        "id\tdifficulty\tdifficulty_raw\na\t1\t 7\n",
+        "id\tdifficulty\tdifficulty_raw\tanchored\na\t1\t 7\t0\n",
         'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received " 7"',
       ],
       [
         "build/4_difficulty.tsv",
-        "id\tdifficulty\tdifficulty_raw\na\t1\t0x10\n",
+        "id\tdifficulty\tdifficulty_raw\tanchored\na\t1\t0x10\t0\n",
         'build/4_difficulty.tsv:2: expected difficulty_raw as a finite number, received "0x10"',
       ],
       [
@@ -551,8 +560,8 @@ const finalBuild = (): Fixture => {
       ),
     ].join("\n") + "\n",
     "build/4_difficulty.tsv": [
-      "id\tdifficulty\tdifficulty_raw",
-      ...ids.map((id, i) => `${id}\t${i + 1}\t${i + 1}`),
+      "id\tdifficulty\tdifficulty_raw\tanchored",
+      ...ids.map((id, i) => `${id}\t${i + 1}\t${i + 1}\t0`),
     ].join("\n") + "\n",
     "build/3b_aliases.tsv": "dropped_id\tcanonical_id\n",
     "build/6_edges.tsv":
@@ -644,7 +653,7 @@ const subjectP = early(() => {
     ...fillers.map((id) => `${id}\t${id}\t\tfoundation\t\t\tmathematics`),
   ].join("\n") + "\n";
   b["build/4_difficulty.tsv"] += ["mathematics", ...fillers].map((id) =>
-    `${id}\t1\t0.5\n`
+    `${id}\t1\t0.5\t0\n`
   ).join("");
   return runIn("postproc", {
     ...b,
@@ -706,7 +715,7 @@ Deno.test(
       ],
       [
         "build/4_difficulty.tsv",
-        "counting\t1\t1\n",
+        "counting\t1\t1\t0\n",
         'build/4_difficulty.tsv:5: expected unique id, received a second "counting"',
       ],
     ];
@@ -724,6 +733,35 @@ Deno.test(
   }),
 );
 
+// counting ← addition ← multiplication, all in band 5. Unanchored, each skill
+// sits a band above its prereq. An anchored multiplication caps the chain
+// below it.
+Deno.test(
+  "finalize: the chain lift puts a skill above its prereq, below an anchored dependent",
+  early(async () => {
+    const bands = async (mult: string) => {
+      const build = finalBuild();
+      build["build/4_difficulty.tsv"] =
+        "id\tdifficulty\tdifficulty_raw\tanchored\n" +
+        `counting\t5\t5\t0\naddition\t5\t5\t0\nmultiplication\t${mult}\n`;
+      const { code, stderr, files } = await runIn("finalize", build);
+      assertEquals(code, 0, stderr);
+      return files["skills.tsv"].split("\n").slice(1).filter((l) => l)
+        .map((l) => l.split("\t")).map((c) => `${c[0]} ${c[4]}`).sort();
+    };
+    assertEquals(await bands("5\t5\t0"), [
+      "addition 6",
+      "counting 5",
+      "multiplication 7",
+    ]);
+    assertEquals(await bands("6\t6\t1"), [
+      "addition 5",
+      "counting 5",
+      "multiplication 6",
+    ]);
+  }),
+);
+
 // A topic that is not a slug passes the reader, which checks tags as text.
 Deno.test(
   "finalize: a bad cell in the output stops the write and keeps the old file",
@@ -736,7 +774,7 @@ Deno.test(
         `${id}\t${id}\td\tfoundation\tgrade:1\t\tBad Topic`
       ),
     ].join("\n") + "\n";
-    build["build/4_difficulty.tsv"] += "calculus\t4\t4\n";
+    build["build/4_difficulty.tsv"] += "calculus\t4\t4\t0\n";
     const { code, stderr, files } = await runIn("finalize", build);
     assert(
       code !== 0 &&
@@ -802,7 +840,7 @@ Deno.test(
         "4_difficulty",
         withFiles(finalBuild(), {
           "build/4_difficulty.tsv":
-            "id\tdifficulty\tdifficulty_raw\ncounting\t1\t1\naddition\t2\t2\nmultiplication\t21\t3\n",
+            "id\tdifficulty\tdifficulty_raw\tanchored\ncounting\t1\t1\t0\naddition\t2\t2\t0\nmultiplication\t21\t3\t0\n",
         }),
         'build/4_difficulty.tsv:4: expected difficulty as an integer 1–20, received "21". Run: deno run -A pipeline.ts difficulty',
       ],
@@ -882,7 +920,7 @@ Deno.test(
         "4_difficulty ids",
         withFiles(finalBuild(), {
           "build/4_difficulty.tsv": finalBuild()["build/4_difficulty.tsv"] +
-            "ghost\t4\t4\n",
+            "ghost\t4\t4\t0\n",
         }),
         'build/4_difficulty.tsv:5: expected a skill id, received "ghost". Run: deno run -A pipeline.ts difficulty',
       ],
@@ -1409,7 +1447,7 @@ Deno.test("readCoursePairs: a truncated gzip names the file to delete, because t
 
 // Embeddings: one orthogonal axis per group, so a group of rows shares a vector.
 Deno.test(
-  "dedupe: a shared code:* tag across OpenSALT and Learning Commons, or an alignment edge, makes a candidate that the cosine test decides",
+  "dedupe: a shared code:* tag across OpenSALT and Learning Commons, or an alignment edge, makes a candidate that the cosine test decides; standards that start at different grades never merge",
   async () => {
     const skills: [string, string, string, string, number][] = [
       // id, title, sources, tags, vector axis
@@ -1443,6 +1481,20 @@ Deno.test(
         "",
         3,
       ],
+      [
+        "os-g1",
+        "Solve word problems within 20",
+        "opensalt",
+        "code:OA.2,grade:01,grade:02",
+        5,
+      ],
+      [
+        "lc-g2",
+        "Solve word problems within 100",
+        "learningcommons",
+        "code:OA.2,grade:02",
+        5,
+      ],
       ["lc-c", "Recite the months of the year", "learningcommons", "", 4],
       ["lc-d", "Name the days of a week", "learningcommons", "", 4],
     ];
@@ -1468,7 +1520,8 @@ Deno.test(
     }, ["build/3b_aliases.tsv"]);
     assertEquals(code, 0, stderr);
     // The code pair and the alignment pair merge. The pair with a far vector and
-    // the unaligned pair with one vector stay apart.
+    // the unaligned pair with one vector stay apart, and so does the code pair
+    // of grades 1–2 and grade 2: they share grade 2 but start apart.
     const pairs = files["build/3b_aliases.tsv"].split("\n").slice(1)
       .filter((l) => l).map((l) => l.split("\t").sort().join("+")).sort();
     assertEquals(pairs, ["lc-a+lc-b", "lc-code+os-code"]);

@@ -1351,7 +1351,12 @@ export const ALIASES = table({
 export const DIFFICULTY = table({
   path: `${BUILD}/4_difficulty.tsv`,
   key: "id",
-  columns: { id: SLUG, difficulty: int(1, 20), difficulty_raw: finite },
+  columns: {
+    id: SLUG,
+    difficulty: int(1, 20),
+    difficulty_raw: finite,
+    anchored: bit,
+  },
 });
 export const EDGES = table({
   path: `${BUILD}/6_edges.tsv`,
@@ -1505,11 +1510,16 @@ export const easier = (
   s: { band: number; raw: number } | undefined,
 ): boolean => !!p && !!s && (p.raw < s.raw || p.band < s.band);
 
-export function readDifficulty(): Map<string, { band: number; raw: number }> {
+export function readDifficulty(): Map<
+  string,
+  { band: number; raw: number; anchored: boolean }
+> {
   return new Map(
-    readTable(DIFFICULTY).map((
-      r,
-    ) => [r.id, { band: r.difficulty, raw: r.difficulty_raw }]),
+    readTable(DIFFICULTY).map((r) => [r.id, {
+      band: r.difficulty,
+      raw: r.difficulty_raw,
+      anchored: r.anchored,
+    }]),
   );
 }
 
@@ -1723,6 +1733,18 @@ export function resolveConcept(
   if (idx.idSet.has(rawSlug)) return rawSlug;
   if (idx.slugToId.has(rawSlug)) return idx.slugToId.get(rawSlug)!;
   return null;
+}
+
+// Every grade:* tag of a skill, as difficulty values. "grade:09.10" names two.
+export function tagGrades(tags: string): number[] {
+  const out: number[] = [];
+  for (const m of tags.matchAll(/grade:([^,]+)/g)) {
+    for (const part of m[1].split(".")) {
+      const d = gradeToDifficulty(part);
+      if (d !== null) out.push(d);
+    }
+  }
+  return out;
 }
 
 export function gradeToDifficulty(token: string): number | null {

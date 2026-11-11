@@ -57,6 +57,18 @@ first for `enrich` and `prereq`).
      stage. Ollama must embed about 269k new titles first.
   4. Stop for the review with the timings and the new status numbers.
 
+- [ ] Stages `prereq` and `pilot` classify with Cloudflare Clef where it beats
+      Haiku 5.5 on accuracy or cost. Clef is a decision model (Apache 2.0, on
+      Workers AI or self-hosted): it answers up to 64 typed questions in one
+      pass, as probabilities over fixed choices.
+  1. Confirm the facts on Cloudflare's own model card and Workers AI pricing:
+     the question limit, the choice format, and the price per 1k calls.
+  2. Try the snap step first: one question, choices `none` and `1`–`10`. Compare
+     with the Haiku answers in `build/pilot_snap.tsv`.
+  3. Then the prereq pick: one yes/no question per candidate (15 per call). A
+     probability gives a cut point; score it with LectureBank precision and
+     recall.
+
 ## Blocked on you
 
 - [ ] Skills from every Common Standards Project (CSP) set appear in

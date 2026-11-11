@@ -7,6 +7,7 @@ import {
   ancestorsOf,
   BUILD,
   col,
+  DIFFICULTY,
   easier,
   EMBED_DIM,
   embeddingFallback,
@@ -217,6 +218,23 @@ async function stageStatus() {
         isTranslation(translations.get(l))
       );
       return grade(done.length / labels.size, 1, 0);
+    }],
+    // A wrong edge lifts every skill above it (finalize's chain lift). A
+    // 3-band lift moves a skill from middle school to high school.
+    ["Under 1% of skills rise more than 3 bands in the chain lift.", () => {
+      const d = readDifficulty();
+      const far = skills().filter((s) => {
+        const before = d.get(s.id);
+        if (!before) {
+          throw new Error(
+            `skills.tsv: expected skill "${s.id}" in ${DIFFICULTY.path}, received none. The files come from different runs: ${
+              rerun(DIFFICULTY.path)
+            }, then every later stage.`,
+          );
+        }
+        return s.band - before.band > 3;
+      });
+      return grade(far.length / skills().length, 0.01, 1);
     }],
     ["Under 10% of seed edges put the prereq in a higher band.", () => {
       const m = byId();
