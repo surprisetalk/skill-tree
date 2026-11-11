@@ -539,21 +539,28 @@ export async function stagePrereq() {
 // ---------- stage postproc ----------
 
 // REVIEW: A skill is a subject area when its id is the topic of 50 or more
-// skills: 224 on 10 Nov (problem-solving 4,799, geometry, mathematics). The
-// cutoff is your decision of 10 Nov. Alternative: a hand list of subject
-// areas. It misses a new one until someone adds it.
+// skills (problem-solving, geometry, mathematics); the cutoff is your decision
+// of 10 Nov. An edge drops when its prereq is a subject area and its dependent
+// carries that area as a topic: "mathematics → arithmetic" orders nothing.
+// "linear-algebra → dimensionality-reduction" stays. Alternative: drop every
+// edge of a subject area, as todo.md first said. Then 59 of the 258 expert
+// positives (linear-algebra → word-embedding, …) can never be recalled.
+// Topics come from 3b_tagged_deduped.tsv: stage finalize adds LCSH ancestors
+// after this stage, and the areas must not move under the filter.
 export const SUBJECT_MIN = 50;
 
-export function subjectAreas(
+export function subjectAreaEdge(
   skills: { id: string; topics: string[] }[],
-): Set<string> {
+): (dep: string, pre: string) => boolean {
   const n = new Map<string, number>();
+  const topicsOf = new Map<string, Set<string>>();
   for (const s of skills) {
-    for (const t of new Set(s.topics)) n.set(t, (n.get(t) ?? 0) + 1);
+    const ts = new Set(s.topics);
+    topicsOf.set(s.id, ts);
+    for (const t of ts) n.set(t, (n.get(t) ?? 0) + 1);
   }
-  return new Set(
-    skills.filter((s) => (n.get(s.id) ?? 0) >= SUBJECT_MIN).map((s) => s.id),
-  );
+  return (dep, pre) =>
+    (n.get(pre) ?? 0) >= SUBJECT_MIN && (topicsOf.get(dep)?.has(pre) ?? false);
 }
 
 export function stagePostproc() {
@@ -959,17 +966,16 @@ export function stagePostproc() {
     `[postproc] seeds: added=${seedAdded}, dup=${seedDup}, missing=${seedMissing}`,
   );
 
-  // A subject area is a topic, not a skill: "mathematics → arithmetic" orders
-  // nothing. A skill whose id names the topic of SUBJECT_MIN skills leaves the
-  // graph, seed edges included, and stays a topic.
+  // A subject area is no prereq of a skill inside it (SUBJECT_MIN), seed
+  // edges included.
   {
-    const areas = subjectAreas(
+    const areaEdge = subjectAreaEdge(
       [...skill].map(([id, s]) => ({ id, topics: [...s.topics] })),
     );
-    const gone = final.filter(([s, p]) => areas.has(s) || areas.has(p));
-    final = final.filter(([s, p]) => !areas.has(s) && !areas.has(p));
+    const gone = final.filter(([s, p]) => areaEdge(s, p));
+    final = final.filter(([s, p]) => !areaEdge(s, p));
     console.log(
-      `[postproc] subject areas: ${areas.size} skills, dropped ${gone.length} edges (${
+      `[postproc] subject areas: dropped ${gone.length} edges (${
         gone.filter(([s, p]) => isSeed(s, p)).length
       } seed)`,
     );

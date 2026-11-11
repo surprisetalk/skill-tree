@@ -423,8 +423,8 @@ Columns:
   anchors share a band, else `seed_anchor_conflicts`, per source in
   `seed_anchor_conflicts_by_source`). Stage `postproc` keeps every seed edge
   either way, as an edge or as a path after the transitive reduction, except an
-  edge that touches a subject area: a skill whose id is the topic of 50 or more
-  skills (`SUBJECT_MIN`) has no prereqs and no dependents.
+  edge from a subject area (a skill whose id is the topic of 50 or more skills,
+  `SUBJECT_MIN`) to a skill that carries it as a topic.
 - `prereqs` — comma-separated prereq IDs. Strict DAG, no self-loops, all IDs
   resolve within the file.
 - `occupations` / `topics` — comma-separated slugs from embedding match +

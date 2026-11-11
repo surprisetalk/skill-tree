@@ -209,6 +209,12 @@ const goodBuild = (): Fixture => {
     "build/2_ids.tsv": skills.map(([id]) => id).join("\n") + "\n",
     "build/2_embeddings.bin": new Uint8Array(emb.buffer),
     "build/3b_aliases.tsv": "dropped_id\tcanonical_id\n",
+    "build/3b_tagged_deduped.tsv": [
+      "id\ttitle\tdescription\tsources\ttags\toccupations\ttopics",
+      ...skills.map(([id, , , occ, top]) =>
+        [id, id, "", "test", "", occ, top].join("\t")
+      ),
+    ].join("\n") + "\n",
     "build/4_difficulty.tsv": [
       "id\tdifficulty\tdifficulty_raw",
       ...skills.map(([id, band]) => `${id}\t${band}\t${band}`),
@@ -627,8 +633,9 @@ Deno.test("postproc: keeps direct prereqs only, with every closure unchanged", a
   );
 });
 
-// "mathematics" names the topic of 50 skills: a subject area. Its LLM edge and
-// its seed edge both leave the graph.
+// "mathematics" names the topic of 50 skills: a subject area. As a prereq of
+// addition and multiplication, both inside it, its LLM edge and its seed edge
+// leave the graph.
 const subjectP = early(() => {
   const b = finalBuild();
   const fillers = Array.from({ length: 50 }, (_, i) => `filler-${i}`);
@@ -647,7 +654,7 @@ const subjectP = early(() => {
       "mathematics\tmultiplication\tcourses\t1.00\t0\t0\n",
   }, ["build/6_edges.tsv"]);
 });
-Deno.test("postproc: a subject area leaves the graph, seed edges included", async () => {
+Deno.test("postproc: a subject area is no prereq of a skill inside it, seed edges included", async () => {
   const out = await subjectP();
   assertEquals(out.code, 0, out.stderr);
   assertEquals(

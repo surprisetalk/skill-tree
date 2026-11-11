@@ -29,6 +29,7 @@ import {
   SKILL_LIST,
   skillIndex,
   SKILLS_OUT,
+  TAGGED_DEDUPED,
   topoOrder,
   TRANSLATE_CACHE,
 } from "./lib.ts";
@@ -39,7 +40,7 @@ import {
   stagePostproc,
   stagePrereq,
   SUBJECT_MIN,
-  subjectAreas,
+  subjectAreaEdge,
 } from "./prereq.ts";
 import {
   stageEnrich,
@@ -108,6 +109,15 @@ async function stageStatus() {
   let aboveFn: ((id: string) => Set<string>) | undefined;
   const above = () =>
     aboveFn ??= ancestorsOf(new Map(skills().map((s) => [s.id, s.prereqs])));
+  // The topics stage postproc filtered by, not the ones finalize adds.
+  let areaEdgeFn: ((dep: string, pre: string) => boolean) | undefined;
+  const areaEdge = () =>
+    areaEdgeFn ??= subjectAreaEdge(
+      readTable(TAGGED_DEDUPED).map((r) => ({
+        id: r.id,
+        topics: r.topics.split(",").filter(Boolean),
+      })),
+    );
   const stat = (key: string, file = "4_stats.json"): number => {
     const path = `${BUILD}/${file}`;
     const v = (readJson(need(path)) as Record<string, unknown>)[key];
@@ -223,8 +233,7 @@ async function stageStatus() {
     // path keeps the seed's order, so the seed counts as kept.
     // Stage postproc drops a subject area's edges on purpose, seeds included.
     ["At least 80% of seed edges survive into skills.tsv.", () => {
-      const areas = subjectAreas(skills());
-      const all = seeds().filter((e) => !areas.has(e.pre) && !areas.has(e.dep));
+      const all = seeds().filter((e) => !areaEdge()(e.dep, e.pre));
       const kept = all.filter((e) => above()(e.dep).has(e.pre));
       return grade(kept.length / all.length, 0.8, 0);
     }],
@@ -382,10 +391,11 @@ async function stageStatus() {
       return grade(fit.length / (rows.length - 1), 0.8, 0);
     }],
     [
-      `No subject area (the id of a topic of ${SUBJECT_MIN}+ skills) is a prereq.`,
+      `No subject area (the id of a topic of ${SUBJECT_MIN}+ skills) is a prereq of a skill inside it.`,
       () => {
-        const areas = subjectAreas(skills());
-        const bad = skills().filter((s) => s.prereqs.some((p) => areas.has(p)));
+        const bad = skills().filter((s) =>
+          s.prereqs.some((p) => areaEdge()(s.id, p))
+        );
         return grade(bad.length / skills().length, 0, 1);
       },
     ],
