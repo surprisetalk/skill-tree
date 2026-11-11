@@ -12,7 +12,6 @@ import {
   embeddingFallback,
   expertScores,
   FRAMEWORK_RE,
-  gradeToDifficulty,
   loadAliasesCollapsed,
   loadTsvCache,
   normalize,
@@ -38,6 +37,7 @@ import {
   stronglyConnected,
   TAGGED,
   TAGGED_DEDUPED,
+  tagGrades,
   topoOrder,
   WIKI_CAT_RE,
   writeStats,
@@ -65,18 +65,11 @@ function parseSkillsWithDifficulty(): {
   raw: Float32Array;
 } {
   const skills: SkillWithDiff[] = readTable(TAGGED_DEDUPED).map((s) => {
-    let gs = Infinity, ge = -Infinity;
-    for (const m of s.tags.matchAll(/grade:([A-Za-z0-9-]+)/g)) {
-      const d = gradeToDifficulty(m[1]);
-      if (d !== null) {
-        gs = Math.min(gs, d);
-        ge = Math.max(ge, d);
-      }
-    }
+    const gs = tagGrades(s.tags);
     return {
       ...s,
-      gradeStart: Number.isFinite(gs) ? gs : -2,
-      gradeEnd: Number.isFinite(ge) ? ge : -2,
+      gradeStart: gs.length ? Math.min(...gs) : -2,
+      gradeEnd: gs.length ? Math.max(...gs) : -2,
     };
   });
   const dm = readDifficulty();
@@ -1299,7 +1292,9 @@ export function stageFinalize() {
   // through a chain. A long chain then carries a skill past grade 12 with no
   // anchor there: algebra (8) → linear algebra → regression → neural networks
   // (12+). Alternative: college-level anchors (you, 11 Nov: no). Risk: one
-  // wrong edge lifts each skill above it, so status bounds the lifts.
+  // wrong edge lifts each skill above it, so status bounds the lifts. A tight
+  // ceiling can leave a prereq in its dependent's band: an anchor outranks the
+  // lift, and status allows equal bands.
   const order = topoOrder(
     skills.map((s) => ({ id: s.id, prereqs: prereqs.get(s.id) ?? [] })),
   );
@@ -1725,9 +1720,8 @@ export async function stagePilot() {
   const idx = skillIndex(vocab);
   // A K or grade-1 standard: every grade tag sits at grade 1 or below.
   const early = (id: string) => {
-    const ds = [...(byId.get(id)?.tags ?? "").matchAll(/grade:([^,]+)/g)]
-      .map((m) => gradeToDifficulty(m[1]));
-    return ds.length > 0 && ds.every((d) => d !== null && d <= 2);
+    const ds = tagGrades(byId.get(id)?.tags ?? "");
+    return ds.length > 0 && ds.every((d) => d <= 2);
   };
 
   const nodes = new Map<string, PilotNode>();

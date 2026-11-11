@@ -816,7 +816,7 @@ export function stageDedupe() {
     }
     return out;
   };
-  // Each group's lowest grade, NaN for none. Two standards that start at
+  // Each group's lowest grade, Infinity for none. Two standards that start at
   // different grades are two steps of a progression ("word problems within
   // 20", grade 1; "within 100", grade 2), not one skill: the merge would anchor
   // both at the lower grade, since a band starts at the lowest grade.
