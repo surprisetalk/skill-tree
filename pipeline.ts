@@ -7,6 +7,7 @@ import {
   ancestorsOf,
   BUILD,
   col,
+  easier,
   EMBED_DIM,
   embeddingFallback,
   expertScores,
@@ -81,9 +82,6 @@ function readSkillsTsv(): StatusSkill[] {
     topics: r.topics,
   }));
 }
-
-const readDifficultyRaw = () =>
-  new Map([...readDifficulty()].map(([id, d]) => [id, d.raw]));
 
 const ANOMALOUS_HUB_RE =
   /retell-stories-related-to.*-day|^sced-|language-immersion-prior|understand-object-naming-and-naming-conventions|^(leadership|assisted-reading|corrective-reading|study-hall)$/;
@@ -194,15 +192,12 @@ async function stageStatus() {
     [
       "Every 5_prereqs.tsv row names skills of the current difficulty stage, each pick easier than its skill.",
       () => {
-        const raw = readDifficultyRaw();
+        const d = readDifficulty();
         const rows = readTable(PREREQS);
-        const stale = rows.filter((r) => {
-          const rs = raw.get(r.skill);
-          return rs === undefined || r.picks.some((p) => {
-            const rp = raw.get(p);
-            return rp === undefined || rp >= rs;
-          });
-        });
+        const stale = rows.filter((r) =>
+          !d.has(r.skill) ||
+          r.picks.some((p) => !easier(d.get(p), d.get(r.skill)))
+        );
         return grade(stale.length / rows.length, 0, 1);
       },
     ],

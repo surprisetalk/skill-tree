@@ -985,34 +985,36 @@ export const courseTopic = (title: string): string => {
 // Key the pair on the two titles, so one pair stands for the many
 // editions of a course. Alternative: keep one pair per edition. It counts a
 // course once per catalog year and gives the 11-edition university 11 votes.
+export async function readCourseCsv(name: string): Promise<string[][]> {
+  const path = `data/courses/${name}.csv.gz`;
+  try {
+    const stream = new Blob([Deno.readFileSync(path)]).stream().pipeThrough(
+      new DecompressionStream("gzip"),
+    );
+    return headed(
+      path,
+      parseCsvText(await new Response(stream).text(), { fieldsPerRecord: 0 }),
+    );
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) {
+      throw new Deno.errors.NotFound(
+        `${path}: missing. Run: deno run -A data/download.ts`,
+      );
+    }
+    throw new Error(
+      `${path}: expected a gzip file of RFC 4180 CSV with a constant field count, received ${
+        (e as Error).message
+      }. Re-download it: rm ${path}; deno run -A data/download.ts`,
+    );
+  }
+}
+
 export async function readCoursePairs(): Promise<{
   pairs: { src: string; dst: string; raw: string }[];
   dropped: { from: string; to: string; raw: string; reason: string }[];
   timingCounts: Record<(typeof TIMINGS)[number], number>;
 }> {
-  const read = async (name: string): Promise<string[][]> => {
-    const path = `data/courses/${name}.csv.gz`;
-    try {
-      const stream = new Blob([Deno.readFileSync(path)]).stream().pipeThrough(
-        new DecompressionStream("gzip"),
-      );
-      return headed(
-        path,
-        parseCsvText(await new Response(stream).text(), { fieldsPerRecord: 0 }),
-      );
-    } catch (e) {
-      if (e instanceof Deno.errors.NotFound) {
-        throw new Deno.errors.NotFound(
-          `${path}: missing. Run: deno run -A data/download.ts`,
-        );
-      }
-      throw new Error(
-        `${path}: expected a gzip file of RFC 4180 CSV with a constant field count, received ${
-          (e as Error).message
-        }. Re-download it: rm ${path}; deno run -A data/download.ts`,
-      );
-    }
-  };
+  const read = readCourseCsv;
   const clean = (t: string) => t.replace(/\s+/g, " ").trim();
   const courses = await read("courses");
   const iDs = col(courses, "dataset", "data/courses/courses.csv.gz"),
@@ -1494,6 +1496,16 @@ export function writeTables(writes: Write[]) {
 
 export const writeTable = <C extends Columns>(s: Schema<C>, rows: string[][]) =>
   writeTables([[s, rows]]);
+
+// REVIEW: A prereq is easier than its skill when it has a lower raw or a lower
+// band. Raw (kNN, no seeds) squeezes college topics into 9-10: linear-algebra
+// (raw 9.89, band 8) sat above logistic-regression (raw 8.92, band 15).
+// Alternative: raw only. It barred linear-algebra and probability from most
+// machine-learning skills, and expert recall fell from 11 to 7 of 258.
+export const easier = (
+  p: { band: number; raw: number } | undefined,
+  s: { band: number; raw: number } | undefined,
+): boolean => !!p && !!s && (p.raw < s.raw || p.band < s.band);
 
 export function readDifficulty(): Map<string, { band: number; raw: number }> {
   return new Map(

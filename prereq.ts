@@ -5,6 +5,7 @@ import {
   claudeNow,
   col,
   DIFFICULTY,
+  easier,
   EDGES,
   EMBED_DIM,
   embedBatch,
@@ -150,7 +151,7 @@ const FOUNDATION_IDS = new Set([
 ]);
 
 function computePrereqCandidates(): Map<string, number[]> {
-  const { skills, raw } = parseSkillsWithDifficulty();
+  const { skills, diff, raw } = parseSkillsWithDifficulty();
   const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
   const topicIdx = new Map<string, number[]>();
   for (let i = 0; i < skills.length; i++) {
@@ -168,6 +169,25 @@ function computePrereqCandidates(): Map<string, number[]> {
   const K = 15;
   const ANCESTOR_K = 5;
   const GLOBAL_K = 5;
+  // A foundation skill names the topic of FOUNDATION_MIN skills
+  // (linear-algebra, probability). Each skill gets FOUNDATION_K slots for the
+  // nearest foundations, whatever its topics: 233 of 248 missed expert
+  // positives shared no topic with their prereq.
+  const FOUNDATION_K = 2;
+  const FOUNDATION_MIN = 20;
+  // REVIEW: Each scan scores at most CAND_POOL_CAP skills, a fixed stride
+  // sample of the pool. The full scan (27,613 skills) and the cosine over it
+  // took 744 s of 18 min at 93k, and grow as skills × skills. Alternative: an
+  // approximate nearest-neighbor index such as HNSW. It keeps the true nearest
+  // candidates, but it is a new dependency.
+  const CAND_POOL_CAP = 3000;
+  const capPool = (pool: number[]) =>
+    pool.length <= CAND_POOL_CAP
+      ? pool
+      : pool.filter((_, k) => k % Math.ceil(pool.length / CAND_POOL_CAP) === 0);
+  const foundations = skills.flatMap((s, j) =>
+    (topicIdx.get(s.id)?.length ?? 0) >= FOUNDATION_MIN ? [j] : []
+  );
   // Shorter tokens ("prepar") link prepare-medication to prepare-pasta.
   const TOK_MIN = 7;
   // A skill whose only topics are framework slugs becomes a phantom hub in the
@@ -211,7 +231,7 @@ function computePrereqCandidates(): Map<string, number[]> {
     // the 38% of random pairs it admitted, and a 0 gap admits 60%. Alternative:
     // read the seed-ordered band (51%), or restore the old seed raw, which set
     // a prereq 1.0 below its dependent and so still failed the 1.5 gap.
-    return raw[j] < raw[i]; // DR1 hard guard
+    return raw[j] < raw[i] || diff[j] < diff[i]; // DR1 hard guard, as `easier`
   };
 
   const out = new Map<string, number[]>();
@@ -262,7 +282,7 @@ function computePrereqCandidates(): Map<string, number[]> {
     }
     lap("topic_pool");
     let cands: number[];
-    if (pool.size >= K) cands = [...pool];
+    if (pool.size >= K) cands = capPool([...pool]);
     else if (
       skills[i].sources.split(",").filter(Boolean).length >= 2 && pool.size < 3
     ) {
@@ -271,6 +291,7 @@ function computePrereqCandidates(): Map<string, number[]> {
     } else {
       cands = [];
       for (let j = 0; j < skills.length; j++) if (candOk(i, j)) cands.push(j);
+      cands = capPool(cands);
       fullScans++;
     }
     lap("full_scan");
@@ -306,7 +327,10 @@ function computePrereqCandidates(): Map<string, number[]> {
     const sOff = i * EMBED_DIM;
     const top: { idx: number; score: number }[] = [];
     const globalTop: { idx: number; score: number }[] = [];
-    const inTopicSlots = Math.max(1, K - ancestorSet.size - GLOBAL_K);
+    const inTopicSlots = Math.max(
+      1,
+      K - ancestorSet.size - GLOBAL_K - FOUNDATION_K,
+    );
     for (const j of cands) {
       if (ancestorSet.has(j)) continue;
       let sc = 0;
@@ -322,11 +346,18 @@ function computePrereqCandidates(): Map<string, number[]> {
     }
     top.sort((a, b) => b.score - a.score);
     lap("cosine_top");
-    const picked = new Set<number>([
-      ...ancestorSet,
-      ...top.map((t) => t.idx),
-      i,
-    ]);
+    const inTop = new Set([...ancestorSet, ...top.map((t) => t.idx), i]);
+    const foundTop = foundations.filter((j) => !inTop.has(j) && candOk(i, j))
+      .map((j) => {
+        let sc = 0;
+        const aOff = j * EMBED_DIM;
+        for (let d = 0; d < EMBED_DIM; d++) {
+          sc += vecs[sOff + d] * vecs[aOff + d];
+        }
+        return { idx: j, score: sc };
+      }).sort((a, b) => b.score - a.score).slice(0, FOUNDATION_K);
+    lap("foundation");
+    const picked = new Set<number>([...inTop, ...foundTop.map((t) => t.idx)]);
     if (GLOBAL_K > 0 && (topics.length > 0 || skills[i].occupations)) {
       const crossPool = new Set<number>();
       for (const [ot, oi] of topicIdx) {
@@ -340,7 +371,7 @@ function computePrereqCandidates(): Map<string, number[]> {
         if (!shared) continue;
         for (const j of oi) crossPool.add(j);
       }
-      for (const j of crossPool) {
+      for (const j of capPool([...crossPool])) {
         if (picked.has(j)) continue;
         if (!candOk(i, j)) continue;
         if (frameworkOnly[j]) continue; // H2: framework-only skills never enter global pool
@@ -409,6 +440,7 @@ function computePrereqCandidates(): Map<string, number[]> {
         score: 0,
         src: "anc" as const,
       })),
+      ...foundTop.map((t) => ({ ...t, src: "top" as const })),
       ...top.map((t) => ({ ...t, src: "top" as const })),
       ...globalTop.map((t) => ({ ...t, src: "global" as const })),
     ];
@@ -453,7 +485,7 @@ function computePrereqCandidates(): Map<string, number[]> {
   console.log(
     `[prereq] candidate seconds: ${
       Object.entries(secs).map(([k, v]) => `${k}=${v.toFixed(1)}`).join(" ")
-    }; full scans ${fullScans}/${skills.length}`,
+    }; full scans ${fullScans}/${skills.length}; foundations ${foundations.length}`,
   );
   return out;
 }
@@ -475,21 +507,21 @@ function parsePrereqResponse(text: string, n: number): number[] | null {
 }
 
 export async function stagePrereq() {
-  const { skills, raw } = parseSkillsWithDifficulty();
+  const { skills, diff, raw } = parseSkillsWithDifficulty();
   // A cache row is stale when it names an id outside this build (a rename or
   // a merge), or a pick no easier than its skill: raw difficulty moved, and
   // the pool the pick came from is gone. Drop it, so its prompt goes out again.
-  const rawOf = new Map(skills.map((s, i) => [s.id, raw[i]]));
+  const dOf = new Map(
+    skills.map((s, i) => [s.id, { band: diff[i], raw: raw[i] }]),
+  );
   // A repeated key (a torn append) keeps one row, as loadTsvCache reads it.
   const cache = loadTsvCache(PREREQ_CACHE);
   const lines = cache.size &&
     Deno.readTextFileSync(PREREQ_CACHE).split("\n").length - 1;
   const fresh = [...cache].filter(([s, ps]) => {
-    const rs = rawOf.get(s);
-    return rs !== undefined && (ps === "none" || ps.split(",").every((p) => {
-      const rp = rawOf.get(p);
-      return rp !== undefined && rp < rs;
-    }));
+    const ds = dOf.get(s);
+    return ds !== undefined &&
+      (ps === "none" || ps.split(",").every((p) => easier(dOf.get(p), ds)));
   });
   if (fresh.length < lines) {
     // A missing cache reads as empty; an empty table does not write.
@@ -666,7 +698,7 @@ export function stagePostproc() {
     const sR = rawDiff.get(s);
     const pR = rawDiff.get(p);
     if (sR === undefined || pR === undefined) return true;
-    if (pR <= sR - RAW_EPS) return true;
+    if (pR <= sR - RAW_EPS || band.get(p)! < band.get(s)!) return true;
     if (isSeed(s, p)) {
       rawExempt++;
       return true;

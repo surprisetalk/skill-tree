@@ -1337,6 +1337,17 @@ export function stageDifficulty() {
     }
     return [...seen];
   };
+  // REVIEW: Each skill scores at most KNN_POOL_CAP anchors: a fixed stride
+  // sample of its topic pool, or of all anchors when it has no topic. The scan
+  // then grows with skills, not skills × anchors (290k anchors at the CSP
+  // scale). Alternative: an approximate nearest-neighbor index such as HNSW.
+  // It finds the true neighbors, but it is a new dependency.
+  const KNN_POOL_CAP = 2000;
+  const capPool = (pool: number[]) =>
+    pool.length <= KNN_POOL_CAP
+      ? pool
+      : pool.filter((_, k) => k % Math.ceil(pool.length / KNN_POOL_CAP) === 0);
+  const allAnchors = anchorIdxs.map((_, a) => a);
   const out = new Float32Array(skills.length);
   let withinTopic = 0, globalFallback = 0;
   {
@@ -1355,13 +1366,11 @@ export function stageDifficulty() {
     for (let i = 0; i < skills.length; i++) {
       const sOff = i * EMBED_DIM;
       const top: { score: number; a: number }[] = [];
-      let pool: number[] | null = candidates(i);
-      if (!pool.length) pool = null;
-      if (pool) withinTopic++;
+      const topicPool = candidates(i);
+      if (topicPool.length) withinTopic++;
       else globalFallback++;
-      const n = pool ? pool.length : anchorIdxs.length;
-      for (let k = 0; k < n; k++) {
-        const a = pool ? pool[k] : k;
+      const pool = capPool(topicPool.length ? topicPool : allAnchors);
+      for (const a of pool) {
         let sc = 0;
         const aOff = a * EMBED_DIM;
         for (let d = 0; d < EMBED_DIM; d++) {
@@ -1377,7 +1386,12 @@ export function stageDifficulty() {
       }
       let num = 0, den = 0;
       for (const { score, a } of top) {
-        const w = Math.max(0, score) ** 2;
+        // REVIEW: Weight cos^8, so the nearest anchors dominate. At 93k it
+        // lifts Kendall τ against the anchors from 0.73 to 0.85. Alternative:
+        // cos^2, or 5 neighbors (τ 0.79). Neither thins the band-11 pile:
+        // nothing anchors above grade 12, so a workplace or college skill
+        // averages its high-school neighbors.
+        const w = Math.max(0, score) ** 8;
         num += w * anchorDiff[a];
         den += w;
       }
