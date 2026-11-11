@@ -15,7 +15,9 @@ first for `enrich` and `prereq`).
   2. DigComp levels stop anchoring at the job-zone scale. Emit level order
      (basic before intermediate before advanced, per competence) as seeds.
   3. Rerun from `difficulty`; `prereq` re-asks picks that drift. Compare the
-     band chart, the Pythagorean slice, and every status condition.
+     band chart, the Pythagorean slice, and every status condition. The sanity
+     set (`data/_sanity.tsv`, 23 skills) is the scoreboard: 10/23 fit on 10 Nov,
+     goal 80%. Do not tune to it; add skills instead.
 
 - [ ] A subject area is a topic, not a skill. 224 skills have an id that 50+
       skills use as a topic (`problem-solving` 4,799, `geometry`, `science`,
