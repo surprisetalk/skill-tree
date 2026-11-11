@@ -1228,6 +1228,14 @@ export function stageDedupe() {
 const K_TO_12 = 12;
 
 export function stageDifficulty() {
+  // Seconds per part: the CSP scale needs the slow one.
+  const secs: Record<string, number> = {};
+  let tl = performance.now();
+  const lap = (part: string) => {
+    const now = performance.now();
+    secs[part] = (now - tl) / 1000;
+    tl = now;
+  };
   const skills = readTable(TAGGED_DEDUPED);
   const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
 
@@ -1304,6 +1312,7 @@ export function stageDifficulty() {
   }
 
   const K = 15;
+  lap("load_and_anchors");
   const t0 = performance.now();
   const topicToAnchors = new Map<string, number[]>();
   for (let a = 0; a < anchorIdxs.length; a++) {
@@ -1410,6 +1419,7 @@ export function stageDifficulty() {
     jittered[i] = smoothed[i] + (((h >>> 0) % 1000) / 1000 - 0.5) * 0.001;
   }
 
+  lap("knn_and_smooth");
   // Isotonic PAV
   const pairs: [number, number][] = [];
   for (const ai of anchorIdxs) pairs.push([jittered[ai], anchor[ai]]);
@@ -1487,6 +1497,7 @@ export function stageDifficulty() {
     knnBand[i] = toBand(calibrated[i], i);
     band[i] = Number.isNaN(anchor[i]) ? knnBand[i] : toBand(anchor[i], i);
   }
+  lap("pav");
   // Seed order: a seed prereq sits in a lower band than its dependent. An
   // anchored skill keeps its band; every other skill moves inside [lo, hi].
   const idToIdx = new Map(skills.map((s, i) => [s.id, i]));
@@ -1599,6 +1610,7 @@ export function stageDifficulty() {
     skills.map((s, i) => [s.id, String(band[i]), out[i].toFixed(4)]),
   );
 
+  lap("seeds");
   // Kendall-τ vs anchors
   let concordant = 0, discordant = 0;
   const sample: { raw: number; a: number }[] = [];
@@ -1658,7 +1670,14 @@ export function stageDifficulty() {
     );
   }
 
+  lap("audits");
+  console.log(
+    `[difficulty] seconds: ${
+      Object.entries(secs).map(([k, v]) => `${k}=${v.toFixed(1)}`).join(" ")
+    }`,
+  );
   writeStats(4, {
+    seconds: secs,
     skills: skills.length,
     anchors: {
       grade: gradeAnchored,

@@ -216,7 +216,16 @@ function computePrereqCandidates(): Map<string, number[]> {
 
   const out = new Map<string, number[]>();
   const t0 = performance.now();
+  // Seconds per part, summed over skills: the CSP scale needs the slow one.
+  const secs: Record<string, number> = {};
+  let tl = performance.now(), fullScans = 0;
+  const lap = (part: string) => {
+    const now = performance.now();
+    secs[part] = (secs[part] ?? 0) + (now - tl) / 1000;
+    tl = now;
+  };
   for (let i = 0; i < skills.length; i++) {
+    lap("other");
     const topics = skills[i].topics.split(",").filter(Boolean);
     const occsI = skills[i].occupations.split(",").filter(Boolean);
     const myOccs = new Set<string>(occsI);
@@ -251,6 +260,7 @@ function computePrereqCandidates(): Map<string, number[]> {
       if (!arr) continue;
       for (const j of arr) if (candOk(i, j) && withinTopicOk(j)) pool.add(j);
     }
+    lap("topic_pool");
     let cands: number[];
     if (pool.size >= K) cands = [...pool];
     else if (
@@ -261,7 +271,9 @@ function computePrereqCandidates(): Map<string, number[]> {
     } else {
       cands = [];
       for (let j = 0; j < skills.length; j++) if (candOk(i, j)) cands.push(j);
+      fullScans++;
     }
+    lap("full_scan");
 
     // Ancestor candidates — foundations within same topic (or expanded for advanced skills)
     const ancestorSet = new Set<number>();
@@ -289,6 +301,7 @@ function computePrereqCandidates(): Map<string, number[]> {
         if (ancestorSet.size >= ANCESTOR_K) break;
       }
     }
+    lap("ancestor");
 
     const sOff = i * EMBED_DIM;
     const top: { idx: number; score: number }[] = [];
@@ -308,6 +321,7 @@ function computePrereqCandidates(): Map<string, number[]> {
       }
     }
     top.sort((a, b) => b.score - a.score);
+    lap("cosine_top");
     const picked = new Set<number>([
       ...ancestorSet,
       ...top.map((t) => t.idx),
@@ -381,6 +395,7 @@ function computePrereqCandidates(): Map<string, number[]> {
       }
       globalTop.sort((a, b) => b.score - a.score);
     }
+    lap("cross_topic");
 
     // S5-3: near-duplicate cluster dedup — if >2 candidates have pairwise cosine ≥0.97,
     // keep only the highest-scoring. Prevents identical K-grade standards flooding slots.
@@ -424,6 +439,7 @@ function computePrereqCandidates(): Map<string, number[]> {
     const kept = allPicks.filter((_, k) => !dropped.has(k));
     const idxs = kept.map((p) => p.idx).slice(0, K);
     out.set(skills[i].id, idxs);
+    lap("dedupe");
     if ((i + 1) % 5000 === 0) {
       const el = (performance.now() - t0) / 1000;
       console.log(
@@ -433,6 +449,12 @@ function computePrereqCandidates(): Map<string, number[]> {
       );
     }
   }
+  lap("other");
+  console.log(
+    `[prereq] candidate seconds: ${
+      Object.entries(secs).map(([k, v]) => `${k}=${v.toFixed(1)}`).join(" ")
+    }; full scans ${fullScans}/${skills.length}`,
+  );
   return out;
 }
 
