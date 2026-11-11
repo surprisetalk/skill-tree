@@ -25,14 +25,18 @@ first for `enrich` and `prereq`).
      its source.
 
 - [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 6/258; it
-      needs 13. Two foundation slots per pool and a full re-ask (11 Nov) gave 6,
-      so they are gone. Claude never picked `linear-algebra` for
-      `logistic-regression`, and that skill has no cached pick.
-  1. For 10 missed positives, print the dependent's candidate list and its
-     cached answer: is the prereq absent from the pool, or present and not
-     picked?
-  2. Fix the stage that loses it: the pool, the prompt, or a postproc filter
-     (domain-specificity dropped 10,244 edges, cross-domain 7,892).
+      needs 13. On 12 missed pairs (11 Nov): 7 prereqs never enter the candidate
+      pool, 5 sit in the wrong band order, and every prereq that was in the pool
+      got picked and kept. Pools hold topic and cosine neighbors (K-2 "count
+      objects in a circle" for `image-processing`); a cross-domain prereq
+      (`linear-algebra → computer-vision`) is near neither. A band-gap cap (8)
+      cleared the K-2 noise but brought in no expert prereq.
+  1. Add one-level expand-and-snap as a candidate source: Claude names up to 8
+     prereqs of each skill, each name snaps to a skill (the pilot's snap), and a
+     "none" drops. No recursion, so no drift. Try it on the 252 missed pairs'
+     dependents before a full run.
+  2. The 5 band-order misses are sense merges ("paraphrasing" NLP vs K-12): list
+     them after step 1.
 
 - [ ] A full build finishes in under 2 hours of compute at the CSP scale: 364k
       skills, about 290k grade anchors. Today `difficulty` and the `prereq`
