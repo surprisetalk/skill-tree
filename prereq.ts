@@ -169,15 +169,6 @@ function computePrereqCandidates(): Map<string, number[]> {
   const K = 15;
   const ANCESTOR_K = 5;
   const GLOBAL_K = 5;
-  // A foundation skill names the topic of FOUNDATION_MIN skills
-  // (linear-algebra, probability). Each skill gets FOUNDATION_K slots for the
-  // nearest foundations, whatever its topics: 233 of 248 missed expert
-  // positives shared no topic with their prereq.
-  const FOUNDATION_K = 2;
-  const FOUNDATION_MIN = 20;
-  const foundations = skills.flatMap((s, j) =>
-    (topicIdx.get(s.id)?.length ?? 0) >= FOUNDATION_MIN ? [j] : []
-  );
   // Shorter tokens ("prepar") link prepare-medication to prepare-pasta.
   const TOK_MIN = 7;
   // A skill whose only topics are framework slugs becomes a phantom hub in the
@@ -316,10 +307,7 @@ function computePrereqCandidates(): Map<string, number[]> {
     const sOff = i * EMBED_DIM;
     const top: { idx: number; score: number }[] = [];
     const globalTop: { idx: number; score: number }[] = [];
-    const inTopicSlots = Math.max(
-      1,
-      K - ancestorSet.size - GLOBAL_K - FOUNDATION_K,
-    );
+    const inTopicSlots = Math.max(1, K - ancestorSet.size - GLOBAL_K);
     for (const j of cands) {
       if (ancestorSet.has(j)) continue;
       let sc = 0;
@@ -335,18 +323,11 @@ function computePrereqCandidates(): Map<string, number[]> {
     }
     top.sort((a, b) => b.score - a.score);
     lap("cosine_top");
-    const inTop = new Set([...ancestorSet, ...top.map((t) => t.idx), i]);
-    const foundTop = foundations.filter((j) => !inTop.has(j) && candOk(i, j))
-      .map((j) => {
-        let sc = 0;
-        const aOff = j * EMBED_DIM;
-        for (let d = 0; d < EMBED_DIM; d++) {
-          sc += vecs[sOff + d] * vecs[aOff + d];
-        }
-        return { idx: j, score: sc };
-      }).sort((a, b) => b.score - a.score).slice(0, FOUNDATION_K);
-    lap("foundation");
-    const picked = new Set<number>([...inTop, ...foundTop.map((t) => t.idx)]);
+    const picked = new Set<number>([
+      ...ancestorSet,
+      ...top.map((t) => t.idx),
+      i,
+    ]);
     if (GLOBAL_K > 0 && (topics.length > 0 || skills[i].occupations)) {
       const crossPool = new Set<number>();
       for (const [ot, oi] of topicIdx) {
@@ -429,7 +410,6 @@ function computePrereqCandidates(): Map<string, number[]> {
         score: 0,
         src: "anc" as const,
       })),
-      ...foundTop.map((t) => ({ ...t, src: "top" as const })),
       ...top.map((t) => ({ ...t, src: "top" as const })),
       ...globalTop.map((t) => ({ ...t, src: "global" as const })),
     ];
@@ -474,7 +454,7 @@ function computePrereqCandidates(): Map<string, number[]> {
   console.log(
     `[prereq] candidate seconds: ${
       Object.entries(secs).map(([k, v]) => `${k}=${v.toFixed(1)}`).join(" ")
-    }; full scans ${fullScans}/${skills.length}; foundations ${foundations.length}`,
+    }; full scans ${fullScans}/${skills.length}`,
   );
   return out;
 }
