@@ -4,41 +4,35 @@ Each entry below is a `deno task status` condition that fails, or a stage that
 is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
-- [ ] A skill's band says when a typical learner can first learn it. Job zones
-      and DigComp levels no longer anchor; 12/23 sanity skills fit (goal 80%).
-      Most misses sit at band 11-12: 42k unanchored skills pile into band 11,
-      because kNN averages 15 neighbors (weight cos²) toward the high-school
-      mean (`drawing` K-2 at band 10, `machine-learning` at 11).
-  1. In stage `difficulty`, print the band histogram of unanchored skills beside
-     anchored ones, and the share of each band's skills set by the global
-     fallback.
-  2. Cut the averaging: fewer neighbors, or a steeper weight. Keep the change
-     whose anchored-skill τ and miss rate hold. Do not tune to the sanity set;
-     add skills to it instead.
-
-- [ ] No skill has a hex-overflow id. Today 9. Haiku reworded their titles
-      without shortening them; the summarize prompt now names a list by its
-      category, and a probe fit all 9.
-  1. Run the chain from `enrich`, then check that `1_skills.tsv` has no id with
-     a hex suffix.
+- [ ] A skill's band says when a typical learner can first learn it. Today 10/23
+      sanity skills fit (goal 80%). 42k unanchored skills pile into band 11: no
+      anchor sits above grade 12, so a workplace or college skill averages its
+      high-school neighbors. Fewer neighbors and a steeper weight both leave the
+      pile (cos^8 kept: τ 0.73 → 0.85). Decision (you, 11 Nov): no college-level
+      anchors.
+  1. The sanity rows above grade 12 (`machine-learning` 13-16, `accounting`
+     10-13) cannot fit with K-12 anchors only. Correct those rows in
+     `data/_sanity.tsv`, as its `REVIEW:` note in `pipeline.ts` asks.
+  2. Then read the K-8 misses (`drawing` band 10, `nutrition` 12,
+     `reading-comprehension` 12): find which anchors pull each one up.
 
 - [ ] Difficulty bands agree with seeds: under 1% of seed pairs fail to fit
-      bands 1–20. Today 76/5,876 (1.3%): khan 34, learningcommons 13, foundation
-      10, opensalt_grade 8, courses 7.
+      bands 1–20. Today 76/5,876 (1.3%): khan 34, learningcommons 13.
   1. Read `seed_anchor_conflict_samples` in `build/4_stats.json` per source.
      Khan pairs such as
      `add-within-20(3) > solving-addition-and-subtraction-word-problems(2)` come
      from a merge of a K and a grade-1 standard; fix the merge or the anchor at
      its source.
 
-- [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 7/258 positive
-      LectureBank pairs sit in the transitive closure (11 before the band
-      change); it needs 13.
-  1. List the 4 pairs that the band change lost, and their candidate pools.
-  2. Widen the pool with a cross-topic slot for foundation skills
-     (`probability`, `linear-algebra`) that many dependents share.
-  3. A new pool reaches cached skills only after a clear of
-     `build/5_prereqs.tsv` and a full `prereq` rerun (about 93k prompts).
+- [ ] Expert recall is above 0.05 (`EXPERT_RECALL_FLOOR`). Today 6/258; it
+      needs 13. Two foundation slots per pool and a full re-ask (11 Nov) gave 6,
+      so they are gone. Claude never picked `linear-algebra` for
+      `logistic-regression`, and that skill has no cached pick.
+  1. For 10 missed positives, print the dependent's candidate list and its
+     cached answer: is the prereq absent from the pool, or present and not
+     picked?
+  2. Fix the stage that loses it: the pool, the prompt, or a postproc filter
+     (domain-specificity dropped 10,244 edges, cross-domain 7,892).
 
 - [ ] A full build finishes in under 2 hours of compute at the CSP scale: 364k
       skills, about 290k grade anchors. Today `difficulty` and the `prereq`
@@ -48,10 +42,12 @@ first for `enrich` and `prereq`).
      with 19,003 skills on the global fallback over 30k anchors. Candidates:
      cosine top 744 s, cross-topic 271 s, topic pool 32 s, full scan 27 s;
      27,613 of 93,485 skills take the full scan.
-  2. Bound the scans that grow as skills times skills: the kNN global fallback
-     and the candidate full-scan fallback. A topic or token index, or a bounded
-     random sample of anchors, keeps the output close. Check that the 93k bands
-     and pools barely move.
+  2. Done for kNN: a stride sample of at most 2,000 anchors per skill (326 s →
+     55 s; 1.8% of bands moved by more than 2). Not for candidates: a stride
+     sample of 3,000 kept mean Jaccard 0.74 on 935 skills, so exact pools stay.
+     Bound them with a nearest-neighbor index (HNSW library, or a token index),
+     and measure the cross-topic pool build (438 s), which iterates every topic
+     per skill.
   3. Measure at scale in a jj workspace: apply side commit `lopuqmnx` (the CSP
      parse), then run `list` through `prereq` with `SKIP_LLM=1`, and time each
      stage. Ollama must embed about 269k new titles first.
