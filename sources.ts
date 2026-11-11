@@ -440,9 +440,12 @@ const SCAFFOLD_LEAD = new RegExp(
 );
 const EMPHASIS =
   /(^|[\s("'“])[*_]+([^*_\s](?:[^*_]*[^*_\s])?)[*_]+(?=[\s,.;:)!?"'”]|$)/g;
-// "* recognize own name in print" leads with a bullet.
+// "* recognize own name in print" leads with a bullet, and "*Identify fitness
+// components (*Body composition …)" (CSP) with a footnote mark. A star that
+// still leads once emphasis pairs are gone is one of those.
 const unmark = (t: string) =>
-  t.replace(/^\*\s+/, "").replace(SCAFFOLD_LEAD, "").replace(EMPHASIS, "$1$2");
+  t.replace(/^\*\s+/, "").replace(SCAFFOLD_LEAD, "").replace(EMPHASIS, "$1$2")
+    .replace(/^\*+\s*/, "");
 // CASE educationLevel uses "KG" and "TK"; stage difficulty expects "K".
 const normGrade = (g: string): string => {
   const u = g.trim().toUpperCase();
@@ -1015,6 +1018,119 @@ export function stageList() {
     );
   }
 
+  // Common Standards Project: one skill per leaf standard of a current set. A
+  // standard that parents another is a heading. Each file is one JSON line.
+  // REVIEW: A set's grades tag its standards only when it names at most 4
+  // grades, as for Learning Commons components; a K-6 set would anchor its
+  // grade-6 standards at K. Alternative: tag every set's grades.
+  {
+    const files = readDirSorted("data/csp").filter((e) =>
+      e.name.endsWith(".json.gz")
+    ).map((e) => `data/csp/${e.name}`);
+    let n = 0,
+      sets = 0,
+      deprecated = 0,
+      headings = 0,
+      scaff = 0,
+      dup = 0,
+      listCodes = 0;
+    for (let c = 0; c < files.length; c += 2000) {
+      const chunk = files.slice(c, c + 2000);
+      const out = new Deno.Command("sh", {
+        args: ["-c", 'for f; do gzip -dc "$f" && echo; done', "sh", ...chunk],
+        stdout: "piped",
+        stderr: "piped",
+      }).outputSync();
+      const lines = new TextDecoder().decode(out.stdout).split("\n").filter(
+        Boolean,
+      );
+      if (out.code !== 0 || lines.length !== chunk.length) {
+        throw new Error(
+          `data/csp: expected ${chunk.length} gzipped JSON sets from ${
+            chunk[0]
+          } on, received ${lines.length} (gzip exit ${out.code}: ${
+            new TextDecoder().decode(out.stderr).trim().slice(0, 200)
+          }). Re-download: deno run -A data/download.ts`,
+        );
+      }
+      lines.forEach((line, k) => {
+        const path = chunk[k];
+        // deno-lint-ignore no-explicit-any -- CSP sets, read field by field
+        const set = JSON.parse(line) as any;
+        if (typeof set?.standards !== "object" || !set.standards) {
+          throw new Error(
+            `${path}: expected a CSP set with a standards object, received keys ${
+              JSON.stringify(Object.keys(set ?? {}))
+            }. Re-download it: deno run -A data/download.ts`,
+          );
+        }
+        sets++;
+        if (set.document?.publicationStatus === "Deprecated") {
+          deprecated++;
+          return;
+        }
+        const levels: string[] = Array.isArray(set.educationLevels)
+          ? set.educationLevels.map(String)
+          : [];
+        const grades = levels.length <= 4
+          ? levels.map((g) => normGrade(g)).filter(Boolean).map((g) =>
+            `grade:${g}`
+          )
+          : [];
+        // deno-lint-ignore no-explicit-any -- CSP standards
+        const stds = Object.values(set.standards) as any[];
+        const parents = new Set(stds.map((st) => st.parentId));
+        const seen = new Set<string>();
+        for (const st of stds) {
+          if (parents.has(st.id)) {
+            headings++;
+            continue;
+          }
+          if (st.statementLabel && SCAFFOLDING_TYPES.has(st.statementLabel)) {
+            scaff++;
+            continue;
+          }
+          const cleaned = cleanStandard(
+            // Plain text: a JavaScript standard names "<script>" as text.
+            String(st.description ?? "").replace(/\s+/g, " ").trim(),
+            "",
+            "",
+            Boolean(st.statementLabel),
+          );
+          if (cleaned === "scaffPat" || cleaned === "pureVerb") {
+            scaff++;
+            continue;
+          }
+          const key = cleaned.title.toLowerCase();
+          if (seen.has(key)) {
+            dup++;
+            continue;
+          }
+          seen.add(key);
+          const tags = ["csp", ...grades];
+          // A notation can list several codes ("6.EE.B.6, MS-ESS3-1"): no tag.
+          const code = String(st.statementNotation ?? "").trim();
+          if (/[\s,()]/.test(code)) listCodes++;
+          else {
+            const t = code && codeTag(code);
+            if (t) tags.push(t);
+          }
+          raw.push({
+            id: "",
+            title: cleaned.title,
+            description: cleaned.description,
+            sources: ["csp"],
+            tags,
+          });
+          n++;
+        }
+      });
+    }
+    console.log(
+      `  csp: ${n} (sets=${sets}, deprecated=${deprecated}, headings=${headings}, scaffolding=${scaff}, dup=${dup}, list_codes=${listCodes})`,
+    );
+  }
+
   // Learning Commons: learning components and the standards of current
   // frameworks. One skill per distinct statement; lcNodes keeps every node id.
   const lcNodes = new Map<Skill, string[]>();
@@ -1415,6 +1531,7 @@ export function stageList() {
       continue;
     }
     const fromOpensalt = s.sources.includes("opensalt") ||
+      s.sources.includes("csp") ||
       s.tags.includes("learningcommons:standard");
     const fromOnetTask = s.tags.some((t) => t === "onet:task");
     const wc = s.title.split(/\s+/).filter(Boolean).length;
@@ -1436,6 +1553,7 @@ export function stageList() {
     survivors.push(s);
   }
   raw.length = 0;
+  // A spread of a million rows overflows the call stack.
   for (const s of survivors) raw.push(s);
   console.log(
     `[list] long_title_dropped=${longTitleDropped}, slug_overflow=${slugOverflowDropped}`,

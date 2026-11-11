@@ -222,8 +222,8 @@ async function stageStatus() {
       );
       return grade(done.length / labels.size, 1, 0);
     }],
-    // A wrong edge lifts every skill above it. Stage finalize caps the lift at
-    // 3 bands and drops each edge it cannot order, so many drops mean noisy
+    // A wrong edge lifts every skill above it. Stage finalize caps the lift
+    // (LIFT_CAP) and drops each edge it cannot order, so many drops mean noisy
     // edges.
     ["Under 10% of postproc edges drop in the chain lift.", () => {
       const m = byId();

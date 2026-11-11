@@ -11,17 +11,14 @@ Nothing is unblocked: every entry waits on you.
 - [ ] A full build finishes in under 2 hours of compute at the CSP scale: 392k
       skills, 279k grade anchors. Decision (you, 10 Nov): performance first,
       then a review together, then all of CSP. Blocker: your review of the
-      timings below. Measured 12 Nov in jj workspace `csp`
-      (`../skill-tree-csp`), `SKIP_LLM=1`: list 1m41, embed 56m (first run only,
-      then cached), tag 4m11, dedupe 6m06, seed-edges 5m50 (36m47 before the IVF
-      fallback), difficulty 4m57, prereq 6m13 (44m53 before the candidate
-      workers: IVF index 2m13, candidates 3m58 on 14 workers, peak 19 GB),
-      postproc 13 s, finalize 6 s, status 1m14. Total 31 min, or 87 min with the
-      first embed.
+      timings below. Measured 12 Nov, `SKIP_LLM=1`: list 1m41, embed 56m (first
+      run only, then cached), tag 4m11, dedupe 6m06, seed-edges 5m50 (36m47
+      before the IVF fallback), difficulty 4m57, prereq 6m13 (44m53 before the
+      candidate workers: IVF index 2m13, candidates 3m58 on 14 workers, peak 19
+      GB), postproc 13 s, finalize 6 s, status 1m14. Total 31 min, or 87 min
+      with the first embed.
   1. If the review wants more margin: the kNN of stage `difficulty` (295 s) and
      the IVF index build (133 s) run on one thread and split the same way.
-  2. Remove the workspace when the review is done: `jj workspace forget csp`,
-     then `watchman watch-del ../skill-tree-csp`, then delete the folder.
 
 - [ ] A skill's band says when a typical learner can first learn it. Sanity fit
       is 10/23 at 93k and 13/23 at CSP scale (goal 80%). Blocker: your review of
@@ -66,17 +63,16 @@ Nothing is unblocked: every entry waits on you.
      recall.
 
 - [ ] Skills from every Common Standards Project (CSP) set appear in
-      `skills.tsv`. Blocker: the performance entry, then your review. Decision:
-      every current set; the 1,508 sets that state no licence count as permitted
-      for now (you, 10 Nov). Side commit `vrswyopt` (rebased `lopuqmnx`) grows
-      `1_skills.tsv` from 95,447 to 391,782 rows.
-  1. Move `vrswyopt` onto main. It parses leaf standards of current sets, treats
-     a parent as a heading, tags grades when a set names at most 4, and skips a
-     notation that lists several codes.
-  2. Stage `prereq` then sends about 116M input and 59M output tokens.
-  3. Stage `dedupe` merges a CSP row and an OpenSALT row that carry the same
+      `skills.tsv`. Stage `list` parses them (391,782 rows in `1_skills.tsv`),
+      and `build/2_cache.bin` holds their embeddings. Blocker: your review of
+      the performance entry, since the next full build sends the CSP rows to
+      Claude. Decision: every current set; the 1,508 sets that state no licence
+      count as permitted for now (you, 10 Nov).
+  1. Run the full chain with `.env` loaded: stage `prereq` sends about 116M
+     input and 59M output tokens.
+  2. Stage `dedupe` merges a CSP row and an OpenSALT row that carry the same
      `code:*` tag before the cosine pass.
-  4. Readme: CSP attributions per set licence (CC BY 4.0 US, CC BY 3.0 US).
+  3. Readme: CSP attributions per set licence (CC BY 4.0 US, CC BY 3.0 US).
 
 - [ ] `deno task status` also scores prereq edges against Junyi crowd labels.
       Blocker: a PSLC DataShop login. You make the account: open

@@ -1406,9 +1406,10 @@ export function stagePostproc() {
 
 // ---------- stage finalize ----------
 
-// The chain lift moves an unanchored skill at most 3 bands: middle school to
-// high school.
-const LIFT_CAP = 3;
+// The chain lift moves an unanchored skill at most 4 bands (decision, 12 Nov).
+// At 93k skills, cap 4 recovers 37 expert pairs and cap 3 recovers 36;
+// precision is 7/26 and 7/24.
+const LIFT_CAP = 4;
 
 export function stageFinalize() {
   const skills = readTable(TAGGED_DEDUPED);

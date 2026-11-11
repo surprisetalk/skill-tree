@@ -23,8 +23,42 @@ const early = <T>(f: () => Promise<T>) => {
   return () => p;
 };
 const LIST_BOUND_MS = 30_000;
+// Stage list reads every CSP set: 25k files and 40 s of gunzip alone. So each
+// list run here sees all other sources and a fixed sample of CSP sets, in a
+// temp dir, so it cannot overwrite the real build/. Stage status grades the
+// full output. `own` names a data folder that the caller fills; such a run
+// sees no CSP set, so its counts are its own.
+const CSP_SAMPLE = 200;
+const listDir = (own = ""): string => {
+  const dir = Deno.makeTempDirSync({ prefix: "list-" });
+  Deno.mkdirSync(`${dir}/build`);
+  Deno.mkdirSync(`${dir}/data/csp`, { recursive: true });
+  if (own) Deno.mkdirSync(`${dir}/data/${own}`, { recursive: true });
+  for (const d of Deno.readDirSync("data")) {
+    if (d.name !== "csp" && d.name !== own) {
+      Deno.symlinkSync(`${Deno.cwd()}/data/${d.name}`, `${dir}/data/${d.name}`);
+    }
+  }
+  if (!own) {
+    const sets = [...Deno.readDirSync("data/csp")].map((e) => e.name)
+      .filter((n) => n.endsWith(".json.gz")).sort().slice(0, CSP_SAMPLE);
+    for (const f of sets) {
+      Deno.symlinkSync(`${Deno.cwd()}/data/csp/${f}`, `${dir}/data/csp/${f}`);
+    }
+  }
+  // The enrich caches that stage list applies: copies, since a stage writes
+  // build files in place.
+  for (const f of Deno.readDirSync("build")) {
+    if (/^1[b-g]_[a-z_]+\.tsv$/.test(f.name)) {
+      Deno.copyFileSync(`build/${f.name}`, `${dir}/build/${f.name}`);
+    }
+  }
+  return dir;
+};
+const LIST = listDir();
+addEventListener("unload", () => Deno.removeSync(LIST, { recursive: true }));
 const t0 = performance.now();
-const listP = run(["list"], ".", LIST_BOUND_MS);
+const listP = run(["list"], LIST, LIST_BOUND_MS);
 const seedHeader = "src_id\tdst_id\tsource\tconfidence\tholdout\tfallback\n";
 
 Deno.test("list: every row has 5 fields, a slug id, a title, and sources; ids are unique", () => {
@@ -89,7 +123,7 @@ Deno.test("list: OpenSALT grades come from the item or an ancestor", () => {
 });
 
 Deno.test("list stats: all four sources contribute, and dedupe merged rows", () => {
-  const s = JSON.parse(Deno.readTextFileSync("build/1_stats.json"));
+  const s = JSON.parse(Deno.readTextFileSync(`${LIST}/build/1_stats.json`));
   for (
     const src of [
       "esco",
@@ -790,7 +824,7 @@ Deno.test(
 
 // counting ← addition ← multiplication. Unanchored, each skill sits a band
 // above its prereq. An anchored multiplication caps the chain below it. A lift
-// past LIFT_CAP (3) drops the edge, unless the edge is a seed.
+// past LIFT_CAP (4) drops the edge, unless the edge is a seed.
 Deno.test(
   "finalize: the chain lift orders bands under anchors and the cap, or drops the edge",
   early(async () => {
@@ -817,17 +851,17 @@ Deno.test(
       "counting 5 ",
       "multiplication 6 addition",
     ]);
-    assertEquals(await lift(u(9, 5, "5\t5\t0")), [
+    assertEquals(await lift(u(10, 5, "5\t5\t0")), [
       "addition 5 ",
-      "counting 9 ",
+      "counting 10 ",
       "multiplication 6 addition",
     ]);
     assertEquals(
       await lift(
-        u(9, 5, "5\t5\t0"),
+        u(10, 5, "5\t5\t0"),
         "counting\taddition\tkhan\t1.00\t0\t0\n",
       ),
-      ["addition 8 counting", "counting 9 ", "multiplication 8 addition"],
+      ["addition 9 counting", "counting 10 ", "multiplication 9 addition"],
     );
   }),
 );
@@ -1240,7 +1274,7 @@ Deno.test("list: Learning Commons rows carry the source, grade tags, and a clean
     "markup left in a Learning Commons row",
   );
   const ids = new Set(
-    Deno.readTextFileSync("build/1m_lc_ids.tsv").split("\n").slice(1)
+    Deno.readTextFileSync(`${LIST}/build/1m_lc_ids.tsv`).split("\n").slice(1)
       .filter((l) => l).map((l) => l.split("\t")[1]),
   );
   assert(
@@ -1945,30 +1979,13 @@ Deno.test(
   }),
 );
 
-// Stage list throws without the BNCC translations. A copy, not a link to
-// build/, so the temp run cannot overwrite the real build/1_skills.tsv.
-const withBnccCache = (dir: string) => {
-  Deno.mkdirSync(`${dir}/build`);
-  Deno.copyFileSync(
-    "build/1g_bncc_translate.tsv",
-    `${dir}/build/1g_bncc_translate.tsv`,
-  );
-};
-
 // Stage list over a temp data dir whose OpenSALT folder holds only `items`.
 const listOpensalt = async (items: Record<string, string>[]) => {
-  const dir = Deno.makeTempDirSync();
-  Deno.mkdirSync(`${dir}/data/opensalt`, { recursive: true });
-  for (const d of Deno.readDirSync("data")) {
-    if (d.name !== "opensalt") {
-      Deno.symlinkSync(`${Deno.cwd()}/data/${d.name}`, `${dir}/data/${d.name}`);
-    }
-  }
+  const dir = listDir("opensalt");
   Deno.writeTextFileSync(
     `${dir}/data/opensalt/a.json`,
     JSON.stringify({ CFDocument: { title: "T" }, CFItems: items }),
   );
-  withBnccCache(dir);
   const out = await run(["list"], dir, LIST_BOUND_MS);
   const stdout = new TextDecoder().decode(out.stdout);
   const stderr = new TextDecoder().decode(out.stderr);
@@ -1988,17 +2005,10 @@ const listWithData = async (
   name: string,
   files: Record<string, Uint8Array>,
 ) => {
-  const dir = Deno.makeTempDirSync();
-  Deno.mkdirSync(`${dir}/data/${name}`, { recursive: true });
-  for (const d of Deno.readDirSync("data")) {
-    if (d.name !== name) {
-      Deno.symlinkSync(`${Deno.cwd()}/data/${d.name}`, `${dir}/data/${d.name}`);
-    }
-  }
+  const dir = listDir(name);
   for (const [f, bytes] of Object.entries(files)) {
     Deno.writeFileSync(`${dir}/data/${name}/${f}`, bytes);
   }
-  withBnccCache(dir);
   const out = await run(["list"], dir, LIST_BOUND_MS);
   Deno.removeSync(dir, { recursive: true });
   return {
@@ -2254,9 +2264,10 @@ if (!list.success) {
     }`,
   );
 }
-const [header, ...rows] = Deno.readTextFileSync("build/1_skills.tsv").split(
-  "\n",
-)
+const [header, ...rows] = Deno.readTextFileSync(`${LIST}/build/1_skills.tsv`)
+  .split(
+    "\n",
+  )
   .filter((l) => l.length).map((l) => l.split("\t"));
 
 Deno.test("expertScores: precision counts annotated edges only, recall follows the closure", () => {

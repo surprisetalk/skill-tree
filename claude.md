@@ -261,7 +261,7 @@ each standard set's raw API body to **{setId}.json.gz**. A set has `subject`,
 `educationLevels`, `document.publicationStatus`, `jurisdiction`, `license`, and
 `standards` keyed by id (`statementNotation`, `description`, `depth`,
 `parentId`). Each set states its own licence (CC BY 4.0 US or CC BY 3.0 US);
-1,508 state none. No stage reads it yet (`todo.md`).
+1,508 state none. Stage `list` reads every set.
 
 ### data/opensalt/ — OpenSALT Standards Frameworks (CASE JSON)
 
@@ -318,17 +318,20 @@ A new build table gets a schema; a new id goes through `slugify`.
 **Parsers**:
 
 - Stage `list`: ESCO, O\*NET (Skills/Knowledge/Abilities/Tasks/DWAs/Tech),
-  Lightcast, OpenSALT, Learning Commons, DigComp, Cert Atlas, BNCC, and the hubs
-  in `data/_foundations.json`. Each BNCC objective is one skill with source
-  `bncc`, tags `bncc:objective`, `bncc:subject:*`, `grade:*`, and
-  `code:<codigo>`. Each Cert Atlas objective is one skill with source
-  `certatlas`, no tags, and a description of exam, certifying body, domain, and
-  sub-objectives; a title with no Latin letter is dropped and counted. Each
-  DigComp LearningOutcome is one skill with tags `digcomp:outcome`,
-  `digcomp:area:*`, `digcomp:competence:*`, and `digcomp:level:*`; stage
-  `seed-edges` turns the levels into seed order. An OpenSALT item with no
-  `educationLevel` takes its nearest `isChildOf` ancestor's. Each item of a
-  framework that grades no item (SCED, Praxis) gets
+  Lightcast, OpenSALT, Learning Commons, DigComp, Cert Atlas, BNCC, CSP, and the
+  hubs in `data/_foundations.json`. Each leaf standard of a current CSP set is
+  one skill with source `csp`, tags `csp`, `grade:*` when the set names at most
+  4 grades, and `code:<statementNotation>` unless the notation lists several
+  codes; a standard that parents another is a heading. Each BNCC objective is
+  one skill with source `bncc`, tags `bncc:objective`, `bncc:subject:*`,
+  `grade:*`, and `code:<codigo>`. Each Cert Atlas objective is one skill with
+  source `certatlas`, no tags, and a description of exam, certifying body,
+  domain, and sub-objectives; a title with no Latin letter is dropped and
+  counted. Each DigComp LearningOutcome is one skill with tags
+  `digcomp:outcome`, `digcomp:area:*`, `digcomp:competence:*`, and
+  `digcomp:level:*`; stage `seed-edges` turns the levels into seed order. An
+  OpenSALT item with no `educationLevel` takes its nearest `isChildOf`
+  ancestor's. Each item of a framework that grades no item (SCED, Praxis) gets
   `opensalt:ungraded-framework`. OpenSALT statements parse as HTML with
   `deno-dom`; a `script`, `style`, or head element in one stops the stage.
   Learning Commons statements parse the same way and pass the same scaffolding
@@ -393,9 +396,10 @@ files).
 ### Checks
 
 - `deno task check` — fmt, lint, typecheck.
-- `deno task test` — runs stage `list` for real (no Ollama) and asserts on its
-  output, plus fixture runs of the other stages. Keep it under 10 s: start each
-  fixture run at module load so the runs overlap.
+- `deno task test` — runs stage `list` for real (no Ollama) in a temp dir, on
+  every source but a fixed sample of 200 CSP sets, and asserts on its output,
+  plus fixture runs of the other stages. Keep it under 10 s: start each fixture
+  run at module load so the runs overlap.
 - `deno task status` — grades the last full build; exits 1 when any condition
   scores below 1.0. snitch runs it hourly. Three conditions grade the edges
   against the LectureBank pairs: the matched-pair count, precision, and recall.
@@ -435,7 +439,7 @@ Columns:
   `SUBJECT_MIN`) to a skill that carries it as a topic. Stage `finalize` then
   lifts along the final edges: an unanchored skill sits at least one band above
   each prereq, and below each anchored skill above it, so a long chain carries a
-  skill past grade 12. The lift moves a skill at most 3 bands (`LIFT_CAP`). A
+  skill past grade 12. The lift moves a skill at most 4 bands (`LIFT_CAP`). A
   non-seed edge whose prereq ends above that limit drops; one that ends in the
   same band stays as a tie.
 - `prereqs` — comma-separated prereq IDs. Strict DAG, no self-loops, all IDs
