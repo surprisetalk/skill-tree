@@ -11,14 +11,15 @@ Nothing is unblocked: every entry waits on you.
 - [ ] A full build finishes in under 2 hours of compute at the CSP scale: 392k
       skills, 279k grade anchors. Decision (you, 10 Nov): performance first,
       then a review together, then all of CSP. Blocker: your review of the
-      timings below. Measured 12 Nov in jj workspace `csp` (`../skill-tree-csp`,
-      change `vrswyopt` on main), `SKIP_LLM=1`: list 1m41, embed 56m (first run
-      only, then cached), tag 4m11, dedupe 6m06, seed-edges 5m50 (36m47 before
-      the IVF fallback, same output), difficulty 4m56, prereq 44m53 (IVF index
-      3m27, candidates 41m23, before any Claude call), postproc 13 s, finalize 6
-      s, status 1m14. Total 69 min, or 125 min with the first embed.
-  1. If the review wants more margin: profile `computePrereqCandidates` at 392k
-     (41 min, the largest stage), and find which pool dominates.
+      timings below. Measured 12 Nov in jj workspace `csp`
+      (`../skill-tree-csp`), `SKIP_LLM=1`: list 1m41, embed 56m (first run only,
+      then cached), tag 4m11, dedupe 6m06, seed-edges 5m50 (36m47 before the IVF
+      fallback), difficulty 4m57, prereq 6m13 (44m53 before the candidate
+      workers: IVF index 2m13, candidates 3m58 on 14 workers, peak 19 GB),
+      postproc 13 s, finalize 6 s, status 1m14. Total 31 min, or 87 min with the
+      first embed.
+  1. If the review wants more margin: the kNN of stage `difficulty` (295 s) and
+     the IVF index build (133 s) run on one thread and split the same way.
   2. Remove the workspace when the review is done: `jj workspace forget csp`,
      then `watchman watch-del ../skill-tree-csp`, then delete the folder.
 
