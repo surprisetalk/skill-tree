@@ -346,7 +346,8 @@ A new build table gets a schema; a new id goes through `slugify`.
   `build/1m_lc_ids.tsv` and `3b_aliases.tsv`, not by label. A pair with an end
   that stage `list` dropped goes to `build/1e_unresolved.tsv` with reason
   `no-skill`. Pairs resolve to skill IDs by exact match, then by embedding
-  (cosine ≥ 0.90 and a shared token). Unresolved pairs go to
+  (cosine ≥ 0.90 and a shared token). Past √n labels, the IVF index of stage
+  `prereq` finds each label's nearest skill. Unresolved pairs go to
   `build/1e_unresolved.tsv` with a reason per label. A source that gives both A
   → B and B → A loses both, as does a course pair inside a seed cycle
   (`contested-order`): expert sources outrank course catalogs. Each Khan

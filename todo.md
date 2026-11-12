@@ -4,51 +4,50 @@ Each entry below is a `deno task status` condition that fails, or a stage that
 is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
-- [ ] A skill's band says when a typical learner can first learn it. Today 10/23
-      sanity skills fit (goal 80%). Decision (you, 11 Nov): no college-level
-      anchors; long chains carry skills past 12. Two causes, from the kNN
-      neighbours of the misses: - Arts, health, and finance anchors are mostly
-      9–12 CTE standards, which anchor at grade 9: `drawing` borrows from
-      drafting, `budgeting` from 9–12 finance. CSP adds these subjects at every
-      grade. - Course seeds lift school concepts: `calculus → probability`,
-      `morphology → grammar`, `writing → reading-comprehension`. Tried at 93k,
-      both reverted: a topic pool under 15 anchors falls back to all anchors
-      (sanity same, Kendall τ 0.85 → 0.81); course seeds skip the band pass
-      (12/23, but 0.3% of skills then sit below a prereq).
-  1. Read the sanity score of the CSP-scale build (perf entry). If it reaches
-     80%, close this entry.
-  2. Else apply the course-seed step of the next entry and rescore.
-  3. Correct the sanity rows only if a row is wrong, as the `REVIEW:` note in
-     `pipeline.ts` asks; never to fit the build.
-
-- [ ] A course-catalog seed never puts a college requirement before a school
-      concept. The backward samples are course seeds, not named prereqs:
-      `academic-writing → drawing`, `songwriting → music-theory`,
-      `medical-nutrition-therapy → nutrition`. Only 18 named edges in
-      `skills.tsv` put a specialisation first, and some are right
-      (`eclampsia ← pre-eclampsia`). 97% of course pairs come from one
-      institution, so a two-institution rule drops nearly all of them. Measured
-      at 93k with no course seeds: precision 7/26 → 10/27, recall 37 → 29,
-      sanity 10 → 12/23.
-  1. Rescore the same drop at CSP scale (filter `courses` rows out of
-     `build/1e_seed_edges.tsv`, then run `difficulty` through `status`).
-  2. If precision and sanity gain more than recall loses, drop course seeds in
-     stage `seed-edges` with a `REVIEW:` note, and keep them in
-     `1e_unresolved.tsv` with reason `course-seed`.
-
-- [ ] A full build finishes in under 2 hours of compute at the CSP scale: 364k
-      skills, about 290k grade anchors. Decision (you, 10 Nov): performance
-      first, then a review together, then all of CSP. Done at 93k: kNN stride
-      sample (326 s → 55 s); candidates use an IVF index for big pools (cosine
-      top 7× faster, pool Jaccard 0.966) and a token index for the cross-topic
-      pool. The IVF build takes 55 s and grows with n·√n.
-  1. Running since 12 Nov 08:34: jj workspace `csp` at `../skill-tree-csp`,
-     change `vrswyopt` (`lopuqmnx` rebased onto main, no conflicts),
-     `SKIP_LLM=1 sh build/chain/chain.sh list`. Read the stage times in its
-     `build/chain/chain.log` and each stage's `seconds` in its logs.
-  2. Stop for the review with the timings and the new status numbers.
+Nothing is unblocked: every entry waits on you.
 
 ## Blocked on you
+
+- [ ] A full build finishes in under 2 hours of compute at the CSP scale: 392k
+      skills, 279k grade anchors. Decision (you, 10 Nov): performance first,
+      then a review together, then all of CSP. Blocker: your review of the
+      timings below. Measured 12 Nov in jj workspace `csp` (`../skill-tree-csp`,
+      change `vrswyopt` on main), `SKIP_LLM=1`: list 1m41, embed 56m (first run
+      only, then cached), tag 4m11, dedupe 6m06, seed-edges 5m50 (36m47 before
+      the IVF fallback, same output), difficulty 4m56, prereq 44m53 (IVF index
+      3m27, candidates 41m23, before any Claude call), postproc 13 s, finalize 6
+      s, status 1m14. Total 69 min, or 125 min with the first embed.
+  1. If the review wants more margin: profile `computePrereqCandidates` at 392k
+     (41 min, the largest stage), and find which pool dominates.
+  2. Remove the workspace when the review is done: `jj workspace forget csp`,
+     then `watchman watch-del ../skill-tree-csp`, then delete the folder.
+
+- [ ] A skill's band says when a typical learner can first learn it. Sanity fit
+      is 10/23 at 93k and 13/23 at CSP scale (goal 80%). Blocker: your review of
+      `data/_sanity.tsv` (its `REVIEW:` note in `pipeline.ts`). Decision (you,
+      11 Nov): no college-level anchors. CSP fixes `probability`, `budgeting`,
+      `typing`, and `spreadsheets`. Misses at CSP scale: `nutrition` 13,
+      `grammar` 12, `drawing` 9, `chemical-reactions` 11, `machine-learning` 12.
+      A merged skill anchors at the lowest grade of its standards, so CSP pulls
+      some down: `reading-comprehension` K, `pythagorean-theorem` grade 7,
+      `project-management` grade 6. Rejected at 93k: a topic pool under 15
+      anchors falls back to all anchors (sanity same, Kendall τ 0.85 → 0.81).
+  1. You check the rows that CSP contradicts: `reading-comprehension` (CCSS has
+     K reading standards), `pythagorean-theorem`, `project-management`.
+  2. Then try the median grade of a merged skill's standards as its anchor, not
+     the lowest, and rescore sanity and Kendall τ at CSP scale.
+
+- [ ] A course-catalog seed never puts a college requirement before a school
+      concept: `academic-writing → drawing`, `songwriting → music-theory`,
+      `medical-nutrition-therapy → nutrition`, `calculus → probability`. These
+      are course seeds, not named prereqs: only 18 named edges put a
+      specialisation first. Blocker: the CSP prereq run, since recall decides
+      it. Dropping every course seed is rejected: at CSP scale recall falls 54 →
+      31 and sanity stays 13/23. 97% of course pairs come from one institution,
+      so a two-institution rule drops nearly all of them.
+  1. Read the 80 course seeds that conflict with an anchor at CSP scale
+     (`seed_anchor_conflicts_by_source` in the workspace's `4_stats.json`), and
+     find a rule that drops those without the recall loss.
 
 - [ ] Stages `prereq` and `pilot` classify with Cloudflare Clef where it beats
       Haiku 5.5 on accuracy or cost. Facts (Cloudflare model page, pricing,
@@ -68,11 +67,11 @@ first for `enrich` and `prereq`).
 - [ ] Skills from every Common Standards Project (CSP) set appear in
       `skills.tsv`. Blocker: the performance entry, then your review. Decision:
       every current set; the 1,508 sets that state no licence count as permitted
-      for now (you, 10 Nov). Side commit `lopuqmnx` grows `1_skills.tsv` from
-      95,375 to 364,519 rows.
-  1. Rebase `lopuqmnx` onto main. It parses leaf standards of current sets,
-     treats a parent as a heading, tags grades when a set names at most 4, and
-     skips a notation that lists several codes.
+      for now (you, 10 Nov). Side commit `vrswyopt` (rebased `lopuqmnx`) grows
+      `1_skills.tsv` from 95,447 to 391,782 rows.
+  1. Move `vrswyopt` onto main. It parses leaf standards of current sets, treats
+     a parent as a heading, tags grades when a set names at most 4, and skips a
+     notation that lists several codes.
   2. Stage `prereq` then sends about 116M input and 59M output tokens.
   3. Stage `dedupe` merges a CSP row and an OpenSALT row that carry the same
      `code:*` tag before the cosine pass.
