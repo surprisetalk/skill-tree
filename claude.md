@@ -287,13 +287,14 @@ Florida, etc.), plus specialty frameworks (CASEL, 21st Century Skills, AP CS).
 `list`, `enrich`, `trees`, `embed`, `tag`, `dedupe`, `seed-edges`, `difficulty`,
 `prereq`, `postproc`, `finalize`, `status`.
 
-| File          | Holds                                                                  |
-| ------------- | ---------------------------------------------------------------------- |
-| `pipeline.ts` | Entry point: stage dispatch and stage `status`.                        |
-| `lib.ts`      | Names that two files share: text cleanup, TSV/CSV, Claude, embeddings. |
-| `sources.ts`  | Stages `list`, `enrich`, `trees`, `seed-edges`.                        |
-| `graph.ts`    | Stages `embed`, `tag`, `dedupe`, `difficulty`.                         |
-| `prereq.ts`   | Stages `prereq`, `postproc`, `finalize`.                               |
+| File               | Holds                                                                  |
+| ------------------ | ---------------------------------------------------------------------- |
+| `pipeline.ts`      | Entry point: stage dispatch and stage `status`.                        |
+| `lib.ts`           | Names that two files share: text cleanup, TSV/CSV, Claude, embeddings. |
+| `sources.ts`       | Stages `list`, `enrich`, `trees`, `seed-edges`.                        |
+| `graph.ts`         | Stages `embed`, `tag`, `dedupe`, `difficulty`.                         |
+| `prereq.ts`        | Stages `prereq`, `postproc`, `finalize`.                               |
+| `prereq_worker.ts` | One core's share of the prereq candidate search.                       |
 
 Parses datasets into a unified schema, embeds via Ollama `nomic-embed-text`,
 assigns occupations/topics, dedupes, infers difficulty (isotonic PAV + kNN

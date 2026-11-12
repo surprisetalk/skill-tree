@@ -5,6 +5,7 @@ import {
   claudeNow,
   col,
   DIFFICULTY,
+  dot,
   easier,
   EDGES,
   EMBED_DIM,
@@ -13,6 +14,7 @@ import {
   EXPAND,
   expertScores,
   FRAMEWORK_RE,
+  type Ivf,
   IVF_EXACT_MAX,
   ivfIndex,
   ivfTop,
@@ -149,10 +151,32 @@ const FOUNDATION_IDS = new Set([
   "probability",
 ]);
 
-function computePrereqCandidates(
-  vecs: Float32Array,
-  ivf: ReturnType<typeof ivfIndex>,
-): Map<string, number[]> {
+// One worker's share of the candidate search: skills w, w + of, w + 2·of, …
+// The arrays sit on SharedArrayBuffers, so no worker copies them.
+export type CandidateShare = {
+  vecs: Float32Array;
+  cent: Float32Array;
+  // The IVF lists end to end: list c is members[starts[c]..starts[c + 1]].
+  members: Int32Array;
+  starts: Int32Array;
+  w: number;
+  of: number;
+};
+
+export function candidateShare(
+  { vecs, cent, members, starts, w, of }: CandidateShare,
+): {
+  out: [number, number[]][];
+  secs: Record<string, number>;
+  fullScans: number;
+} {
+  const ivf = {
+    cent,
+    lists: Array.from(
+      { length: starts.length - 1 },
+      (_, c) => [...members.subarray(starts[c], starts[c + 1])],
+    ),
+  };
   const { skills, diff, raw } = parseSkillsWithDifficulty();
   const topicIdx = new Map<string, number[]>();
   for (let i = 0; i < skills.length; i++) {
@@ -170,6 +194,21 @@ function computePrereqCandidates(
   const K = 15;
   // Shorter tokens ("prepar") link prepare-medication to prepare-pasta.
   const TOK_MIN = 7;
+  // Each skill's fields, split once: the filters read them for every pair.
+  const longToks = (s: string) =>
+    s.split("-").filter((t) => t.length >= TOK_MIN);
+  const topicsOf = skills.map((s) => s.topics.split(",").filter(Boolean));
+  const occsOf = skills.map((s) => s.occupations.split(",").filter(Boolean));
+  const idToksOf = skills.map((s) => longToks(s.id));
+  const topicToksOf = topicsOf.map((ts) => ts.map(longToks));
+  const isPathological = skills.map((s) => pathological.has(s.id));
+  const isFoundation = skills.map((s) => FOUNDATION_IDS.has(s.id));
+  // Each topic's members by raw difficulty, easiest first, for the ancestors.
+  const byRaw = new Map(
+    [...topicIdx].map((
+      [t, arr],
+    ) => [t, arr.toSorted((a, b) => raw[a] - raw[b])]),
+  );
   // Each long topic token → the topics that hold it, in topicIdx order, so a
   // skill finds its cross-topic pool without a pass over every topic.
   const topicsOfTok = new Map<string, number[]>();
@@ -214,7 +253,7 @@ function computePrereqCandidates(
 
   const candOk = (i: number, j: number): boolean => {
     if (i === j) return false;
-    if (pathological.has(skills[j].id)) return false;
+    if (isPathological[j]) return false;
     if (isSced[j]) return false; // R1
     if (isStudyMeta[j] && !isStudyMeta[i]) return false; // R4
     const lj = slugLangs[j];
@@ -228,8 +267,7 @@ function computePrereqCandidates(
     return raw[j] < raw[i] || diff[j] < diff[i]; // DR1 hard guard, as `easier`
   };
 
-  const out = new Map<string, number[]>();
-  const t0 = performance.now();
+  const out: [number, number[]][] = [];
   // Seconds per part, summed over skills: the CSP scale needs the slow one.
   const secs: Record<string, number> = {};
   let tl = performance.now(), fullScans = 0;
@@ -238,35 +276,24 @@ function computePrereqCandidates(
     secs[part] = (secs[part] ?? 0) + (now - tl) / 1000;
     tl = now;
   };
-  for (let i = 0; i < skills.length; i++) {
+  for (let i = w; i < skills.length; i += of) {
     lap("other");
-    const topics = skills[i].topics.split(",").filter(Boolean);
-    const occsI = skills[i].occupations.split(",").filter(Boolean);
-    const myOccs = new Set<string>(occsI);
-    const myToks = new Set<string>();
-    for (const t of topics) {
-      for (const tok of t.split("-")) {
-        if (tok.length >= TOK_MIN) myToks.add(tok);
-      }
-    }
+    const topics = topicsOf[i];
+    const myOccs = new Set<string>(occsOf[i]);
+    const myToks = new Set<string>(topicToksOf[i].flat());
+    const sharesTok = (toks: string[]) => toks.some((t) => myToks.has(t));
+    // How many of j's topics hold one of i's tokens, counted up to 2.
+    const topicsSharingTok = (j: number) => {
+      let n = 0;
+      for (const toks of topicToksOf[j]) if (sharesTok(toks) && ++n >= 2) break;
+      return n;
+    };
 
     // R3 within-topic shared-token guard: candidate must share ≥1 topic token,
     // OR share an occupation, OR be in FOUNDATION_IDS.
-    const withinTopicOk = (j: number): boolean => {
-      if (FOUNDATION_IDS.has(skills[j].id)) return true;
-      for (const oc of skills[j].occupations.split(",")) {
-        if (oc && myOccs.has(oc)) return true;
-      }
-      for (const tok of skills[j].id.split("-")) {
-        if (tok.length >= TOK_MIN && myToks.has(tok)) return true;
-      }
-      for (const t of skills[j].topics.split(",")) {
-        for (const tok of t.split("-")) {
-          if (tok.length >= TOK_MIN && myToks.has(tok)) return true;
-        }
-      }
-      return false;
-    };
+    const withinTopicOk = (j: number): boolean =>
+      isFoundation[j] || occsOf[j].some((o) => myOccs.has(o)) ||
+      sharesTok(idToksOf[j]) || topicToksOf[j].some(sharesTok);
 
     const pool = new Set<number>();
     for (const t of topics) {
@@ -299,9 +326,8 @@ function computePrereqCandidates(
     if (topics.length > 0 && ANCESTOR_K > 0) {
       const aMax = raw[i] - ancestorMin;
       for (const t of topics) {
-        const arr = topicIdx.get(t);
-        if (!arr) continue;
-        const sorted = [...arr].sort((a, b) => raw[a] - raw[b]);
+        const sorted = byRaw.get(t);
+        if (!sorted) continue;
         for (
           let k = 0;
           k < sorted.length && ancestorSet.size < ANCESTOR_K;
@@ -323,9 +349,7 @@ function computePrereqCandidates(
     const inTopicSlots = Math.max(1, K - ancestorSet.size - GLOBAL_K);
     const consider = (j: number) => {
       if (ancestorSet.has(j)) return;
-      let sc = 0;
-      const aOff = j * EMBED_DIM;
-      for (let d = 0; d < EMBED_DIM; d++) sc += vecs[sOff + d] * vecs[aOff + d];
+      const sc = dot(vecs, sOff, vecs, j * EMBED_DIM);
       if (top.length < inTopicSlots) {
         top.push({ idx: j, score: sc });
         if (top.length === inTopicSlots) top.sort((a, b) => a.score - b.score);
@@ -367,45 +391,9 @@ function computePrereqCandidates(
         if (picked.has(j)) continue;
         if (!candOk(i, j)) continue;
         if (frameworkOnly[j]) continue; // H2: framework-only skills never enter global pool
-        if (myOccs.size) {
-          let occShared = false;
-          for (const o of skills[j].occupations.split(",")) {
-            if (o && myOccs.has(o)) {
-              occShared = true;
-              break;
-            }
-          }
-          if (!occShared) {
-            let tokShared = 0;
-            for (const t of skills[j].topics.split(",")) {
-              for (const tok of t.split("-")) {
-                if (tok.length >= TOK_MIN && myToks.has(tok)) {
-                  tokShared++;
-                  break;
-                }
-              }
-              if (tokShared >= 2) break;
-            }
-            if (tokShared < 2) continue;
-          }
-        } else {
-          let tokShared = 0;
-          for (const t of skills[j].topics.split(",")) {
-            for (const tok of t.split("-")) {
-              if (tok.length >= TOK_MIN && myToks.has(tok)) {
-                tokShared++;
-                break;
-              }
-            }
-            if (tokShared >= 2) break;
-          }
-          if (tokShared < 2) continue;
-        }
-        let sc = 0;
-        const aOff = j * EMBED_DIM;
-        for (let d = 0; d < EMBED_DIM; d++) {
-          sc += vecs[sOff + d] * vecs[aOff + d];
-        }
+        const occShared = occsOf[j].some((o) => myOccs.has(o));
+        if (!occShared && topicsSharingTok(j) < 2) continue;
+        const sc = dot(vecs, sOff, vecs, j * EMBED_DIM);
         if (globalTop.length < GLOBAL_K) {
           globalTop.push({ idx: j, score: sc });
           if (globalTop.length === GLOBAL_K) {
@@ -439,16 +427,10 @@ function computePrereqCandidates(
     const dropped = new Set<number>();
     for (let a = 0; a < allPicks.length; a++) {
       if (dropped.has(a)) continue;
-      const aIdx = allPicks[a].idx;
-      const aOff = aIdx * EMBED_DIM;
+      const aOff = allPicks[a].idx * EMBED_DIM;
       for (let b = a + 1; b < allPicks.length; b++) {
         if (dropped.has(b)) continue;
-        const bIdx = allPicks[b].idx;
-        const bOff = bIdx * EMBED_DIM;
-        let sc = 0;
-        for (let d = 0; d < EMBED_DIM; d++) {
-          sc += vecs[aOff + d] * vecs[bOff + d];
-        }
+        const sc = dot(vecs, aOff, vecs, allPicks[b].idx * EMBED_DIM);
         if (sc >= DUP_COS) {
           // keep higher-scoring (or lower index for ancestors — score 0)
           if (allPicks[a].score >= allPicks[b].score) dropped.add(b);
@@ -461,24 +443,92 @@ function computePrereqCandidates(
     }
     const kept = allPicks.filter((_, k) => !dropped.has(k));
     const idxs = kept.map((p) => p.idx).slice(0, K);
-    out.set(skills[i].id, idxs);
+    out.push([i, idxs]);
     lap("dedupe");
-    if ((i + 1) % 5000 === 0) {
-      const el = (performance.now() - t0) / 1000;
-      console.log(
-        `  candidates ${i + 1}/${skills.length} (${
-          ((i + 1) / el).toFixed(0)
-        }/s)`,
-      );
-    }
   }
   lap("other");
-  console.log(
-    `[prereq] candidate seconds: ${
-      Object.entries(secs).map(([k, v]) => `${k}=${v.toFixed(1)}`).join(" ")
-    }; full scans ${fullScans}/${skills.length}`,
+  return { out, secs, fullScans };
+}
+
+// REVIEW: Workers split the candidate search, one per core, and at least
+// WORKER_SKILLS skills each: a worker first reads the skill tables itself.
+// Each skill's candidates read only shared data, so the output is the same
+// for any split. At 93k: 157 s on one thread, 22 s on 10 workers.
+// Alternative: one thread. It took 41 min at 392k skills.
+const WORKER_SKILLS = 10_000;
+async function prereqCandidates(
+  vecs: Float32Array,
+  ivf: Ivf,
+  ids: string[],
+): Promise<Map<string, number[]>> {
+  const shared = <T extends Float32Array | Int32Array>(
+    make: (b: SharedArrayBuffer) => T,
+    from: ArrayLike<number>,
+  ): T => {
+    const a = make(new SharedArrayBuffer(from.length * 4));
+    a.set(from);
+    return a;
+  };
+  const starts = [0];
+  for (const l of ivf.lists) starts.push(starts.at(-1)! + l.length);
+  const share = {
+    vecs: shared((b) => new Float32Array(b), vecs),
+    cent: shared((b) => new Float32Array(b), ivf.cent),
+    members: shared((b) => new Int32Array(b), ivf.lists.flat()),
+    starts: shared((b) => new Int32Array(b), starts),
+  };
+  const of = Math.max(
+    1,
+    Math.min(
+      navigator.hardwareConcurrency,
+      Math.ceil(ids.length / WORKER_SKILLS),
+    ),
   );
-  return out;
+  const t0 = performance.now();
+  const shares = await Promise.all(
+    Array.from(
+      { length: of },
+      (_, w) =>
+        new Promise<ReturnType<typeof candidateShare>>((resolve, reject) => {
+          const worker = new Worker(
+            new URL("./prereq_worker.ts", import.meta.url),
+            { type: "module" },
+          );
+          const fail = (why: string) => {
+            worker.terminate();
+            reject(
+              new Error(
+                `[prereq] candidate worker ${w} of ${of}: expected candidate lists, received ${why}. Rerun: deno run -A pipeline.ts prereq`,
+              ),
+            );
+          };
+          worker.onmessage = (e) => {
+            worker.terminate();
+            resolve(e.data);
+          };
+          worker.onerror = (e) => {
+            e.preventDefault();
+            fail(`an error: ${e.message}`);
+          };
+          worker.onmessageerror = () => fail("a message it could not read");
+          worker.postMessage({ ...share, w, of } satisfies CandidateShare);
+        }),
+    ),
+  );
+  const secs: Record<string, number> = {};
+  for (const r of shares) {
+    for (const [k, v] of Object.entries(r.secs)) secs[k] = (secs[k] ?? 0) + v;
+  }
+  console.log(
+    `[prereq] candidates: ${of} workers, ${
+      ((performance.now() - t0) / 1000).toFixed(1)
+    } s; worker seconds ${
+      Object.entries(secs).map(([k, v]) => `${k}=${v.toFixed(1)}`).join(" ")
+    }; full scans ${shares.reduce((n, r) => n + r.fullScans, 0)}/${ids.length}`,
+  );
+  const byIdx: number[][] = [];
+  for (const r of shares) for (const [i, c] of r.out) byIdx[i] = c;
+  return new Map(ids.map((id, i) => [id, byIdx[i]]));
 }
 
 const PREREQ_PROMPT =
@@ -547,7 +597,11 @@ export async function stagePrereq() {
       ((performance.now() - tIvf) / 1000).toFixed(1)
     } s`,
   );
-  const candidates = computePrereqCandidates(vecs, ivf);
+  const candidates = await prereqCandidates(
+    vecs,
+    ivf,
+    skills.map((s) => s.id),
+  );
   const jobs = skills.flatMap((s) => {
     const cands = candidates.get(s.id);
     return cands?.length ? [{ ...s, cands }] : [];
