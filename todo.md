@@ -75,28 +75,26 @@ first for `enrich` and `prereq`).
       Blocker: a PSLC DataShop login. You make the account: open
       `pslcdatashop.web.cmu.edu/help?page=access`, sign in with Google or your
       university, and fill the registration form. Dataset 1198 is a public
-      project, so it needs no request to the PI.
+      project, so it needs no request to the PI. Safari did not load the site on
+      12 Nov, though curl got 200: try without iCloud Private Relay or content
+      blockers.
   1. Log in, open `DatasetInfo?datasetId=1198`, tab Files, and download
      `relationship_annotation_training.csv` (1,131 pairs) into `data/junyi/`,
      gitignored. The web-services API needs a Java client with request signing,
      so a manual download is simpler. It is non-commercial: eval only.
   2. Score it with the LectureBank precision and recall code.
 
-- [ ] ASN standards that CSP lacks appear in `skills.tsv`. Blocker: ASN bulk
-      access. D2L documents no batch service. You write through
-      `asn.desire2learn.com/content/contact-us`: "We request bulk access to the
-      ASN web services (JSON-LD, export 3.1.0) for all US state standards
-      documents, for non-commercial research. Please name the batch endpoint,
-      whether it needs credentials, and the licence."
+- [ ] ASN standards that CSP lacks appear in `skills.tsv`. Blocker: ASN's reply.
+      You sent the bulk-access request through
+      `asn.desire2learn.com/content/contact-us` (12 Nov).
   1. Only single documents download
      (`asn.desire2learn.com/resources/{id}_full.json`). CSP first imported its
      states from ASN, so ASN adds mostly duplicates.
 
 - [ ] England's school curriculum (Oak National Academy, KS1–KS4, 17 subjects)
-      appears in `skills.tsv`, with unit order as seed edges. Blocker: a free
-      API key. You open `open-api.thenational.academy`, click "Request an API
-      key" (a HubSpot form), and put the key in `.env` as `OAK_API_KEY`. Keys do
-      not expire. Calls send `Authorization: Bearer <key>`.
+      appears in `skills.tsv`, with unit order as seed edges. Blocker: the API
+      key you requested (12 Nov), by email. Put it in `.env` as `OAK_API_KEY`.
+      Keys do not expire. Calls send `Authorization: Bearer <key>`.
   1. Fetch the bulk JSON per subject and phase. Before you parse it, check one
      file for quiz fields: the schema has none, but the bulk page lists them.
   2. Each unit becomes a skill. Consecutive units within one `thread` become
@@ -106,13 +104,11 @@ first for `enrich` and `prereq`).
   4. Skip lessons with `restricted: true`. OGL v3 covers the rest.
 
 - [ ] Apprenticeship knowledge, skills, and behaviours (Skills England, levels
-      2–7) appear in `skills.tsv`, tagged by occupation. Blocker: a free API
-      key, granted at Skills England's discretion. You open
-      `occupational-maps.skillsengland.education.gov.uk/public-api/`, fill its
-      Cognito form (the data is stored in the US), and put the emailed key in
-      `.env` as `SKILLS_ENGLAND_API_KEY`. The licence (OGL v3) requires the
-      Skills England logo and "© Skills England 2025" on every derived product.
-      Decision: sponge carries the logo.
+      2–7) appear in `skills.tsv`, tagged by occupation. Blocker: the API key
+      you requested (12 Nov), granted at Skills England's discretion, by email.
+      Put it in `.env` as `SKILLS_ENGLAND_API_KEY`. The licence (OGL v3)
+      requires the Skills England logo and "© Skills England 2025" on every
+      derived product. Decision: sponge carries the logo.
   1. `GET occupational-maps-api.skillsengland.education.gov.uk/api/v1/Occupations`
      with header `X-API-KEY`, then each `/Occupations/{stdCode}`.
   2. Each `knowledges`, `skills`, and `behaviours` item becomes a skill. Its
