@@ -4,7 +4,19 @@ Each entry below is a `deno task status` condition that fails, or a stage that
 is not built. Rerun one stage: `sh build/chain/chain.sh <stage>` (load `.env`
 first for `enrich` and `prereq`).
 
-Nothing is unblocked: every entry waits on you.
+- [ ] Stages `prereq` and `pilot` classify with Cloudflare Clef where it beats
+      Haiku 5.5 on accuracy or cost. Facts (Cloudflare model page, pricing,
+      changelog 1 Oct 2026): `@cf/cloudflare/clef` (27B) and `clef-flash` (9B),
+      Apache 2.0, 1–64 questions per call, types `noul` (yes/no), `choice`,
+      `score`; input $0.24/M tokens (flash $0.038/M), output free, 10k neurons a
+      day free. `CLOUDFLARE_API_TOKEN` is in `.env`; the account id comes from
+      `GET /accounts`, which must list exactly one.
+  1. Try the snap step first with `clef-flash`: one `choice` question, choices
+     `none` and `1`–`10`. Compare with the Haiku answers in
+     `build/pilot_snap.tsv`.
+  2. Then the prereq pick: one `noul` question per candidate (15 per call). A
+     probability gives a cut point; score it with LectureBank precision and
+     recall.
 
 ## Blocked on you
 
@@ -47,21 +59,6 @@ Nothing is unblocked: every entry waits on you.
      (`seed_anchor_conflicts_by_source` in the workspace's `4_stats.json`), and
      find a rule that drops those without the recall loss.
 
-- [ ] Stages `prereq` and `pilot` classify with Cloudflare Clef where it beats
-      Haiku 5.5 on accuracy or cost. Facts (Cloudflare model page, pricing,
-      changelog 1 Oct 2026): `@cf/cloudflare/clef` (27B) and `clef-flash` (9B),
-      Apache 2.0, 1–64 questions per call, types `noul` (yes/no), `choice`,
-      `score`; input $0.24/M tokens (flash $0.038/M), output free, 10k neurons a
-      day free. Blocker: no Cloudflare credentials in `.env`. You create an API
-      token with Workers AI read and run permission, then add
-      `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
-  1. Try the snap step first with `clef-flash`: one `choice` question, choices
-     `none` and `1`–`10`. Compare with the Haiku answers in
-     `build/pilot_snap.tsv`.
-  2. Then the prereq pick: one `noul` question per candidate (15 per call). A
-     probability gives a cut point; score it with LectureBank precision and
-     recall.
-
 - [ ] Skills from every Common Standards Project (CSP) set appear in
       `skills.tsv`. Stage `list` parses them (391,782 rows in `1_skills.tsv`),
       and `build/2_cache.bin` holds their embeddings. Blocker: your review of
@@ -94,15 +91,6 @@ Nothing is unblocked: every entry waits on you.
   1. Only single documents download
      (`asn.desire2learn.com/resources/{id}_full.json`). CSP first imported its
      states from ASN, so ASN adds mostly duplicates.
-
-- [ ] Delete the CSP API key from git history, or confirm that it is CSP's
-      public demo key. Blocker: you. Commit `4724493^` holds a hardcoded
-      `api-key` in `data/download.ts`, and `origin/main` already has that
-      commit. A history rewrite changes every later commit hash.
-  1. Check whether the key belongs to your CSP account. It is not on CSP's
-     public pages: the site, the API docs, and the UI bundle omit it.
-  2. If yes: rotate it at CSP. The API answers without a key today, so new code
-     sends none.
 
 - [ ] England's school curriculum (Oak National Academy, KS1–KS4, 17 subjects)
       appears in `skills.tsv`, with unit order as seed edges. Blocker: a free
