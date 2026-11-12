@@ -1436,7 +1436,7 @@ export function stageList() {
     survivors.push(s);
   }
   raw.length = 0;
-  raw.push(...survivors);
+  for (const s of survivors) raw.push(s);
   console.log(
     `[list] long_title_dropped=${longTitleDropped}, slug_overflow=${slugOverflowDropped}`,
   );
@@ -1599,7 +1599,7 @@ export function stageList() {
     title_len: {
       p50: pct(titleLens, 0.5),
       p95: pct(titleLens, 0.95),
-      max: Math.max(...titleLens),
+      max: titleLens.reduce((a, b) => Math.max(a, b), 0),
     },
     empty_description: out.filter((s) => !s.description).length,
   });

@@ -183,7 +183,10 @@ async function stageStatus() {
           .join("_");
         groups.set(k, (groups.get(k) ?? 0) + 1);
       }
-      return grade(Math.max(...groups.values()), 5, Math.max(ids.length, 6));
+      // A spread of 390k counts overflows the call stack.
+      let most = 0;
+      for (const n of groups.values()) most = Math.max(most, n);
+      return grade(most, 5, Math.max(ids.length, 6));
     }],
     // REVIEW: One check, the rule stage prereq's purge applies: every row
     // names skills of this build, and every pick sits below its skill. It
