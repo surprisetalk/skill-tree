@@ -433,8 +433,9 @@ Columns:
   `SUBJECT_MIN`) to a skill that carries it as a topic. Stage `finalize` then
   lifts along the final edges: an unanchored skill sits at least one band above
   each prereq, and below each anchored skill above it, so a long chain carries a
-  skill past grade 12. The lift moves a skill at most 3 bands (`LIFT_CAP`); an
-  edge it cannot order drops, except a seed.
+  skill past grade 12. The lift moves a skill at most 3 bands (`LIFT_CAP`). A
+  non-seed edge whose prereq ends above that limit drops; one that ends in the
+  same band stays as a tie.
 - `prereqs` — comma-separated prereq IDs. Strict DAG, no self-loops, all IDs
   resolve within the file.
 - `occupations` / `topics` — comma-separated slugs from embedding match +
