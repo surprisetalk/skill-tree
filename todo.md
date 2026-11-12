@@ -25,9 +25,18 @@ first for `enrich` and `prereq`).
      whole numbers". Haiku is not gold, so hand-label 50 disagreements before
      you call either one more accurate. Cost: 545 input tokens a call, $0.004
      per 200 on `clef-flash`.
-  2. Then the prereq pick, which has gold labels: one `noul` question per
-     candidate (15 per call). A probability gives a cut point; score it with
-     LectureBank precision and recall.
+  2. Prereq-pick trial (12 Nov, LectureBank, the 128 dependents that resolve,
+     today's 15 candidates, one `noul` per candidate): the pools hold only 5 of
+     258 positive pairs, so no picker recalls more than 5. Haiku's picks: 3/5
+     precision, 3 recalled, 173 edges. `clef-flash` at p ≥ 0.5: 4/6, 4 recalled,
+     220 edges; at p ≥ 0.7: 4/4, 4 recalled, 85 edges. `clef` (27B) is no better
+     (3 at most). Too few graded edges to decide: 6 at most.
+  3. Rerun the trial against the Junyi pairs too (262 resolve), with the
+     script's design: Haiku's picks from `build/5_prereqs.tsv` against
+     `clef-flash` probabilities on today's candidates, scored by `expertScores`.
+     Cost: 1,609 input tokens a call, about 700 neurons per 128 calls.
+  4. If Clef holds up on both, the bigger lever is the candidate pool, not the
+     picker: 5 of 258 positives reach it. Find why before you switch models.
 
 ## Blocked on you
 
