@@ -1354,6 +1354,29 @@ export const SKILL_LIST = table({
   key: "id",
   columns: LIST_COLUMNS,
 });
+// What stage list must not emit, per row of SKILL_LIST. The list test reads a
+// sample of CSP sets; stage status reads every row.
+export function listDefects(
+  rows: { title: string; description: string; tags: string }[],
+): Record<"prefix" | "emphasis" | "shortCode" | "mojibake", string[]> {
+  // First letter only is case-insensitive, so acronyms like "CAN Bus" pass.
+  const prefix =
+    /^((Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]+|([Cc]an|[Cc]ould|[Ss]hould|[Hh]ow to|[Ww]hat is|[Ww]hy does)\s|[*_]*[Ww]ith\s+(modeling|prompting|guidance|support)|[*_])/;
+  // Markdown emphasis; a lone "_" is a blank, as in "What does _ mean?".
+  const emphasis = /(^|\s)[*_]+[^*_\s][^*_]*[*_]+(\s|[,.]|$)/;
+  // UTF-8 read as cp1252: "Ã©" for "é", "â€™" for "’".
+  const mojibake = /[ÂÃâ][\u0080-¿ŒœŠšŸŽžƒˆ˜–-›€™]|Â(\s|$)/;
+  return {
+    prefix: rows.filter((r) => prefix.test(r.title)).map((r) => r.title),
+    emphasis: rows.filter((r) => emphasis.test(r.title)).map((r) => r.title),
+    shortCode: rows.flatMap((r) => r.tags.split(",")).filter((t) =>
+      t.startsWith("code:") && t.length < "code:".length + 4
+    ),
+    mojibake: rows.filter((r) =>
+      mojibake.test(r.title) || mojibake.test(r.description)
+    ).map((r) => r.title),
+  };
+}
 export const TAGGED_RAW = table({
   path: `${BUILD}/3_tagged.tsv`,
   key: "id",

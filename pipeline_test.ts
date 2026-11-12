@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertGreater } from "@std/assert";
-import { expertScores } from "./lib.ts";
+import { expertScores, listDefects } from "./lib.ts";
 
 // Stage list runs in seconds without Ollama. The other stages need Ollama or
 // minutes, so they answer to `deno task status`.
@@ -145,39 +145,16 @@ Deno.test("list stats: all four sources contribute, and dedupe merged rows", () 
 // Mojibake is UTF-8 read as Windows-1252: a lead byte (Â, Ã, â) followed by a char
 // from the 0x80–0xBF continuation range as cp1252 shows it. A lone Â is a mangled
 // no-break space after the pipeline collapses whitespace.
-Deno.test("list: no bad title prefix, short code:* tag, or double-encoded UTF-8", () => {
-  // First letter only is case-insensitive, so acronyms like "CAN Bus" pass.
-  const prefix =
-    /^((Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]+|([Cc]an|[Cc]ould|[Ss]hould|[Hh]ow to|[Ww]hat is|[Ww]hy does)\s|[*_]*[Ww]ith\s+(modeling|prompting|guidance|support)|[*_])/;
-  const badTitles = rows.map((c) => c[1]).filter((t) => prefix.test(t));
-  assertEquals(
-    badTitles.slice(0, 5),
-    [],
-    `${badTitles.length} titles with a prefix`,
+Deno.test("list: no bad title prefix, emphasis, short code:* tag, or double-encoded UTF-8", () => {
+  const d = listDefects(
+    rows.map((c) => ({ title: c[1], description: c[2], tags: c[4] })),
   );
-  // Markdown emphasis is gone; a lone "_" is a blank, as in "What does _ mean?".
-  const marked = rows.map((c) => c[1]).filter((t) =>
-    /(^|\s)[*_]+[^*_\s][^*_]*[*_]+(\s|[,.]|$)/.test(t)
-  );
-  assertEquals(marked.slice(0, 5), [], `${marked.length} titles with emphasis`);
+  for (const [kind, bad] of Object.entries(d)) {
+    assertEquals(bad.slice(0, 5), [], `${bad.length} rows with ${kind}`);
+  }
   assert(
     rows.some((c) => c[1] === "Encode words with or after w read /er/"),
     "emphasis around single letters stayed",
-  );
-  const shortTags = rows.flatMap((c) => c[4].split(",")).filter((t) =>
-    t.startsWith("code:") && t.length < "code:".length + 4
-  );
-  assertEquals(
-    shortTags.slice(0, 5),
-    [],
-    `${shortTags.length} short code:* tags`,
-  );
-  const mojibake = /[ÂÃâ][\u0080-¿ŒœŠšŸŽžƒˆ˜–-›€™]|Â(\s|$)/;
-  const badRows = rows.filter((c) => c.some((f) => mojibake.test(f)));
-  assertEquals(
-    badRows.slice(0, 3).map((c) => c[0]),
-    [],
-    `${badRows.length} rows`,
   );
 });
 
@@ -374,6 +351,9 @@ Deno.test(
     ).join("");
     // The chain lift dropped calculus ← biology.
     build["build/6_edges.tsv"] += "calculus\tbiology\n";
+    // Two of four list rows carry a defect: mojibake, then a scaffold lead.
+    build["build/1_skills.tsv"] +=
+      "resume\tPrepare a rÃ©sumÃ©\t\tcsp\tcsp\nsyllables\tWith modeling and support break words\t\tcsp\tcsp\n";
     // Seeds: counting > addition is an edge, counting > multiplication is a
     // path, and calculus > counting is neither.
     build["build/1e_seed_edges.tsv"] +=
@@ -384,6 +364,13 @@ Deno.test(
       score("At least 80% of seed edges survive into skills.tsv."),
       (2 / 3 - 0) / (0.8 - 0),
     );
+    assertEquals(
+      score(
+        "No list title has a junk prefix, emphasis, a short code:* tag, or double-encoded UTF-8.",
+      ),
+      1 - 2 / 4,
+    );
+    assert(stderr.includes("mojibake 1"), stderr);
     // 11 edges: loop-a, loop-b, self, and ghost are bad.
     assertEquals(
       score("The prereq graph is a DAG, and every prereq names another skill."),

@@ -412,7 +412,8 @@ files).
 
 - `deno task check` — fmt, lint, typecheck.
 - `deno task test` — runs stage `list` for real (no Ollama) in a temp dir, on
-  every source but a fixed sample of 200 CSP sets, and asserts on its output,
+  every source but a fixed sample of 200 CSP sets, and asserts on its output
+  (`deno task status` reruns its title checks, `listDefects`, on every row),
   plus fixture runs of the other stages. Keep it under 10 s: start each fixture
   run at module load so the runs overlap.
 - `deno task status` — grades the last full build; exits 1 when any condition

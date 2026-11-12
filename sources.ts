@@ -438,14 +438,53 @@ const SCAFFOLD_LEAD = new RegExp(
     `[^,*_]*[,*_][,*_\\s]*`,
   "i",
 );
+// CSP writes some leads with no comma: "With modeling and support break words
+// into syllables". With no comma or marker in the title, the skill starts at
+// the word after the lead, unless that word continues the lead ("from").
+const SCAFFOLD_LEAD_BARE = new RegExp(
+  `^with\\s+${LEAD_WORD}(?:\\s+(?:(?:and|or)\\s+)?${LEAD_WORD})*\\s+` +
+    `(?!(?:from|of|by|as|in|at|for|to|the|an?|and|or)\\b)(?=\\S)`,
+  "i",
+);
 const EMPHASIS =
   /(^|[\s("'“])[*_]+([^*_\s](?:[^*_]*[^*_\s])?)[*_]+(?=[\s,.;:)!?"'”]|$)/g;
 // "* recognize own name in print" leads with a bullet, and "*Identify fitness
 // components (*Body composition …)" (CSP) with a footnote mark. A star that
 // still leads once emphasis pairs are gone is one of those.
 const unmark = (t: string) =>
-  t.replace(/^\*\s+/, "").replace(SCAFFOLD_LEAD, "").replace(EMPHASIS, "$1$2")
-    .replace(/^\*+\s*/, "");
+  t.replace(/^\*\s+/, "").replace(
+    /[,*_]/.test(t) ? SCAFFOLD_LEAD : SCAFFOLD_LEAD_BARE,
+    "",
+  ).replace(EMPHASIS, "$1$2").replace(/^\*+\s*/, "");
+
+// Some CSP text is UTF-8 that went through cp1252 once: "rÃ©sumÃ©" for
+// "résumé". Each run of non-ASCII characters maps back to its cp1252 bytes,
+// and the run becomes their UTF-8 text when they decode; "café" stays, since
+// a lone "é" byte is no UTF-8. The platform's codecs supply both tables.
+const CP1252 = new Map(
+  [
+    ...new TextDecoder("windows-1252").decode(
+      Uint8Array.from({ length: 256 }, (_, b) => b),
+    ),
+  ].map((ch, b) => [ch, b]),
+);
+const HIGH_RUN = new RegExp(
+  `[${
+    [...CP1252].filter(([, b]) => b >= 0x80).map(([ch]) =>
+      `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`
+    ).join("")
+  }]+`,
+  "g",
+);
+const UTF8 = new TextDecoder("utf-8", { fatal: true });
+const unmojibake = (t: string) =>
+  t.replace(HIGH_RUN, (run) => {
+    try {
+      return UTF8.decode(Uint8Array.from([...run], (ch) => CP1252.get(ch)!));
+    } catch {
+      return run;
+    }
+  });
 // CASE educationLevel uses "KG" and "TK"; stage difficulty expects "K".
 const normGrade = (g: string): string => {
   const u = g.trim().toUpperCase();
@@ -1092,7 +1131,8 @@ export function stageList() {
           }
           const cleaned = cleanStandard(
             // Plain text: a JavaScript standard names "<script>" as text.
-            String(st.description ?? "").replace(/\s+/g, " ").trim(),
+            unmojibake(String(st.description ?? "")).replace(/\s+/g, " ")
+              .trim(),
             "",
             "",
             Boolean(st.statementLabel),

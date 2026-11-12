@@ -16,6 +16,7 @@ import {
   HAN_RE,
   isJunkTopic,
   isTranslation,
+  listDefects,
   loadRawEmbeddings,
   loadTsvCache,
   need,
@@ -455,6 +456,25 @@ async function stageStatus() {
           ),
         ];
         return grade(checks.filter((c) => !c).length / checks.length, 0, 1);
+      },
+    ],
+    // The list test sees a sample of CSP sets; this sees every row.
+    [
+      "No list title has a junk prefix, emphasis, a short code:* tag, or double-encoded UTF-8.",
+      () => {
+        const rows = readTable(SKILL_LIST);
+        const d = listDefects(rows);
+        const bad = Object.values(d).reduce((n, b) => n + b.length, 0);
+        if (bad) {
+          console.error(
+            `list defects: ${
+              Object.entries(d).filter(([, b]) => b.length).map(([k, b]) =>
+                `${k} ${b.length} (${JSON.stringify(b[0]).slice(0, 80)})`
+              ).join(", ")
+            }`,
+          );
+        }
+        return grade(bad / rows.length, 0, 1);
       },
     ],
     ...expertSources.flatMap(([who, expert]) =>
