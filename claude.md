@@ -239,6 +239,21 @@ under `LB-Paper/`:
 - `readLectureBank` (`lib.ts`) reads the four sets. A row that names a topic id
   with no name in its topic file is counted and dropped (LB1 ids 210 and 211).
 
+### data/junyi/ — Junyi Academy Crowd Prerequisite Ratings (gitignored)
+
+PSLC DataShop dataset 1198 (Chang et al., EDM 2015). The licence bars commercial
+use, so git does not track it, and no stage reads it: `deno task
+status` grades
+the edges against it. A DataShop login downloads it by hand (tab Files).
+
+- **relationship_annotation_training.csv**,
+  **relationship_annotation_testing.csv** —
+  `Exercise_A, Exercise_B, …, Prerequisite_avg, Prerequisite_raw`: crowd scores
+  1–9. `readJunyi` (`lib.ts`) reads Exercise_B as the prereq of Exercise_A and a
+  mean over 5 as a positive; an exercise name `addition_2` reads as "addition".
+- **junyi_Exercise_table.csv**, **README.txt** — the exercises (Chinese display
+  names, Junyi's own prereq links) and the licence.
+
 ### data/bncc/ — Brazil's National Curriculum (BNCC, gzipped JSON)
 
 From github.com/bncc-dev/bncc-dados at the commit pinned in `data/download.ts`.
@@ -402,12 +417,13 @@ files).
   run at module load so the runs overlap.
 - `deno task status` — grades the last full build; exits 1 when any condition
   scores below 1.0. snitch runs it hourly. Three conditions grade the edges
-  against the LectureBank pairs: the matched-pair count, precision, and recall.
-  `status` resolves the topic names with `resolveConcept`, then
-  `embeddingFallback` (`lib.ts`, shared with stage `seed-edges`; it calls Ollama
-  for names with no exact skill, and the embedding cache keeps later runs
-  offline). Precision counts the `skills.tsv` edges whose pair an expert
-  annotated. Recall counts the positive pairs inside the transitive closure.
+  against the LectureBank pairs, and three against the Junyi pairs: the
+  matched-pair count, precision, and recall. `status` resolves the topic names
+  with `resolveConcept`, then `embeddingFallback` (`lib.ts`, shared with stage
+  `seed-edges`; it calls Ollama for names with no exact skill, and the embedding
+  cache keeps later runs offline). Precision counts the `skills.tsv` edges whose
+  pair an expert annotated. Recall counts the positive pairs inside the
+  transitive closure.
 
 ## Output Files
 

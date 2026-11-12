@@ -2055,6 +2055,53 @@ export function readLectureBank(): { pairs: ExpertPair[]; unnamed: number } {
   return { pairs, unnamed };
 }
 
+// ---------- Junyi Academy crowd prerequisite labels ----------
+
+// PSLC DataShop dataset 1198 (Chang et al., EDM 2015): crowd workers rated
+// pairs of Junyi Academy exercises (a Khan Academy fork) from 1 to 9. The
+// licence bars commercial use, so git does not track it: eval only.
+const JUNYI = "data/junyi";
+
+// REVIEW: Exercise_B is the prereq of Exercise_A, and a mean above 5, the
+// scale's midpoint, is a positive. Where Junyi's exercise table links the
+// pair, "B is a prereq of A" averages 6.12 and "A of B" 5.17 (all pairs 4.59),
+// so the crowd half-rates relatedness too. Alternative: drop the 4–6 band as
+// unlabeled. It is cleaner, but it drops about half the pairs.
+export function readJunyi(): { pairs: ExpertPair[]; unnamed: number } {
+  // "addition_2" is the second "addition" exercise.
+  const name = (e: string) => e.replace(/_\d+$/, "").replaceAll("_", " ");
+  const pairs: ExpertPair[] = [];
+  for (const part of ["training", "testing"]) {
+    const path = `${JUNYI}/relationship_annotation_${part}.csv`;
+    let rows: string[][];
+    try {
+      rows = readCsv(path);
+    } catch (e) {
+      if (!(e instanceof Deno.errors.NotFound)) throw e;
+      throw new Deno.errors.NotFound(
+        `${path}: missing. Log in to pslcdatashop.web.cmu.edu, open dataset 1198, tab Files, and save both relationship_annotation CSVs into ${JUNYI}/.`,
+      );
+    }
+    const [iA, iB, iS] = ["Exercise_A", "Exercise_B", "Prerequisite_avg"].map(
+      (c) => col(rows, c, path),
+    );
+    rows.slice(1).forEach((r, k) => {
+      const score = Number(r[iS]);
+      if (!r[iA] || !r[iB] || !(score >= 1 && score <= 9)) {
+        throw new Error(
+          `${path}:${
+            k + 2
+          }: expected two exercise names and a mean score from 1 to 9, received ${
+            JSON.stringify([r[iA], r[iB], r[iS]])
+          }. Re-download dataset 1198.`,
+        );
+      }
+      pairs.push({ pre: name(r[iB]), dep: name(r[iA]), positive: score > 5 });
+    });
+  }
+  return { pairs, unnamed: 0 };
+}
+
 // The transitive prereqs of a skill, memoized. graph maps dep → prereqs.
 export function ancestorsOf(
   graph: Map<string, string[]>,

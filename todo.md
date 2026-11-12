@@ -82,19 +82,6 @@ first for `enrich` and `prereq`).
      `code:*` tag before the cosine pass.
   3. Readme: CSP attributions per set licence (CC BY 4.0 US, CC BY 3.0 US).
 
-- [ ] `deno task status` also scores prereq edges against Junyi crowd labels.
-      Blocker: a PSLC DataShop login. You make the account: open
-      `pslcdatashop.web.cmu.edu/help?page=access`, sign in with Google or your
-      university, and fill the registration form. Dataset 1198 is a public
-      project, so it needs no request to the PI. Safari did not load the site on
-      12 Nov, though curl got 200: try without iCloud Private Relay or content
-      blockers.
-  1. Log in, open `DatasetInfo?datasetId=1198`, tab Files, and download
-     `relationship_annotation_training.csv` (1,131 pairs) into `data/junyi/`,
-     gitignored. The web-services API needs a Java client with request signing,
-     so a manual download is simpler. It is non-commercial: eval only.
-  2. Score it with the LectureBank precision and recall code.
-
 - [ ] ASN standards that CSP lacks appear in `skills.tsv`. Blocker: ASN's reply.
       You sent the bulk-access request through
       `asn.desire2learn.com/content/contact-us` (12 Nov).

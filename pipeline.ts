@@ -11,6 +11,7 @@ import {
   EDGES,
   EMBED_DIM,
   embeddingFallback,
+  type ExpertPair,
   expertScores,
   HAN_RE,
   isJunkTopic,
@@ -21,6 +22,7 @@ import {
   PREREQS,
   readDifficulty,
   readJson,
+  readJunyi,
   readLectureBank,
   readMoocPairs,
   readSeeds,
@@ -131,10 +133,15 @@ async function stageStatus() {
   };
 
   // Expert pairs, as skill ids. A pair whose topic matches no skill drops out.
-  let expertP: Promise<ReturnType<typeof expertScores>> | undefined;
-  const expert = () =>
-    expertP ??= (async () => {
-      const { pairs, unnamed } = readLectureBank();
+  const experts = new Map<string, Promise<ReturnType<typeof expertScores>>>();
+  const expertOf = (
+    source: string,
+    read: () => { pairs: ExpertPair[]; unnamed: number },
+  ) => {
+    const cached = experts.get(source);
+    if (cached) return cached;
+    const p = (async () => {
+      const { pairs, unnamed } = read();
       const labels = [...new Set(pairs.flatMap((p) => [p.pre, p.dep]))];
       const idx = skillIndex(skills());
       const ids = new Map(labels.map((l) => [l, resolveConcept(l, idx)]));
@@ -152,15 +159,22 @@ async function stageStatus() {
         matched,
       );
       console.error(
-        `expert pairs: ${matched.length}/${pairs.length} annotated pairs resolve, ${unnamed} more name no topic; ${r.positives} positive, ${r.predicted} predicted edges, ${r.hits} hits, ${r.recovered} recovered`,
+        `${source} pairs: ${matched.length}/${pairs.length} annotated pairs resolve, ${unnamed} more name no topic; ${r.positives} positive, ${r.predicted} predicted edges, ${r.hits} hits, ${r.recovered} recovered`,
       );
       if (!r.positives || !r.predicted) {
         throw new Error(
-          `data/lecturebank: expected at least 1 positive pair and 1 predicted edge among resolved topics, received ${r.positives} positive and ${r.predicted} predicted. Too few topics resolve to skills.tsv: rerun the full build, or check the topic names.`,
+          `${source}: expected at least 1 positive pair and 1 predicted edge among resolved topics, received ${r.positives} positive and ${r.predicted} predicted. Too few topics resolve to skills.tsv: rerun the full build, or check the topic names.`,
         );
       }
       return r;
     })();
+    experts.set(source, p);
+    return p;
+  };
+  const expertSources = [
+    ["Expert", () => expertOf("data/lecturebank", readLectureBank)],
+    ["Junyi crowd", () => expertOf("data/junyi", readJunyi)],
+  ] as const;
 
   const conditions: [string, () => number | Promise<number>][] = [
     ["The prereq graph is a DAG, and every prereq names another skill.", () => {
@@ -443,24 +457,29 @@ async function stageStatus() {
         return grade(checks.filter((c) => !c).length / checks.length, 0, 1);
       },
     ],
-    [
-      "Enough expert prereq pairs resolve to skills to grade them.",
-      async () => grade((await expert()).positives, EXPERT_MIN_POSITIVES, 0),
-    ],
-    [
-      "Expert prereq edges have precision above the floor.",
-      async () => {
-        const r = await expert();
-        return grade(r.hits / r.predicted, EXPERT_PRECISION_FLOOR, 0);
-      },
-    ],
-    [
-      "Expert prereq pairs have recall above the floor.",
-      async () => {
-        const r = await expert();
-        return grade(r.recovered / r.positives, EXPERT_RECALL_FLOOR, 0);
-      },
-    ],
+    ...expertSources.flatMap(([who, expert]) =>
+      [
+        [
+          `Enough ${who.toLowerCase()} prereq pairs resolve to skills to grade them.`,
+          async () =>
+            grade((await expert()).positives, EXPERT_MIN_POSITIVES, 0),
+        ],
+        [
+          `${who} prereq edges have precision above the floor.`,
+          async () => {
+            const r = await expert();
+            return grade(r.hits / r.predicted, EXPERT_PRECISION_FLOOR, 0);
+          },
+        ],
+        [
+          `${who} prereq pairs have recall above the floor.`,
+          async () => {
+            const r = await expert();
+            return grade(r.recovered / r.positives, EXPERT_RECALL_FLOOR, 0);
+          },
+        ],
+      ] as [string, () => Promise<number>][]
+    ),
     ["The build disk has at least 10 GB free.", async () => {
       const out = await new Deno.Command("df", {
         args: ["-k", "."],

@@ -218,6 +218,27 @@ const lbFixture = (
     [`${d}/LectureBankCD/data/BIO.annotation.csv`]: ann,
   };
 };
+// Junyi rates "Exercise_B is a prereq of Exercise_A" from 1 to 9; over 5 is a
+// positive. The same pairs as lbFixture, as exercise names.
+const junyiFixture = (
+  rows = [
+    "addition_1,counting,7",
+    "calculus,addition_1,6",
+    "multiplication,counting,8",
+    "calculus,counting,2",
+  ],
+): Fixture => {
+  const csv = "Exercise_A,Exercise_B,Similarity_avg,Similarity_raw," +
+    "Difficulty_avg,Difficulty_raw,Prerequisite_avg,Prerequisite_raw\n" +
+    rows.map((r) => {
+      const [a, b, p] = r.split(",");
+      return `${a},${b},5,5_5,5,5_5,${p},${p}_${p}`;
+    }).join("\n") + "\n";
+  return {
+    "data/junyi/relationship_annotation_training.csv": csv,
+    "data/junyi/relationship_annotation_testing.csv": csv,
+  };
+};
 const goodBuild = (): Fixture => {
   const skills: [string, number, string, string, string][] = [
     ["counting", 1, "", "", ""],
@@ -283,6 +304,7 @@ const goodBuild = (): Fixture => {
     "data/mooccubex/math.json.gz": MOOC_GZ,
     "data/mooccubex/psy.json.gz": MOOC_GZ,
     ...lbFixture(),
+    ...junyiFixture(),
   };
 };
 
@@ -2301,6 +2323,13 @@ Deno.test(
     const build = {
       ...goodBuild(),
       ...lbFixture(["2,1,1", "3,2,1", "3,1,1", "1,2,0"]),
+      // Reversed: Exercise_B is the dependent here, so no edge matches.
+      ...junyiFixture([
+        "counting,addition_1,7",
+        "addition_1,calculus,6",
+        "counting,multiplication,8",
+        "addition_1,counting,2",
+      ]),
     };
     const { code, score } = await runIn("status", build);
     assertEquals(code, 1);
@@ -2308,6 +2337,8 @@ Deno.test(
       const name of [
         "Expert prereq edges have precision above the floor.",
         "Expert prereq pairs have recall above the floor.",
+        "Junyi crowd prereq edges have precision above the floor.",
+        "Junyi crowd prereq pairs have recall above the floor.",
       ]
     ) assertEquals(score(name), 0, name);
     assertEquals(
@@ -2318,17 +2349,23 @@ Deno.test(
 );
 
 Deno.test(
-  "status: a missing LectureBank clone scores 0 and names the downloader",
+  "status: a missing LectureBank clone or Junyi file scores 0 and names the fix",
   early(async () => {
     const build = goodBuild();
-    for (const k of Object.keys(lbFixture())) delete build[k];
+    for (const k of Object.keys({ ...lbFixture(), ...junyiFixture() })) {
+      delete build[k];
+    }
     const { code, score, stderr } = await runIn("status", build);
     assertEquals(code, 1);
-    assertEquals(
-      score("Enough expert prereq pairs resolve to skills to grade them."),
-      0,
-    );
+    for (const who of ["expert", "junyi crowd"]) {
+      assertEquals(
+        score(`Enough ${who} prereq pairs resolve to skills to grade them.`),
+        0,
+        who,
+      );
+    }
     assert(stderr.includes("Run: deno run -A data/download.ts"), stderr);
+    assert(stderr.includes("open dataset 1198"), stderr);
   }),
 );
 
