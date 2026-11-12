@@ -10,13 +10,24 @@ first for `enrich` and `prereq`).
       Apache 2.0, 1–64 questions per call, types `noul` (yes/no), `choice`,
       `score`; input $0.24/M tokens (flash $0.038/M), output free, 10k neurons a
       day free. `CLOUDFLARE_API_TOKEN` is in `.env`; the account id comes from
-      `GET /accounts`, which must list exactly one.
-  1. Try the snap step first with `clef-flash`: one `choice` question, choices
-     `none` and `1`–`10`. Compare with the Haiku answers in
-     `build/pilot_snap.tsv`.
-  2. Then the prereq pick: one `noul` question per candidate (15 per call). A
-     probability gives a cut point; score it with LectureBank precision and
-     recall.
+      `GET /accounts`, which must list exactly one. Split (12 Nov): Clef can
+      take only the calls that pick from fixed choices: `prereq` (which of 15
+      candidates), `prereq:snap` and `pilot:snap` (which of 10, or none). Six
+      `enrich` calls (translate, bncc, infill, summarize, onet-desc,
+      opensalt-desc) and the two `expand` calls write text, so they stay on
+      Claude.
+  1. Snap trial (12 Nov, 200 rows of `build/pilot_snap.tsv`, same 10
+     candidates): agreement with Haiku is 46% for `clef-flash` as one 11-way
+     `choice`, 54.5% for `clef` (27B), and 52% for 10 `noul` questions at cut
+     0.5 (2.6× the tokens). Clef rarely answers none (15 vs Haiku's 59), and
+     often picks a broader or narrower skill (`Voltage dividers` → "Resistors").
+     Some picks beat Haiku's none: `Subtraction of whole numbers` → "Subtract
+     whole numbers". Haiku is not gold, so hand-label 50 disagreements before
+     you call either one more accurate. Cost: 545 input tokens a call, $0.004
+     per 200 on `clef-flash`.
+  2. Then the prereq pick, which has gold labels: one `noul` question per
+     candidate (15 per call). A probability gives a cut point; score it with
+     LectureBank precision and recall.
 
 ## Blocked on you
 

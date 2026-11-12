@@ -7,6 +7,9 @@ data/lcsh/*.nt
 # LectureBank states no licence: a local eval clone only
 data/lecturebank/
 
+# Junyi crowd labels (PSLC DataShop 1198) are non-commercial: eval only
+data/junyi/
+
 # pipeline stage caches + final output
 build/*
 # keep LLM-generated outputs — paid to produce, stochastic, non-reproducible
