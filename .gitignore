@@ -4,6 +4,9 @@ data/mooccubex/*.json
 data/dbpedia/article_categories_en.ttl.bz2
 data/lcsh/*.nt
 
+# half-written downloads that data/download.ts renames when whole
+data/**/*.tmp
+
 # LectureBank states no licence: a local eval clone only
 data/lecturebank/
 

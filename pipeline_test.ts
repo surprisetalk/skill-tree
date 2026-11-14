@@ -27,24 +27,48 @@ const LIST_BOUND_MS = 30_000;
 // list run here sees all other sources and a fixed sample of CSP sets, in a
 // temp dir, so it cannot overwrite the real build/. Stage status grades the
 // full output. `own` names a data folder that the caller fills; such a run
-// sees no CSP set, so its counts are its own.
+// sees one CSP set, enough for the zero-row guard.
 const CSP_SAMPLE = 200;
+const HEAD_ROWS = 200;
+const HEAD_BYTES = 100_000;
 const listDir = (own = ""): string => {
   const dir = Deno.makeTempDirSync({ prefix: "list-" });
   Deno.mkdirSync(`${dir}/build`);
   Deno.mkdirSync(`${dir}/data/csp`, { recursive: true });
   if (own) Deno.mkdirSync(`${dir}/data/${own}`, { recursive: true });
   for (const d of Deno.readDirSync("data")) {
-    if (d.name !== "csp" && d.name !== own) {
+    if (d.name === "csp" || d.name === own) continue;
+    if (own && (d.name === "esco" || d.name === "onet")) {
+      // REVIEW: An error-case run reads head-truncated copies of the big ESCO
+      // and O*NET files (header plus HEAD_ROWS lines), since it asserts on one
+      // source only. Alternative: link the full files. It costs about 1.5 s
+      // of CPU per run.
+      Deno.mkdirSync(`${dir}/data/${d.name}`);
+      for (const f of Deno.readDirSync(`data/${d.name}`)) {
+        const from = `${Deno.cwd()}/data/${d.name}/${f.name}`;
+        const to = `${dir}/data/${d.name}/${f.name}`;
+        if (Deno.statSync(from).size < HEAD_BYTES) Deno.symlinkSync(from, to);
+        else {
+          // A quoted field can span lines: a record ends at an even quote count.
+          const kept: string[] = [];
+          let records = 0, quotes = 0;
+          for (const line of Deno.readTextFileSync(from).split("\n")) {
+            kept.push(line);
+            quotes += line.split('"').length - 1;
+            if (quotes % 2 === 0 && ++records > HEAD_ROWS) break;
+          }
+          Deno.writeTextFileSync(to, kept.join("\n") + "\n");
+        }
+      }
+    } else {
       Deno.symlinkSync(`${Deno.cwd()}/data/${d.name}`, `${dir}/data/${d.name}`);
     }
   }
-  if (!own) {
-    const sets = [...Deno.readDirSync("data/csp")].map((e) => e.name)
-      .filter((n) => n.endsWith(".json.gz")).sort().slice(0, CSP_SAMPLE);
-    for (const f of sets) {
-      Deno.symlinkSync(`${Deno.cwd()}/data/csp/${f}`, `${dir}/data/csp/${f}`);
-    }
+  const sets = [...Deno.readDirSync("data/csp")].map((e) => e.name)
+    .filter((n) => n.endsWith(".json.gz")).sort()
+    .slice(0, own ? 1 : CSP_SAMPLE);
+  for (const f of sets) {
+    Deno.symlinkSync(`${Deno.cwd()}/data/csp/${f}`, `${dir}/data/csp/${f}`);
   }
   // The enrich caches that stage list applies: copies, since a stage writes
   // build files in place.
@@ -1924,7 +1948,10 @@ Deno.test(
           [],
         );
         assert(code !== 0, `seeds ${JSON.stringify(pairs)} exit 0`);
-        assert(/self-loop|not in build\/1_skills/.test(stderr), stderr);
+        assert(
+          /self-loop|not in build\/3b_tagged_deduped/.test(stderr),
+          stderr,
+        );
       }),
     );
   }),
@@ -2025,6 +2052,21 @@ const listWithData = async (
     stderr: new TextDecoder().decode(out.stderr),
   };
 };
+
+Deno.test(
+  "list: an empty CSP folder stops the stage and names csp",
+  early(async () => {
+    const dir = listDir("csp");
+    for (const f of Deno.readDirSync(`${dir}/data/csp`)) {
+      Deno.removeSync(`${dir}/data/csp/${f.name}`);
+    }
+    const out = await run(["list"], dir, LIST_BOUND_MS);
+    const stderr = new TextDecoder().decode(out.stderr);
+    Deno.removeSync(dir, { recursive: true });
+    assert(out.code !== 0, "exit 0 with no CSP rows");
+    assert(stderr.includes("received 0 from csp"), stderr);
+  }),
+);
 
 const exam = (over: Record<string, unknown> = {}, objective: unknown = {
   title: "Security controls",

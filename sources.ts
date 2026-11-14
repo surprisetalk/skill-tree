@@ -7,6 +7,7 @@ import {
   col,
   decodeEntities,
   embeddingFallback,
+  gunzipText,
   h32,
   HAN_RE,
   isTranslation,
@@ -33,6 +34,7 @@ import {
   TAGGED_DEDUPED,
   TOPIC_REFS,
   TRANSLATE_CACHE,
+  writeAtomic,
   writeStats,
   writeTable,
 } from "./lib.ts";
@@ -193,19 +195,14 @@ function readBncc(): BnccRow[] {
     ]
   ) {
     const path = `data/bncc/${file}.json.gz`;
-    const out = new Deno.Command("gzip", {
-      args: ["-dc", path],
-      stdout: "piped",
-      stderr: "piped",
-    }).outputSync();
+    const gunzipped = gunzipText(path, fix);
     let doc: Record<string, unknown>;
     try {
-      if (out.code !== 0) throw new Error(`gzip exit ${out.code}`);
-      doc = JSON.parse(new TextDecoder().decode(out.stdout));
+      doc = JSON.parse(gunzipped);
     } catch (e) {
       throw new Error(
-        `${path}: expected gzipped JSON, received ${(e as Error).message}: ${
-          new TextDecoder().decode(out.stderr).trim()
+        `${path}: expected gzipped JSON, received ${
+          (e as Error).message
         }. ${fix}`,
       );
     }
@@ -1340,18 +1337,7 @@ export function stageList() {
     const path = "data/certatlas/exams.json.gz";
     const fix =
       "Re-download it: rm data/certatlas/exams.json.gz; deno run -A data/download.ts";
-    const out = new Deno.Command("gzip", {
-      args: ["-dc", path],
-      stdout: "piped",
-      stderr: "piped",
-    }).outputSync();
-    if (out.code !== 0) {
-      throw new Error(
-        `${path}: expected a gzip file, received gzip exit ${out.code}: ${
-          new TextDecoder().decode(out.stderr).trim()
-        }. ${fix}`,
-      );
-    }
+    const gunzipped = gunzipText(path, fix);
     const bad = (where: string, expected: string, got: unknown): never => {
       throw new Error(
         `${path} ${where}: expected ${expected}, received ${
@@ -1371,7 +1357,7 @@ export function stageList() {
       Array.isArray(v) ? v : bad(where, "an array", v);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(new TextDecoder().decode(out.stdout));
+      parsed = JSON.parse(gunzipped);
     } catch (e) {
       bad("", "JSON", (e as Error).message);
     }
@@ -1698,6 +1684,7 @@ export function stageList() {
       "digcomp",
       "certatlas",
       "bncc",
+      "csp",
     ]
       .map((
         src,
@@ -1826,11 +1813,10 @@ export async function stageEnrich() {
     const cache = [...loadTsvCache(SUMMARIZE_CACHE)];
     const good = cache.filter(([, v]) => isSummary(v));
     if (good.length < cache.length) {
-      Deno.writeTextFileSync(
-        SUMMARIZE_CACHE + ".tmp",
+      writeAtomic(
+        SUMMARIZE_CACHE,
         good.map(([k, v]) => `${k}\t${v}\n`).join(""),
       );
-      Deno.renameSync(SUMMARIZE_CACHE + ".tmp", SUMMARIZE_CACHE);
       console.log(
         `[enrich:summarize] dropped ${
           cache.length - good.length
@@ -2080,27 +2066,35 @@ export async function stageTrees() {
     seen.add(k);
     return true;
   });
-  // Write only after both dumps parse, so the three files come from one run.
-  for (
-    const [path, tree] of [
-      [`${BUILD}/1j_lcsh_tree.tsv`, lcsh.ancestors],
-      [`${BUILD}/1k_dbpedia_tree.tsv`, dbp.ancestors],
-    ] as const
-  ) {
-    const fh = Deno.openSync(path, {
+  // Write all three .tmp files, then rename all three: a crash between the
+  // renames is the only torn state, and the next run rewrites all three.
+  // REVIEW: Rename sequentially. Alternative: a directory swap, which is atomic
+  // but adds a build subfolder every reader must know.
+  // The DBpedia tree is about 225 MB, near V8's string cap, so each tree
+  // streams line by line.
+  const enc = new TextEncoder();
+  const trees = [
+    [`${BUILD}/1j_lcsh_tree.tsv`, lcsh.ancestors],
+    [`${BUILD}/1k_dbpedia_tree.tsv`, dbp.ancestors],
+  ] as const;
+  for (const [path, tree] of trees) {
+    const fh = Deno.openSync(`${path}.tmp`, {
       create: true,
       write: true,
       truncate: true,
     });
-    const enc = new TextEncoder();
     for (const [slug, anc] of tree) {
       fh.writeSync(enc.encode(`${slug}\t${anc.join(",")}\n`));
     }
     fh.close();
-    console.log(`[trees] ${tree.size} slugs → ${path}`);
   }
-  Deno.writeTextFileSync(TOPIC_REFS, refs.join("\n") + "\n");
-  console.log(`[trees] ${refs.length} topic refs → ${TOPIC_REFS}`);
+  Deno.writeTextFileSync(`${TOPIC_REFS}.tmp`, refs.join("\n") + "\n");
+  for (const path of [...trees.map(([p]) => p), TOPIC_REFS]) {
+    Deno.renameSync(`${path}.tmp`, path);
+  }
+  console.log(
+    `[trees] ${lcsh.ancestors.size} + ${dbp.ancestors.size} slugs, ${refs.length} topic refs → ${BUILD}/1j, 1k, 1l`,
+  );
 }
 
 // ---------- stage seed-edges ----------
@@ -2468,11 +2462,12 @@ export async function stageSeedEdges() {
       }
       if (nodes.length < 10) continue;
       nodes.sort((a, b) => a.grade - b.grade);
+      const sigs = nodes.map((n) => sigT(n.label));
       const PAIR_CAP = 5;
       const perGradePair = new Map<string, number>();
       for (let i = 0; i < nodes.length; i++) {
         const ai = nodes[i];
-        const ta = sigT(ai.label);
+        const ta = sigs[i];
         if (ta.size < 3) continue;
         for (let j = i + 1; j < nodes.length; j++) {
           const aj = nodes[j];
@@ -2481,16 +2476,19 @@ export async function stageSeedEdges() {
               break;
             } else continue;
           }
-          const tb = sigT(aj.label);
+          // The cap check sits before the overlap count: a pair counts only
+          // after it passes the overlap and Jaccard gates, so a capped grade
+          // pair skips the count and nothing else changes.
+          const k = `${ai.grade}->${aj.grade}`;
+          const c = perGradePair.get(k) ?? 0;
+          if (c >= PAIR_CAP) continue;
+          const tb = sigs[j];
           let overlap = 0;
           for (const t of ta) if (tb.has(t)) overlap++;
           if (overlap < 3) continue;
           // Jaccard ≥0.80: the same standard at two grades, not a prereq.
           const jaccard = overlap / (ta.size + tb.size - overlap);
           if (jaccard >= 0.80) continue;
-          const k = `${ai.grade}->${aj.grade}`;
-          const c = perGradePair.get(k) ?? 0;
-          if (c >= PAIR_CAP) continue;
           if (emitted > 50000) {
             capDroppedPairs++;
             capDroppedFrameworks.add(f.name);

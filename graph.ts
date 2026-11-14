@@ -460,20 +460,41 @@ export async function stageTag() {
     const out: { idx: number; score: number }[][] = new Array(skills.length);
     const refHits = new Int32Array(refCount);
     const refToks = refs.map((r) => tokenize(r.label));
+    // REVIEW: An inverted index from token to refs finds the refs that share a
+    // token with a skill, so the loop no longer tests every ref. Alternative:
+    // the all-pairs Set lookups. They cost about 392k × 9k lookups at CSP scale.
+    const tokToRefs = new Map<string, number[]>();
+    for (let r = 0; r < refCount; r++) {
+      if (poisoned && poisoned[r]) continue;
+      for (const t of refToks[r]) {
+        const rs = tokToRefs.get(t);
+        if (rs) rs.push(r);
+        else tokToRefs.set(t, [r]);
+      }
+    }
+    const hits = new Int32Array(refCount);
+    const rareHit = new Uint8Array(refCount);
     for (let i = 0; i < skills.length; i++) {
       const sOff = i * EMBED_DIM;
-      const skToks = skillToks[i];
-      const top: { idx: number; score: number }[] = [];
-      for (let r = 0; r < refCount; r++) {
-        if (poisoned && poisoned[r]) continue;
-        let hits = 0;
-        let rareHit = false;
-        for (const t of refToks[r]) {
-          if (!skToks.has(t)) continue;
-          hits++;
-          if (!commonWord(t)) rareHit = true;
+      const touched: number[] = [];
+      for (const t of skillToks[i]) {
+        const rs = tokToRefs.get(t);
+        if (!rs) continue;
+        const rare = !commonWord(t);
+        for (const r of rs) {
+          if (hits[r]++ === 0) touched.push(r);
+          if (rare) rareHit[r] = 1;
         }
-        if (!rareHit && hits < 2) continue;
+      }
+      // Ascending r keeps the order of the all-pairs scan, so score ties
+      // resolve the same way.
+      touched.sort((a, b) => a - b);
+      const top: { idx: number; score: number }[] = [];
+      for (const r of touched) {
+        const pass = rareHit[r] === 1 || hits[r] >= 2;
+        hits[r] = 0;
+        rareHit[r] = 0;
+        if (!pass) continue;
         let s = 0;
         const rOff = r * EMBED_DIM;
         for (let d = 0; d < EMBED_DIM; d++) {
@@ -550,6 +571,21 @@ export async function stageTag() {
   const HEX_SUFFIX_RE = /-[a-f0-9]{6}$/;
 
   type Picked = { slug: string; score: number };
+  // Direct slugs not yet picked go first at score 1.0, then the cap applies.
+  const withDirect = (
+    picked: Picked[],
+    direct: string[],
+    cap: number,
+  ): Picked[] => {
+    const existing = new Set(picked.map((p) => p.slug));
+    return [
+      ...direct.filter((sl) => !existing.has(sl)).map((slug) => ({
+        slug,
+        score: 1.0,
+      })),
+      ...picked,
+    ].slice(0, cap);
+  };
   const pickedOccs: Picked[][] = new Array(skills.length);
   const pickedTopics: Picked[][] = new Array(skills.length);
 
@@ -607,47 +643,32 @@ export async function stageTag() {
     if (s.sources.includes("esco") && !skipOccs) {
       const dOcc = directEsco.get(s.id);
       if (dOcc?.length) {
-        const direct = dOcc.slice(0, DIRECT_OCC_CAP).map((o) => slugify(o))
-          .filter((sl) => sl && !HEX_SUFFIX_RE.test(sl));
-        const existing = new Set(occs.map((p) => p.slug));
-        const merged: Picked[] = [
-          ...direct.filter((sl) => !existing.has(sl)).map((sl) => ({
-            slug: sl,
-            score: 1.0,
-          })),
-          ...occs,
-        ];
-        occs = merged.slice(0, DIRECT_OCC_CAP);
+        occs = withDirect(
+          occs,
+          dOcc.slice(0, DIRECT_OCC_CAP).map((o) => slugify(o))
+            .filter((sl) => sl && !HEX_SUFFIX_RE.test(sl)),
+          DIRECT_OCC_CAP,
+        );
       }
       const dTopic = directEscoTopics.get(s.id);
       if (dTopic?.length) {
-        const direct = dTopic.slice(0, DIRECT_TOPIC_CAP).map((t) => slugify(t))
-          .filter(Boolean);
-        const existing = new Set(topics.map((p) => p.slug));
-        const merged: Picked[] = [
-          ...direct.filter((sl) => !existing.has(sl)).map((sl) => ({
-            slug: sl,
-            score: 1.0,
-          })),
-          ...topics,
-        ];
-        topics = merged.slice(0, DIRECT_TOPIC_CAP);
+        topics = withDirect(
+          topics,
+          dTopic.slice(0, DIRECT_TOPIC_CAP).map((t) => slugify(t))
+            .filter(Boolean),
+          DIRECT_TOPIC_CAP,
+        );
       }
     }
     if (s.sources.includes("onet") && !skipOccs) {
       const dOcc = directOnet.get(s.id);
       if (dOcc?.length) {
-        const direct = dOcc.slice(0, DIRECT_OCC_CAP).map((o) => slugify(o))
-          .filter((sl) => sl && !HEX_SUFFIX_RE.test(sl));
-        const existing = new Set(occs.map((p) => p.slug));
-        const merged: Picked[] = [
-          ...direct.filter((sl) => !existing.has(sl)).map((sl) => ({
-            slug: sl,
-            score: 1.0,
-          })),
-          ...occs,
-        ];
-        occs = merged.slice(0, DIRECT_OCC_CAP);
+        occs = withDirect(
+          occs,
+          dOcc.slice(0, DIRECT_OCC_CAP).map((o) => slugify(o))
+            .filter((sl) => sl && !HEX_SUFFIX_RE.test(sl)),
+          DIRECT_OCC_CAP,
+        );
       }
     }
     pickedOccs[i] = occs;
@@ -918,14 +939,7 @@ export function stageDedupe() {
   };
   const JACCARD_MIN = 0.7;
   const wordSets = rows.map((r) => wordSet(r.title));
-  const sigTokens = (s: string): Set<string> => {
-    const out = new Set<string>();
-    for (const w of s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)) {
-      if (w.length >= 3 && !SIG_STOP.has(w)) out.add(w);
-    }
-    return out;
-  };
-  const sigSets = rows.map((r) => sigTokens(r.title));
+  const sigSets = rows.map((r) => titleTokSet(r.title));
 
   let merged = 0, skippedHuge = 0, cosBlocked = 0;
   for (const idxs of buckets.values()) {
@@ -1527,7 +1541,7 @@ export function stageDifficulty() {
     }
     if (si === undefined || di === undefined) {
       throw new Error(
-        `[difficulty] seed id not in build/1_skills.tsv. Expected both ids of a seed pair in the skill table. Received ${pre} > ${dep} in build/1e_seed_edges.tsv. Fix: rerun stage seed-edges after the last dedupe.`,
+        `[difficulty] seed id not in ${TAGGED_DEDUPED.path}. Expected both ids of a seed pair in the skill table. Received ${pre} > ${dep} in build/1e_seed_edges.tsv. Fix: rerun stage seed-edges after the last dedupe.`,
       );
     }
     return [si, di, i] as const;
@@ -1640,11 +1654,13 @@ export function stageDifficulty() {
       sample.push({ raw: out[i], a: anchor[i] });
     }
   }
-  sample.length = Math.min(sample.length, 2000);
-  for (let i = 0; i < sample.length; i++) {
-    for (let j = i + 1; j < sample.length; j++) {
-      const ds = Math.sign(sample[i].raw - sample[j].raw);
-      const da = Math.sign(sample[i].a - sample[j].a);
+  // A stride keeps every source in the sample; the first 2000 rows are one source.
+  const step = Math.ceil(sample.length / 2000);
+  const strided = sample.filter((_, i) => i % step === 0);
+  for (let i = 0; i < strided.length; i++) {
+    for (let j = i + 1; j < strided.length; j++) {
+      const ds = Math.sign(strided[i].raw - strided[j].raw);
+      const da = Math.sign(strided[i].a - strided[j].a);
       if (ds === 0 || da === 0) continue;
       if (ds === da) concordant++;
       else discordant++;

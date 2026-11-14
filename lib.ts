@@ -173,12 +173,17 @@ export function col(rows: string[][], name: string, path: string): number {
   return i;
 }
 
+export function writeAtomic(path: string, text: string) {
+  Deno.writeTextFileSync(`${path}.tmp`, text);
+  Deno.renameSync(`${path}.tmp`, path);
+}
+
 export function writeStats(
   stage: string | number,
   stats: Record<string, unknown>,
 ) {
   const path = `${BUILD}/${stage}_stats.json`;
-  Deno.writeTextFileSync(path, JSON.stringify(stats, null, 2));
+  writeAtomic(path, JSON.stringify(stats, null, 2));
   console.log(`[stage ${stage}] stats → ${path}`);
 }
 
@@ -797,10 +802,10 @@ export async function embedBatch(
   );
   let done = 0;
   const t0 = performance.now();
-  const queue = [...missing];
+  let next = 0;
   async function worker() {
-    while (queue.length) {
-      const i = queue.shift()!;
+    while (next < missing.length) {
+      const i = missing[next++];
       const { embedding } = await ollama("/api/embeddings", {
         model: EMBED_MODEL,
         prompt: contents[i],
@@ -846,11 +851,36 @@ export function normalize(v: Float32Array, what: string): Float32Array {
   return r;
 }
 
-export function loadRawEmbeddings(): {
+type RawEmbeddings = {
   ids: string[];
   emb: Float32Array;
   idToEmbIdx: Map<string, number>;
-} {
+};
+
+// REVIEW: Stage status holds the 1.2 GB read for its run through this slot.
+// Stage embed rewrites the file in the same process on a full chain, so a
+// permanent memo would go stale. Alternative: pass the embeddings down every
+// call (embeddingFallback, normalizedEmbeddingsForSkills). It adds a
+// parameter to each and to their callers.
+let rawMemo: { v?: RawEmbeddings } | undefined;
+
+export async function withRawEmbeddingsMemo<T>(
+  run: () => Promise<T>,
+): Promise<T> {
+  rawMemo = {};
+  try {
+    return await run();
+  } finally {
+    rawMemo = undefined;
+  }
+}
+
+export function loadRawEmbeddings(): RawEmbeddings {
+  if (!rawMemo) return readRawEmbeddings();
+  return rawMemo.v ??= readRawEmbeddings();
+}
+
+function readRawEmbeddings(): RawEmbeddings {
   const ids = readTable(IDS).map((r) => r.id);
   const binPath = `${BUILD}/2_embeddings.bin`;
   const bin = Deno.readFileSync(need(binPath));
@@ -1640,27 +1670,32 @@ export type LearningCommons = {
   }[];
 };
 
-export const LC_EXTRACT = "data/learningcommons/graph.jsonl.gz";
-
-// The extract is the output of data/download.ts, one JSON object per line.
-export function readLearningCommons(): LearningCommons {
-  const fix = `Re-download it: rm ${LC_EXTRACT}; deno run -A data/download.ts`;
+// Shells out to gzip, because Deno has no sync gunzip.
+export function gunzipText(path: string, fix: string): string {
   const out = new Deno.Command("gzip", {
-    args: ["-dc", LC_EXTRACT],
+    args: ["-dc", path],
     stdout: "piped",
     stderr: "piped",
   }).outputSync();
   if (out.code !== 0) {
     throw new Error(
-      `${LC_EXTRACT}: expected a gzip file, received gzip exit ${out.code}: ${
+      `${path}: expected a gzip file, received gzip exit ${out.code}: ${
         new TextDecoder().decode(out.stderr).trim()
       }. ${fix}`,
     );
   }
+  return new TextDecoder().decode(out.stdout);
+}
+
+export const LC_EXTRACT = "data/learningcommons/graph.jsonl.gz";
+
+// The extract is the output of data/download.ts, one JSON object per line.
+export function readLearningCommons(): LearningCommons {
+  const fix = `Re-download it: rm ${LC_EXTRACT}; deno run -A data/download.ts`;
   const lc: LearningCommons = { components: [], items: [], edges: [] };
   const ids = new Set<string>();
   let sawAttributions = false;
-  const lines = new TextDecoder().decode(out.stdout).split("\n");
+  const lines = gunzipText(LC_EXTRACT, fix).split("\n");
   if (lines.pop() !== "") {
     throw new Error(
       `${LC_EXTRACT}: expected a newline after the last row. ${fix}`,

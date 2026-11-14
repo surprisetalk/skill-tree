@@ -37,6 +37,7 @@ import {
   TAGGED_DEDUPED,
   topoOrder,
   TRANSLATE_CACHE,
+  withRawEmbeddingsMemo,
 } from "./lib.ts";
 import {
   langTokenOf,
@@ -101,13 +102,20 @@ const EXPERT_PRECISION_FLOOR = 0.25;
 const EXPERT_RECALL_FLOOR = 0.05;
 const EXPERT_MIN_POSITIVES = 3;
 
+const listTable = () => readTable(SKILL_LIST);
+
 async function stageStatus() {
   let cached: StatusSkill[] | undefined;
   const skills = () => cached ??= readSkillsTsv();
   const byId = () => new Map(skills().map((s) => [s.id, s]));
   const edgeCount = () => skills().reduce((n, s) => n + s.prereqs.length, 0);
   const usedAsPrereq = () => new Set(skills().flatMap((s) => s.prereqs));
-  const seeds = readSeeds;
+  let seedsCached: ReturnType<typeof readSeeds> | undefined;
+  const seeds = () => seedsCached ??= readSeeds();
+  let orderCached: string[] | undefined;
+  const order = () => orderCached ??= topoOrder(skills());
+  let listCached: ReturnType<typeof listTable> | undefined;
+  const listRows = () => listCached ??= listTable();
   let aboveFn: ((id: string) => Set<string>) | undefined;
   const above = () =>
     aboveFn ??= ancestorsOf(new Map(skills().map((s) => [s.id, s.prereqs])));
@@ -181,7 +189,7 @@ async function stageStatus() {
     ["The prereq graph is a DAG, and every prereq names another skill.", () => {
       const ss = skills();
       const ids = new Set(ss.map((s) => s.id));
-      const ordered = new Set(topoOrder(ss));
+      const ordered = new Set(order());
       let bad = 0;
       for (const s of ss) {
         for (const p of s.prereqs) {
@@ -268,7 +276,7 @@ async function stageStatus() {
         const m = byId();
         const maxAbove = new Map<string, number>();
         let withPrereqs = 0, clean = 0;
-        for (const id of topoOrder(skills())) {
+        for (const id of order()) {
           const s = m.get(id)!;
           let top = -Infinity;
           for (const p of s.prereqs) {
@@ -339,7 +347,7 @@ async function stageStatus() {
     [
       "At least 95% of OpenSALT skills from graded frameworks carry a grade tag.",
       () => {
-        const rows = readTable(SKILL_LIST).filter((r) =>
+        const rows = listRows().filter((r) =>
           r.sources.split(",").includes("opensalt") &&
           (/(^|,)grade:/.test(r.tags) ||
             !/(^|,)opensalt:ungraded-framework(,|$)/.test(r.tags))
@@ -462,7 +470,7 @@ async function stageStatus() {
     [
       "No list title has a junk prefix, emphasis, a short code:* tag, or double-encoded UTF-8.",
       () => {
-        const rows = readTable(SKILL_LIST);
+        const rows = listRows();
         const d = listDefects(rows);
         const bad = Object.values(d).reduce((n, b) => n + b.length, 0);
         if (bad) {
@@ -518,21 +526,23 @@ async function stageStatus() {
   ];
 
   const report: Record<string, { "0": number }> = {};
-  for (const [name, fn] of conditions) {
-    let score: number;
-    try {
-      score = await fn();
-    } catch (e) {
-      if (!(e instanceof Deno.errors.NotFound)) {
-        throw new Error(`status "${name}": ${(e as Error).message}`, {
-          cause: e,
-        });
+  await withRawEmbeddingsMemo(async () => {
+    for (const [name, fn] of conditions) {
+      let score: number;
+      try {
+        score = await fn();
+      } catch (e) {
+        if (!(e instanceof Deno.errors.NotFound)) {
+          throw new Error(`status "${name}": ${(e as Error).message}`, {
+            cause: e,
+          });
+        }
+        console.error(`${name}\n  ${e.message}`);
+        score = 0;
       }
-      console.error(`${name}\n  ${e.message}`);
-      score = 0;
+      report[name] = { "0": score };
     }
-    report[name] = { "0": score };
-  }
+  });
   console.log(JSON.stringify(report, null, 2));
   if (Object.values(report).some((r) => !(r["0"] >= 1))) Deno.exit(1);
 }

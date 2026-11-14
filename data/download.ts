@@ -6,8 +6,9 @@ async function exists(path: string): Promise<boolean> {
   try {
     await Deno.stat(path);
     return true;
-  } catch {
-    return false;
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) return false;
+    throw e;
   }
 }
 
@@ -33,10 +34,21 @@ async function get(url: string, dest: string) {
     return;
   }
   console.log(`  GET ${url}`);
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}: ${url}`);
-  const f = await Deno.open(dest, { write: true, create: true });
+  // REVIEW: One 10 min cap per file. Alternative: an idle timeout, which lets a
+  // slow big file finish but needs a stream wrapper.
+  const r = await fetch(url, { signal: AbortSignal.timeout(10 * 60_000) });
+  if (!r.ok) {
+    throw new Error(
+      `expected 2xx, received ${r.status} ${r.statusText} from ${url} (writing ${dest}). Check the URL in a browser; if it moved, update data/download.ts.`,
+    );
+  }
+  const f = await Deno.open(dest + ".tmp", {
+    write: true,
+    create: true,
+    truncate: true,
+  });
   await r.body!.pipeTo(f.writable);
+  await Deno.rename(dest + ".tmp", dest);
 }
 
 async function mkdir(path: string) {
@@ -386,12 +398,22 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
       } else {
         let offset = 0;
         const limit = 100;
-        while (true) {
+        const MAX_PAGES = 50;
+        for (let pages = 1;; pages++) {
+          if (pages > MAX_PAGES) {
+            throw new Error(
+              `expected the OpenSALT index to end within ${MAX_PAGES} pages, received page ${pages} at offset ${offset} from opensalt.net CFDocuments. Raise MAX_PAGES if the list grew, or check that offset paging still works.`,
+            );
+          }
           const url =
             `https://opensalt.net/ims/case/v1p0/CFDocuments?limit=${limit}&offset=${offset}`;
           console.log(`  GET ${url}`);
-          const r = await fetch(url);
-          if (!r.ok) throw new Error(`${r.status}: ${url}`);
+          const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+          if (!r.ok) {
+            throw new Error(
+              `expected 2xx, received ${r.status} from ${url}. Retry later; if it persists, check opensalt.net.`,
+            );
+          }
           const body = await r.json();
           const page = body.CFDocuments ?? [];
           docs.push(
@@ -403,25 +425,44 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
           if (page.length < limit) break;
           offset += limit;
         }
-        await Deno.writeTextFile(indexFile, JSON.stringify(docs, null, 2));
+        await Deno.writeTextFile(
+          indexFile + ".tmp",
+          JSON.stringify(docs, null, 2),
+        );
+        await Deno.rename(indexFile + ".tmp", indexFile);
         console.log(`  indexed ${docs.length} frameworks`);
       }
 
       // fetch each package
       let fetched = 0;
+      const failed: string[] = [];
       for (const doc of docs) {
         const dest = `${dir}/${doc.identifier}.json`;
         if (await exists(dest)) continue;
         const url =
           `https://opensalt.net/ims/case/v1p0/CFPackages/${doc.identifier}`;
         console.log(`  [${++fetched}] ${doc.title}`);
-        const r = await fetch(url);
+        // The cap covers the body too; the largest package is 11.5 MB.
+        const r = await fetch(url, { signal: AbortSignal.timeout(5 * 60_000) });
         if (!r.ok) {
-          console.log(`  WARN: ${r.status} for ${doc.title}`);
+          failed.push(`${doc.title}: ${r.status} from ${url}`);
+          await r.body?.cancel();
           continue;
         }
-        const f = await Deno.open(dest, { write: true, create: true });
+        const f = await Deno.open(dest + ".tmp", {
+          write: true,
+          create: true,
+          truncate: true,
+        });
         await r.body!.pipeTo(f.writable);
+        await Deno.rename(dest + ".tmp", dest);
+      }
+      if (failed.length) {
+        throw new Error(
+          `expected 2xx for every OpenSALT package, received ${failed.length} of ${docs.length} failures. First: ${
+            failed[0]
+          }. Rerun data/download.ts; finished packages stay.`,
+        );
       }
       if (fetched === 0) {
         console.log("  skip: all frameworks already downloaded");
@@ -807,7 +848,13 @@ for (const [i, step] of steps.entries()) {
     await step.fn();
     console.log("  done");
   } catch (e) {
-    console.error(`  ERROR: ${e instanceof Error ? e.message : e}`);
+    // AbortSignal.timeout rejects with a bare "Signal timed out".
+    const msg = e instanceof DOMException && e.name === "TimeoutError"
+      ? `expected "${step.label}" to download within its timeout, received a timeout. Check the network, then rerun; a partial .tmp file restarts.`
+      : e instanceof Error
+      ? e.message
+      : e;
+    console.error(`  ERROR: ${msg}`);
     failed.push(step.label);
   }
 }

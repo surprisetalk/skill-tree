@@ -761,8 +761,17 @@ export function stagePostproc() {
       );
     }
   }
-  const rawDiff = new Map([...diffs].map(([id, d]) => [id, d.raw]));
-  const band = new Map([...diffs].map(([id, d]) => [id, d.band]));
+  const diffOf = (id: string) => {
+    const d = diffs.get(id);
+    if (!d) {
+      throw new Error(
+        `${BUILD}/4_difficulty.tsv: expected a difficulty row for "${id}", received none. ${
+          rerun(`${BUILD}/4_difficulty.tsv`)
+        }`,
+      );
+    }
+    return d;
+  };
 
   // Both tables name skills from before dedupe, so an alias maps them in.
   const alias = loadAliasesCollapsed();
@@ -878,10 +887,10 @@ export function stagePostproc() {
   // Alternative: the guard for every edge; recall stays under the floor.
   // You approved this on 11 Nov.
   const liftable = (s: string, p: string) =>
-    named.has(`${s}\t${p}`) && !diffs.get(s)!.anchored;
+    named.has(`${s}\t${p}`) && !diffOf(s).anchored;
   let namedExempt = 0;
   raw = raw.filter(([s, p]) => {
-    if ((band.get(p) ?? 0) <= (band.get(s) ?? 20)) return true;
+    if (diffOf(p).band <= diffOf(s).band) return true;
     if (isSeed(s, p)) {
       bandExempt++;
       return true;
@@ -903,10 +912,9 @@ export function stagePostproc() {
   let rawExempt = 0;
   const beforeRaw = raw.length;
   raw = raw.filter(([s, p]) => {
-    const sR = rawDiff.get(s);
-    const pR = rawDiff.get(p);
-    if (sR === undefined || pR === undefined) return true;
-    if (pR <= sR - RAW_EPS || band.get(p)! < band.get(s)!) return true;
+    const sR = diffOf(s).raw;
+    const pR = diffOf(p).raw;
+    if (pR <= sR - RAW_EPS || diffOf(p).band < diffOf(s).band) return true;
     if (isSeed(s, p)) {
       rawExempt++;
       return true;
@@ -987,14 +995,14 @@ export function stagePostproc() {
   for (const [s, prereqs] of bySkill) {
     const ssk = skill.get(s);
     const sIsTech = ssk?.tags.includes("onet:tech") ?? false;
-    const sRaw = rawDiff.get(s) ?? 0;
+    const sRaw = diffOf(s).raw;
     const kept = prereqs.filter((p) => {
       if (isSeed(s, p)) return true;
       const psk = skill.get(p);
       if (!psk) return true;
       const pIsTech = psk.tags.includes("onet:tech");
       if (!pIsTech) return true;
-      if (sIsTech) return sRaw - (rawDiff.get(p) ?? 0) >= 2.0;
+      if (sIsTech) return sRaw - diffOf(p).raw >= 2.0;
       if (ssk?.topics.has(p)) return true;
       return false;
     });
@@ -1025,10 +1033,10 @@ export function stagePostproc() {
   const keep = new Set<string>();
   for (const [prereqId, edges] of downstream) {
     const pIsTech = skill.get(prereqId)?.tags.includes("onet:tech") ?? false;
-    const pRaw = rawDiff.get(prereqId) ?? 0;
+    const pRaw = diffOf(prereqId).raw;
     edges.sort((a, b) =>
-      Math.abs((rawDiff.get(a[0]) ?? 0) - pRaw) -
-      Math.abs((rawDiff.get(b[0]) ?? 0) - pRaw)
+      Math.abs(diffOf(a[0]).raw - pRaw) -
+      Math.abs(diffOf(b[0]).raw - pRaw)
     );
     if (pIsTech) {
       for (let i = 0; i < edges.length; i++) {
@@ -1079,18 +1087,14 @@ export function stagePostproc() {
   const orphanSkills = new Set<string>();
   const hasEdge = new Set(final.map(([s]) => s));
   for (const id of skill.keys()) if (!hasEdge.has(id)) orphanSkills.add(id);
-  const wordToSkills = new Map<string, string[]>();
+  const wordCount = new Map<string, number>();
   for (const [id] of skill) {
     for (const w of id.split("-")) {
-      if (w.length >= 5) {
-        const arr = wordToSkills.get(w) ?? [];
-        arr.push(id);
-        wordToSkills.set(w, arr);
-      }
+      if (w.length >= 5) wordCount.set(w, (wordCount.get(w) ?? 0) + 1);
     }
   }
   const stopWords = new Set<string>();
-  for (const [w, list] of wordToSkills) if (list.length > 300) stopWords.add(w);
+  for (const [w, n] of wordCount) if (n > 300) stopWords.add(w);
   const heurUseCount = new Map<string, number>();
   const HEUR_CAP = 15;
   const HEUR_MIN_GAP = 4;
@@ -1103,31 +1107,21 @@ export function stagePostproc() {
     return out;
   };
   for (const orphanId of orphanSkills) {
-    const sRaw = rawDiff.get(orphanId) ?? 0;
-    const titleToks = orphanTitleTok(orphanId);
-    // Candidate words must appear in orphan's own TITLE (not just topics).
-    const candWords = new Set<string>();
-    for (const w of titleToks) if (w.length >= 5) candWords.add(w);
-    const cands = new Map<string, number>();
-    for (const w of candWords) {
-      if (stopWords.has(w)) continue;
-      const list = wordToSkills.get(w);
-      if (!list) continue;
-      for (const candId of list) {
-        if (candId === orphanId) continue;
-        if (candId !== w) continue; // only exact-slug matches
-        if (skill.get(candId)?.tags.includes("onet:tech")) continue;
-        if (sRaw - (rawDiff.get(candId) ?? 0) < HEUR_MIN_GAP) continue;
-        cands.set(candId, 100);
-      }
+    const sRaw = diffOf(orphanId).raw;
+    // A candidate is a skill whose whole id is one word of the orphan's title.
+    const ranked: string[] = [];
+    for (const w of orphanTitleTok(orphanId)) {
+      const c = skill.get(w);
+      if (w.length < 5 || w === orphanId || !c) continue;
+      if (c.tags.includes("onet:tech")) continue;
+      if (sRaw - diffOf(w).raw < HEUR_MIN_GAP) continue;
+      ranked.push(w);
     }
-    if (cands.size === 0) continue;
-    const ranked = [...cands.entries()].sort((a, b) =>
-      b[1] - a[1] ||
-      (heurUseCount.get(a[0]) ?? 0) - (heurUseCount.get(b[0]) ?? 0) ||
-      (rawDiff.get(a[0]) ?? 0) - (rawDiff.get(b[0]) ?? 0)
+    ranked.sort((a, b) =>
+      (heurUseCount.get(a) ?? 0) - (heurUseCount.get(b) ?? 0) ||
+      diffOf(a).raw - diffOf(b).raw
     );
-    for (const [candId] of ranked) {
+    for (const candId of ranked) {
       const n = heurUseCount.get(candId) ?? 0;
       if (n >= HEUR_CAP) continue;
       final.push([orphanId, candId]);
@@ -1160,13 +1154,6 @@ export function stagePostproc() {
     "learning-strategies",
   ]);
   const MIN_OVERLAP = 0.0001;
-  const sigTok2 = (id: string): Set<string> => {
-    const out = new Set<string>();
-    for (const w of id.split("-")) {
-      if (w.length >= 4 && !stopWords.has(w)) out.add(w);
-    }
-    return out;
-  };
   const outPerSkill = new Map<string, number>();
   for (const [s] of final) outPerSkill.set(s, (outPerSkill.get(s) ?? 0) + 1);
   let droppedCross = 0;
@@ -1179,7 +1166,7 @@ export function stagePostproc() {
     let overlap = 0;
     for (const t of srcT) if (dstT.has(t)) overlap++;
     if (overlap / Math.min(srcT.size, dstT.size) >= MIN_OVERLAP) continue;
-    const st = sigTok2(p), dt = sigTok2(s);
+    const st = orphanTitleTok(p), dt = orphanTitleTok(s);
     let tOverlap = 0;
     for (const t of st) if (dt.has(t)) tOverlap++;
     if (tOverlap > 0) continue;
@@ -1254,7 +1241,7 @@ export function stagePostproc() {
         internal.push({
           s,
           p,
-          gap: (rawDiff.get(s) ?? 0) - (rawDiff.get(p) ?? 0),
+          gap: diffOf(s).raw - diffOf(p).raw,
           seed: isSeed(s, p),
         });
       }
@@ -1273,7 +1260,7 @@ export function stagePostproc() {
       const ready: string[] = [...scc].filter((n) =>
         (seedInDeg.get(n) ?? 0) === 0
       );
-      ready.sort((a, b) => (rawDiff.get(a) ?? 0) - (rawDiff.get(b) ?? 0));
+      ready.sort((a, b) => diffOf(a).raw - diffOf(b).raw);
       let rank = 0;
       const seedCycleNodes = new Set(scc);
       while (ready.length) {
@@ -1286,14 +1273,14 @@ export function stagePostproc() {
             let ins = 0;
             while (
               ins < ready.length &&
-              (rawDiff.get(ready[ins]) ?? 0) <= (rawDiff.get(v) ?? 0)
+              diffOf(ready[ins]).raw <= diffOf(v).raw
             ) ins++;
             ready.splice(ins, 0, v);
           }
         }
       }
       const leftover = [...seedCycleNodes].sort((a, b) =>
-        (rawDiff.get(a) ?? 0) - (rawDiff.get(b) ?? 0)
+        diffOf(a).raw - diffOf(b).raw
       );
       for (const n of leftover) rankFor.set(n, rank++);
       let droppedThis = 0;
@@ -1779,25 +1766,6 @@ export function stageFinalize() {
       r.gEnd,
     ]);
   }
-  const emittedSet = new Set<string>();
-  for (const r of rows) emittedSet.add(r[0]);
-  let violations = 0;
-  for (const r of pending) {
-    if (!r.ps) continue;
-    for (const p of r.ps.split(",")) {
-      if (!emittedSet.has(p)) {
-        if (violations < 5) {
-          console.error(`[finalize] orphan edge: ${r.id} → ${p}`);
-        }
-        violations++;
-      }
-    }
-  }
-  if (violations > 0) {
-    throw new Error(
-      `finalize: expected every prereq to name an emitted skill, received ${violations} that do not (first 5 above). skills.tsv is unchanged. Rerun: deno run -A pipeline.ts postproc`,
-    );
-  }
   if (!pending.length) {
     throw new Error(
       `finalize: expected at least one skill, received none after the cruft drop. skills.tsv is unchanged. Check isCruft against ${TAGGED_DEDUPED.path}.`,
@@ -1988,29 +1956,32 @@ export async function stagePilot() {
     return path.reverse();
   };
 
-  let mat: Float32Array | null = null;
+  // REVIEW: The shortlist uses the IVF index, as stage prereq does, so the
+  // pilot snaps like production. It is approximate: it can miss a true
+  // neighbour outside the probed lists. Alternative: scan all of vocab for each
+  // name. It is exact, but costs about 70 ms a name, and the pilot then differs
+  // from production.
+  let index: { mat: Float32Array; ivf: Ivf } | null = null;
   const shortlist = async (names: string[]): Promise<string[][]> => {
-    mat ??= normalizedEmbeddingsForSkills(vocab.map((s) => s.id));
+    if (!index) {
+      const mat = normalizedEmbeddingsForSkills(vocab.map((s) => s.id));
+      index = { mat, ivf: ivfIndex(mat, vocab.length) };
+    }
+    const { mat, ivf } = index;
     // Stage embed pads short text the same way; nomic-embed-text collapses it.
     const vecs = await embedBatch(
       names.map((n) => n.length < 40 ? `${n}. Skill: ${n}. ${n}.` : n),
       "pilot:snap",
     );
-    return vecs.map((raw, li) => {
-      const v = normalize(raw, `prereq name "${names[li]}"`);
-      const top: { i: number; s: number }[] = [];
-      for (let i = 0; i < vocab.length; i++) {
-        let dot = 0;
-        const off = i * EMBED_DIM;
-        for (let k = 0; k < EMBED_DIM; k++) dot += v[k] * mat![off + k];
-        if (top.length < SNAP_K || dot > top[top.length - 1].s) {
-          top.push({ i, s: dot });
-          top.sort((a, b) => b.s - a.s);
-          if (top.length > SNAP_K) top.pop();
-        }
-      }
-      return top.map((t) => vocab[t.i].id);
-    });
+    return vecs.map((raw, li) =>
+      ivfTop(
+        ivf,
+        mat,
+        normalize(raw, `prereq name "${names[li]}"`),
+        SNAP_K,
+        () => true,
+      ).map((t) => vocab[t.idx].id)
+    );
   };
 
   let frontier = roots.filter((id) => {
