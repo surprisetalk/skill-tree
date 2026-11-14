@@ -38,6 +38,124 @@ first for `enrich` and `prereq`).
   4. If Clef holds up on both, the bigger lever is the candidate pool, not the
      picker: 5 of 258 positives reach it. Find why before you switch models.
 
+- [ ] `deno task test` finishes in under 10 s. Warm run (14 Nov): 10.7 s wall,
+      58 s user, 630% CPU; the tests themselves take 0.4 s. The cost is the
+      fixture runs at module load.
+  1. Time each `run()` in `pipeline_test.ts` with `performance.now()`. Find the
+     slowest before you cut anything.
+  2. If the error-case list runs (`listWithData`, `listOpensalt`) dominate:
+     `listDir` links full ESCO and O\*NET into each. Link head-truncated copies
+     (header plus about 200 rows) there. Keep full data in the `LIST` run.
+  3. Merge the Cert Atlas error cases into fewer runs when one run can assert
+     several failures.
+
+- [ ] A crash or Ctrl-C never leaves a torn build file that a later stage reads
+      as valid. Now `stageTrees` truncates `1j`, `1k`, and `1l` in place, and
+      `readTree` checks only line shape. `writeStats` writes `*_stats.json` in
+      place too.
+  1. Add `writeAtomic(path, text)` to `lib.ts`: write `path.tmp`, then
+     `Deno.renameSync`. Use it in `writeStats` and at `sources.ts:1829`, which
+     hand-rolls the same thing.
+  2. In `stageTrees`, write all three `.tmp` files first, then rename all three,
+     so the three files always come from one run.
+
+- [ ] `data/download.ts` never leaves a half file, never hangs, and exits
+      nonzero when a framework fails. Now `get()` pipes straight into `dest`
+      with no timeout, and the next run skips the partial file. OpenSALT logs
+      `WARN` on a failed package, continues, and exits 0.
+  1. `get()`: add `AbortSignal.timeout` (10 min). Pipe to `dest.tmp`, then
+     rename. The non-ok error states expected 2xx, received status, the URL, and
+     a fix.
+  2. OpenSALT: collect failed frameworks and throw after the loop, as `csp()`
+     does. Add a 60 s timeout to both fetches. Write through `.tmp`. Bound the
+     page loop (50 pages) and throw with the counter.
+  3. `exists()`: return false only for `Deno.errors.NotFound`. Rethrow other
+     errors. Now a permission error makes it fetch again over existing data.
+
+- [ ] Stage `list` fails when CSP gives zero rows. Now an empty `data/csp`
+      passes: the per-source zero-row guard (`sources.ts:1690`) omits `csp`, and
+      the 20,000-row floor holds on the other sources.
+  1. Add `"csp"` to that list. Run `deno task test` to confirm the 200-set
+     sample gives CSP rows.
+
+- [ ] Stage `postproc` crashes on a skill with no difficulty row. It does not
+      sort it as raw 0. Now `rawDiff` and `band` (`prereq.ts:764`) copy `diffs`,
+      and 12 lookups default with `?? 0` or `?? 20`. No lookup misses today, but
+      a miss makes a missing prereq look easier than its dependent.
+  1. Delete `rawDiff` and `band`. Add `diffOf(id)`: it returns `diffs.get(id)`
+     or throws expected a difficulty row, received none, and the rerun fix.
+  2. Replace every `rawDiff.get(x) ?? 0` and `band.get(x) ?? n` with
+     `diffOf(x)`. The postproc fixture output stays identical.
+  3. `graph.ts:1530`: the error names `build/1_skills.tsv`, but stage
+     `difficulty` reads `TAGGED_DEDUPED`. Name `TAGGED_DEDUPED.path`.
+
+- [ ] Status condition `kendall_tau_vs_anchor` grades every source, not only the
+      first. Now `graph.ts:1643` keeps the first 2000 anchored skills in table
+      order, which is one source at 279k anchors.
+  1. Replace the truncation with a stride:
+     `step = Math.ceil(sample.length / 2000)`, keep every `step`-th row. The
+     pair cost stays 2M.
+  2. After the next full build, check the new value against the 0.5 threshold in
+     `pipeline.ts`.
+
+- [ ] Stage `tag` takes less than its 4m11 at CSP scale. Now `oversamplePass`
+      (`graph.ts:452`) tests every skill against every ref: about 392k × 9k Set
+      lookups.
+  1. Before the skill loop, build `tokToRefs: Map<string, number[]>` from
+     `refToks`, without poisoned refs.
+  2. Per skill, walk its tokens through `tokToRefs` to count `hits[r]` and set
+     `rareHit[r]`. Reset only the refs it touched. Keep the gate: `rareHit` or
+     `hits >= 2`.
+  3. Sort survivors by ascending `r` before the dot product, so ties keep
+     today's order. Diff the tag outputs on a sample build.
+
+- [ ] Stage `seed-edges` takes less than its 5m50. The `opensalt_grade` pairing
+      (`sources.ts:2471`) runs 13.3M (i, j) iterations and calls `sigT` on both
+      labels in each. The `PAIR_CAP` check comes after the overlap count.
+  1. After `nodes.sort`, compute `sigs = nodes.map((n) => sigT(n.label))` and
+     index into it.
+  2. Move the `PAIR_CAP` check above the overlap count. Output is unchanged: the
+     count increments only after it.
+  3. Diff the `opensalt_grade` rows of `1e_seed_edges.tsv` before and after.
+
+- [ ] `deno task status` takes less than its 1m14. Now it reads the 1.2 GB
+      `2_embeddings.bin` up to 5 times, and parses `1_skills.tsv`, the seeds,
+      and the topological order twice each.
+  1. Memoize `loadRawEmbeddings` in stage `status` only. A full chain runs in
+     one process and stage `embed` rewrites the file, so a module memo goes
+     stale. Check free RAM first: the memo holds 1.2 GB.
+  2. In `stageStatus`, memoize `readSeeds`, `topoOrder(skills())`, and
+     `readTable(SKILL_LIST)` the way `skills` already is.
+
+- [ ] The first `embed` run spends no time on queue upkeep. `embedBatch`
+      (`lib.ts`) shares a 392k queue across 8 workers with `queue.shift()`,
+      which is O(n) per call.
+  1. Replace the queue with a shared index: `let next = 0`, and each worker
+     takes `missing[next++]` while `next < missing.length`.
+
+- [ ] The code is about 150 lines smaller, with identical output. Run
+      `deno task test` after each step.
+  1. `prereq.ts:1782`: delete `emittedSet` and the orphan-edge check. It cannot
+     fire: a skipped skill has no dependents, and the `EDGES` read already
+     checks every id.
+  2. Orphan fix (`prereq.ts:1082`): `wordToSkills` stores id arrays only to
+     count stop words. Count tokens instead. A candidate is a token `w` with
+     `skill.has(w)`. Sort by `heurUseCount`, then raw, stable. Delete the
+     constant score.
+  3. Delete `sigTok2` (`prereq.ts:1163`). It equals `orphanTitleTok`.
+  4. Delete `sigTokens` (`graph.ts:921`). It equals `titleTokSet`. Check whether
+     the `sigTokens` in `lib.ts:1930` is a third copy.
+  5. `stageTag`: the direct ESCO and O\*NET merge appears three times. Add one
+     local `withDirect(picked, direct, cap)`: dedupe by slug, prepend at score
+     1.0, slice to cap.
+  6. Add `gunzipText(path, fix)` to `lib.ts`. Call it from `readBncc`, the Cert
+     Atlas block, and `readLearningCommons`, which repeat the same `gzip -dc`
+     call and error text.
+  7. Pilot `shortlist` (`prereq.ts:1992`) scans all vocab by hand. Use `ivfTop`
+     as stage `prereq` does. Add a `REVIEW:` note: the shortlist is now
+     approximate. Alternative: keep the exact scan, at about 70 ms a name, and
+     the pilot then differs from production.
+
 ## Blocked on you
 
 - [ ] A full build finishes in under 2 hours of compute at the CSP scale: 392k
