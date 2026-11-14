@@ -1391,7 +1391,7 @@ export function listDefects(
 ): Record<"prefix" | "emphasis" | "shortCode" | "mojibake", string[]> {
   // First letter only is case-insensitive, so acronyms like "CAN Bus" pass.
   const prefix =
-    /^((Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]+|([Cc]an|[Cc]ould|[Ss]hould|[Hh]ow to|[Ww]hat is|[Ww]hy does)\s|[*_]*[Ww]ith\s+(modeling|prompting|guidance|support)|[*_])/;
+    /^((Unit|Lesson|Chapter|Benchmark|Standard)\s+[\d.]+|[A-Z][A-Za-z0-9]*(\.[A-Za-z0-9]+)+:\s|(I can,?|[Cc]an|[Cc]ould|[Ss]hould|[Hh]ow to|[Ww]hat is|[Ww]hy does)\s|[*_]*[Ww]ith\s+(modeling|prompting|guidance|support)|[*_])/;
   // Markdown emphasis; a lone "_" is a blank, as in "What does _ mean?".
   const emphasis = /(^|\s)[*_]+[^*_\s][^*_]*[*_]+(\s|[,.]|$)/;
   // UTF-8 read as cp1252: "Ã©" for "é", "â€™" for "’".
@@ -1796,15 +1796,40 @@ export function readLearningCommons(): LearningCommons {
 
 export const TOPIC_REFS = `${BUILD}/1l_topic_refs.tsv`;
 
-// Lookups from a skill title or slug to its id, for resolveConcept.
+// A title with each word's plural and -ing/-ed ending folded off: "Hidden
+// Markov Models" and "Hidden Markov Model" share a key, as do "ordering
+// fractions" and "Order fractions".
+function foldKey(title: string): string {
+  return title.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).map((w) =>
+    w.length > 4 && w.endsWith("ies")
+      ? w.slice(0, -3) + "y"
+      : w.length > 5 && w.endsWith("ing")
+      ? w.slice(0, -3)
+      : w.length > 4 && w.endsWith("ed")
+      ? w.slice(0, -2)
+      : w.length > 3 && w.endsWith("s") && !w.endsWith("ss")
+      ? w.slice(0, -1)
+      : w
+  ).join(" ");
+}
+
+// Lookups from a skill title or slug to its id, for resolveConcept. foldToId
+// holds null for a key that two skills share, so a fold never guesses.
+// REVIEW: Fold plurals and -ing/-ed only. On the expert labels they add 80
+// LectureBank and 9 Junyi pairs, all 29 checked right. Alternative: also strip
+// a title's leading verb ("Solve radical equations") and its parenthetical
+// (+64 LB, +33 Junyi pairs), but 2 of 23 checked were wrong, and stage
+// seed-edges shares this resolver, so a wrong match plants a wrong seed edge.
 export function skillIndex(skills: { id: string; title: string }[]): {
   idSet: Set<string>;
   titleToId: Map<string, string>;
   slugToId: Map<string, string>;
+  foldToId: Map<string, string | null>;
 } {
   const idSet = new Set<string>();
   const titleToId = new Map<string, string>();
   const slugToId = new Map<string, string>();
+  const foldToId = new Map<string, string | null>();
   for (const { id, title } of skills) {
     idSet.add(id);
     const t = title.toLowerCase().trim();
@@ -1812,17 +1837,17 @@ export function skillIndex(skills: { id: string; title: string }[]): {
     slugToId.set(id, id);
     const altSlug = slugify(title);
     if (altSlug && !slugToId.has(altSlug)) slugToId.set(altSlug, id);
+    const k = foldKey(title);
+    if (k) {
+      foldToId.set(k, foldToId.has(k) && foldToId.get(k) !== id ? null : id);
+    }
   }
-  return { idSet, titleToId, slugToId };
+  return { idSet, titleToId, slugToId, foldToId };
 }
 
 export function resolveConcept(
   raw: string,
-  idx: {
-    idSet: Set<string>;
-    titleToId: Map<string, string>;
-    slugToId: Map<string, string>;
-  },
+  idx: ReturnType<typeof skillIndex>,
 ): string | null {
   if (!raw) return null;
   const cleaned = raw.replace(/_/g, " ").replace(/\([^)]*\)/g, " ").replace(
@@ -1838,7 +1863,7 @@ export function resolveConcept(
   const rawSlug = slugify(raw.replace(/_/g, " "));
   if (idx.idSet.has(rawSlug)) return rawSlug;
   if (idx.slugToId.has(rawSlug)) return idx.slugToId.get(rawSlug)!;
-  return null;
+  return idx.foldToId.get(foldKey(cleaned)) ?? null;
 }
 
 // Every grade:* tag of a skill, as difficulty values. "grade:09.10" names two.
@@ -2126,8 +2151,9 @@ const JUNYI = "data/junyi";
 // so the crowd half-rates relatedness too. Alternative: drop the 4–6 band as
 // unlabeled. It is cleaner, but it drops about half the pairs.
 export function readJunyi(): { pairs: ExpertPair[]; unnamed: number } {
-  // "addition_2" is the second "addition" exercise.
-  const name = (e: string) => e.replace(/_\d+$/, "").replaceAll("_", " ");
+  // "addition_2" is the second "addition" exercise, "division_2.9" a level.
+  const name = (e: string) =>
+    e.replace(/_\d+(\.\d+)?$/, "").replaceAll("_", " ");
   const pairs: ExpertPair[] = [];
   for (const part of ["training", "testing"]) {
     const path = `${JUNYI}/relationship_annotation_${part}.csv`;

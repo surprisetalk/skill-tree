@@ -532,14 +532,19 @@ function cleanStandard(
     title = fullStmt;
     description = notes && notes !== fullStmt ? notes : "";
   }
+  // CSP repeats a statement's code as its lead: "TEI2.J.10.f: identify ...".
   title = unmark(
-    title.replace(/^[•▪►■◆]\s*/, "").replace(/^\d+\.\s+/, ""),
+    title.replace(/^[•▪►■◆]\s*/, "").replace(/^\d+\.\s+/, "").replace(
+      /^[A-Z][A-Za-z0-9]*(\.[A-Za-z0-9]+)+:\s+/,
+      "",
+    ),
   );
   const before = title;
   title = stripStudentPrefix(title);
   title = title.replace(
-    /^(Can|Could|Should|How to|What is|Why does)\s+/i,
-    (_m, _g, _off, _s) => "",
+    // Repeated: one CSP statement reads "I can I can examine ...".
+    /^((I can,?|Can|Could|Should|How to|What is|Why does)\s+)+/i,
+    "",
   );
   if (title && title[0] === title[0].toLowerCase()) {
     title = title[0].toUpperCase() + title.slice(1);

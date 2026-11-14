@@ -1000,8 +1000,10 @@ export function stageDedupe() {
     };
     const byCode = new Map<string, { lc: number[]; os: number[] }>();
     rows.forEach((r, i) => {
-      const lc = r.sources.includes("learningcommons"),
-        os = r.sources.includes("opensalt");
+      // A CSP standard is a state standard, as a Learning Commons one is.
+      const srcs = r.sources.split(",");
+      const lc = srcs.includes("learningcommons") || srcs.includes("csp"),
+        os = srcs.includes("opensalt");
       if (!lc && !os) return;
       for (const t of r.tags.split(",")) {
         if (!t.startsWith("code:")) continue;

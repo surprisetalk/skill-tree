@@ -1,5 +1,10 @@
 import { assert, assertEquals, assertGreater } from "@std/assert";
-import { expertScores, listDefects } from "./lib.ts";
+import {
+  expertScores,
+  listDefects,
+  resolveConcept,
+  skillIndex,
+} from "./lib.ts";
 
 // Stage list runs in seconds without Ollama. The other stages need Ollama or
 // minutes, so they answer to `deno task status`.
@@ -31,6 +36,58 @@ const LIST_BOUND_MS = 30_000;
 const CSP_SAMPLE = 200;
 const HEAD_ROWS = 200;
 const HEAD_BYTES = 100_000;
+// REVIEW: An error-case run reads small copies of Learning Commons, Cert Atlas,
+// and BNCC, made once per test process in a shared temp folder. It asserts on
+// one source only. Alternative: link the full files. They cost about 4 s of
+// CPU per run (72k standards through deno-dom). Lightcast stays whole: it
+// carries the 20,000-row floor of stage list at 0.1 s of CPU.
+const SMALL_ROWS = 300;
+const small = (() => {
+  let dir = "";
+  return (): string => {
+    if (dir) return dir;
+    dir = Deno.makeTempDirSync({ prefix: "small-" });
+    addEventListener("unload", () => Deno.removeSync(dir, { recursive: true }));
+    for (const d of ["learningcommons", "certatlas", "bncc"]) {
+      Deno.mkdirSync(`${dir}/${d}`);
+    }
+    // Items come first in the export and edges last, so no edge dangles.
+    const sh = (cmd: string) => {
+      const r = new Deno.Command("sh", {
+        args: ["-c", cmd],
+        stderr: "piped",
+      }).outputSync();
+      assertEquals(r.code, 0, new TextDecoder().decode(r.stderr));
+    };
+    sh(
+      `gzip -dc data/learningcommons/graph.jsonl.gz | head -n ${
+        SMALL_ROWS + 1
+      } | gzip -c > ${dir}/learningcommons/graph.jsonl.gz`,
+    );
+    const head = (path: string, key: string | null) => {
+      const doc = JSON.parse(
+        new TextDecoder().decode(
+          new Deno.Command("gzip", { args: ["-dc", path], stdout: "piped" })
+            .outputSync().stdout,
+        ),
+      );
+      if (key) doc[key] = doc[key].slice(0, 20);
+      else doc.splice(5);
+      const out = `${dir}/${path.slice("data/".length, -".gz".length)}`;
+      Deno.writeTextFileSync(out, JSON.stringify(doc));
+      sh(`gzip -f ${out}`);
+    };
+    head("data/certatlas/exams.json.gz", null);
+    for (
+      const [f, k] of [
+        ["educacao-infantil", "objetivos"],
+        ["ensino-fundamental", "habilidades"],
+        ["ensino-medio", "habilidades"],
+      ]
+    ) head(`data/bncc/${f}.json.gz`, k);
+    return dir;
+  };
+})();
 const listDir = (own = ""): string => {
   const dir = Deno.makeTempDirSync({ prefix: "list-" });
   Deno.mkdirSync(`${dir}/build`);
@@ -60,6 +117,10 @@ const listDir = (own = ""): string => {
           Deno.writeTextFileSync(to, kept.join("\n") + "\n");
         }
       }
+    } else if (
+      own && ["learningcommons", "certatlas", "bncc"].includes(d.name)
+    ) {
+      Deno.symlinkSync(`${small()}/${d.name}`, `${dir}/data/${d.name}`);
     } else {
       Deno.symlinkSync(`${Deno.cwd()}/data/${d.name}`, `${dir}/data/${d.name}`);
     }
@@ -1584,7 +1645,7 @@ Deno.test("readCoursePairs: a truncated gzip names the file to delete, because t
 
 // Embeddings: one orthogonal axis per group, so a group of rows shares a vector.
 Deno.test(
-  "dedupe: a shared code:* tag across OpenSALT and Learning Commons, or an alignment edge, makes a candidate that the cosine test decides; standards that start at different grades never merge",
+  "dedupe: a shared code:* tag across OpenSALT and Learning Commons or CSP, or an alignment edge, makes a candidate that the cosine test decides; standards that start at different grades never merge",
   async () => {
     const skills: [string, string, string, string, number][] = [
       // id, title, sources, tags, vector axis
@@ -1634,6 +1695,24 @@ Deno.test(
       ],
       ["lc-c", "Recite the months of the year", "learningcommons", "", 4],
       ["lc-d", "Name the days of a week", "learningcommons", "", 4],
+      // CSP x OpenSALT: same code and cosine 1 merge. A code reused for
+      // another standard ("6.12", orthogonal vectors) does not.
+      [
+        "csp-skip",
+        "Skip-count by 5s",
+        "csp",
+        "csp,grade:02,code:2.NBT.A.2",
+        6,
+      ],
+      [
+        "os-skip",
+        "Count forward in fives",
+        "opensalt",
+        "grade:02,code:2.NBT.A.2",
+        6,
+      ],
+      ["csp-tax", "Explain federal taxes", "csp", "csp,code:6.12", 8],
+      ["os-wind", "Wind energy", "opensalt", "code:6.12", 9],
     ];
     const emb = new Float32Array(skills.length * 768);
     skills.forEach(([, , , , axis], i) => emb[i * 768 + axis] = 1);
@@ -1661,7 +1740,11 @@ Deno.test(
     // of grades 1–2 and grade 2: they share grade 2 but start apart.
     const pairs = files["build/3b_aliases.tsv"].split("\n").slice(1)
       .filter((l) => l).map((l) => l.split("\t").sort().join("+")).sort();
-    assertEquals(pairs, ["lc-a+lc-b", "lc-code+os-code"]);
+    assertEquals(pairs, [
+      "csp-skip+os-skip",
+      "lc-a+lc-b",
+      "lc-code+os-code",
+    ]);
   },
 );
 
@@ -2170,6 +2253,8 @@ Deno.test(
         { fullStatement: "日本語の 別の標準を学ぶ ことができる" },
         { fullStatement: `${LONG} Straße` },
         { fullStatement: `${LONG} Strasse` },
+        { fullStatement: "I can I can examine effects of viruses on health" },
+        { fullStatement: "TEI2.J.10.f: identify food hazards for infants" },
       ]),
       listOpensalt([{
         identifier: "x1",
@@ -2181,6 +2266,12 @@ Deno.test(
       ok.titles.includes("Add fractions with unlike denominators correctly"),
       `blocks glued: ${JSON.stringify(ok.titles)}`,
     );
+    for (
+      const t of [
+        "Examine effects of viruses on health",
+        "Identify food hazards for infants",
+      ]
+    ) assert(ok.titles.includes(t), `lead kept: ${JSON.stringify(ok.titles)}`);
     for (const w of ["strasse", "soren", "lodz", "igdir-ilik"]) {
       assert(
         ok.ids.includes(`spell-${w}-correctly-in-writing`),
@@ -2509,4 +2600,19 @@ Deno.test("digcompSeedEdges: each level of a competence is a prereq of the next;
     msg = (e as Error).message;
   }
   assert(msg.includes("digcomp:competence:*"), msg);
+});
+
+Deno.test("resolveConcept: a plural or -ing form finds its skill, and a fold two skills share finds none", () => {
+  const idx = skillIndex([
+    { id: "hidden-markov-model", title: "Hidden Markov Model" },
+    { id: "order-fractions", title: "Order fractions" },
+    { id: "paint", title: "Paint" },
+    { id: "painting", title: "Painting" },
+  ]);
+  assertEquals(
+    ["Hidden Markov Models", "ordering fractions", "Paints", "painted"].map(
+      (l) => resolveConcept(l, idx),
+    ),
+    ["hidden-markov-model", "order-fractions", null, null],
+  );
 });

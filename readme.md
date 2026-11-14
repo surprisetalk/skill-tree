@@ -34,6 +34,22 @@ stage `prereq` reuse `build/5_prereqs.tsv` as is.
 
 See `claude.md` for the full dataset catalog and schemas.
 
+## Attributions
+
+Common Standards Project (`data/csp/`): each standard set states its own licence
+in its `license` field. Both licences require credit to the rights holder, a
+link to the licence, and a note of changes.
+
+- CC BY 4.0 US (http://creativecommons.org/licenses/by/4.0/us/): most sets,
+  mainly Common Curriculum, Inc.
+- CC BY 3.0 US (http://creativecommons.org/licenses/by/3.0/us/): sets of
+  Desire2Learn Incorporated (D2L Corporation).
+- No licence stated: some sets, with the rights holder only. Run
+  `gzip -dc data/csp/<setId>.json.gz | jq .data.license` to read one.
+
+A skill that merges a CSP and an OpenSALT standard of one code keeps both
+sources, so both credits apply.
+
 ## Pending design
 
 Evidence for each note: `research.md`.

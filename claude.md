@@ -364,9 +364,10 @@ A new build table gets a schema; a new id goes through `slugify`.
   sits at its lowest level). Learning Commons resolves through
   `build/1m_lc_ids.tsv` and `3b_aliases.tsv`, not by label. A pair with an end
   that stage `list` dropped goes to `build/1e_unresolved.tsv` with reason
-  `no-skill`. Pairs resolve to skill IDs by exact match, then by embedding
-  (cosine ≥ 0.90 and a shared token). Past √n labels, the IVF index of stage
-  `prereq` finds each label's nearest skill. Unresolved pairs go to
+  `no-skill`. Pairs resolve to skill IDs by exact match (case, plurals, and
+  -ing/-ed folded, unless two skills share the fold), then by embedding (cosine
+  ≥ 0.90 and a shared token). Past √n labels, the IVF index of stage `prereq`
+  finds each label's nearest skill. Unresolved pairs go to
   `build/1e_unresolved.tsv` with a reason per label. A source that gives both A
   → B and B → A loses both, as does a course pair inside a seed cycle
   (`contested-order`): expert sources outrank course catalogs. Each Khan
@@ -391,15 +392,17 @@ no anchor skips the easier-than check, and the chain lift orders its bands. One
 across two languages drops. Resumable via the three caches; a row that names an
 id outside the build, or a pick no easier than its skill, drops, and its prompt
 goes out again. `SKIP_LLM=1` reuses the caches, less the stale rows, for a
-regression build without the generator.
+regression build without the generator. It rewrites the three caches without the
+stale rows; before a commit, restore the paid rows with
+`jj restore build/5_prereqs.tsv build/5b_expand.tsv build/5c_snap.tsv`.
 
 **Merge step** (stage `dedupe`): token-sort signature merge + per-topic
-Jaccard+cosine merge + Learning Commons candidates (a Learning Commons row and
-an OpenSALT row that share a `code:*` tag, cosine ≥ 0.90; a
-`hasStandardAlignment` pair, cosine ≥ 0.96). Two groups whose `grade:*` tags
-share no grade never merge: they are two steps of a progression. Canonical ID =
-shortest title. Dropped IDs become aliases in `3b_aliases.tsv`; stages
-`postproc` and `finalize` remap edges through it.
+Jaccard+cosine merge + code candidates (a Learning Commons or CSP row and an
+OpenSALT row that share a `code:*` tag, cosine ≥ 0.90; a `hasStandardAlignment`
+pair, cosine ≥ 0.96). Two groups whose `grade:*` tags share no grade never
+merge: they are two steps of a progression. Canonical ID = shortest title.
+Dropped IDs become aliases in `3b_aliases.tsv`; stages `postproc` and `finalize`
+remap edges through it.
 
 ### data/download.ts — Dataset Downloader
 
