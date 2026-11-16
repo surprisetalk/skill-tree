@@ -655,6 +655,8 @@ Deno.test(
 );
 
 // A small postproc output that finalize turns into skills.tsv.
+// Oak with no units: stage postproc reads Oak's prior-knowledge statements.
+const OAK_EMPTY = await gzip('{"sequences":{},"units":[]}');
 const finalBuild = (): Fixture => {
   const ids = ["counting", "addition", "multiplication"];
   return {
@@ -677,6 +679,7 @@ const finalBuild = (): Fixture => {
     "build/5b_expand.tsv": "counting\tnone\n",
     "build/5c_snap.tsv": "number-sense\tnone\n",
     "build/1e_seed_edges.tsv": seedHeader,
+    "data/oak/index.json.gz": OAK_EMPTY,
   };
 };
 
@@ -693,7 +696,22 @@ const staleP = early(() =>
     "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\tghost\n",
     "build/5b_expand.tsv": "ghost\tCounting\naddition\tCounting\n",
     "build/5c_snap.tsv": "number-sense\tghost\ncounting\tcounting\n",
-  }, ["build/5_prereqs.tsv", "build/5b_expand.tsv", "build/5c_snap.tsv"])
+  }, ["build/5_prereqs.tsv", "build/5b_expand.tsv"])
+);
+// Stage snap drops a match to a gone id, and keeps one that an alias renames.
+const staleSnapP = early(() =>
+  runIn("snap", {
+    ...finalBuild(),
+    "build/2_ids.tsv": "counting\naddition\nmultiplication\n",
+    "build/2_embeddings.bin": goodBuild()["build/2_embeddings.bin"].slice(
+      0,
+      3 * 768 * 4,
+    ),
+    "build/3b_aliases.tsv": "dropped_id\tcanonical_id\noldadd\taddition\n",
+    "build/5b_expand.tsv": "addition\tCounting\n",
+    "build/5c_snap.tsv":
+      "number-sense\tghost\ncounting\tcounting\nsums\toldadd\n",
+  }, ["build/5c_snap.tsv"])
 );
 // A repeated key keeps one row; a cache with no fresh row goes away.
 // Raw difficulty: counting 1, addition 2, multiplication 3. A row whose pick
@@ -722,7 +740,12 @@ Deno.test("prereq: a cache row that names a gone id drops and asks again", async
   const { files, stderr } = await staleP();
   assertEquals(files["build/5_prereqs.tsv"], "addition\tcounting\n", stderr);
   assertEquals(files["build/5b_expand.tsv"], "addition\tCounting\n");
-  assertEquals(files["build/5c_snap.tsv"], "counting\tcounting\n");
+  const snap = await staleSnapP();
+  assertEquals(
+    snap.files["build/5c_snap.tsv"],
+    "counting\tcounting\nsums\toldadd\n",
+    snap.stderr,
+  );
   assert(stderr.includes("expected ANTHROPIC_API_KEY"), stderr);
   const [dup, none, drifted, merged] = await Promise.all(
     staleCases.map((c) => c()),
@@ -752,6 +775,68 @@ Deno.test("postproc: keeps direct prereqs only, with every closure unchanged", a
   assertEquals(
     out.files["build/6_edges.tsv"],
     "skill_id\tprereq_id\naddition\tcounting\nmultiplication\taddition\n",
+  );
+});
+
+// Multiplication is Oak unit "u", whose prior statement "Counting" snaps to
+// counting. Addition is a level-2 Skills England statement, and its pick
+// counting a level-6 one: that edge drops.
+const oakSeP = early(async () => {
+  const b = finalBuild();
+  b["build/3b_tagged_deduped.tsv"] =
+    (b["build/3b_tagged_deduped.tsv"] as string)
+      .replace(
+        "counting.\tfoundation\tgrade:1",
+        "counting.\tfoundation\tskillsengland:level:6",
+      )
+      .replace(
+        "addition.\tfoundation\tgrade:1",
+        "addition.\tfoundation\tskillsengland:level:2",
+      )
+      .replace(
+        "multiplication.\tfoundation\tgrade:1",
+        "multiplication.\tfoundation\toak:u",
+      );
+  return runIn("postproc", {
+    ...b,
+    "build/5_prereqs.tsv": "addition\tcounting\n",
+    "build/5c_snap.tsv": "counting\tcounting\n",
+    "data/oak/index.json.gz": await gzip('{"sequences":{},"units":["u"]}'),
+    "data/oak/units/u.json.gz": await gzip(JSON.stringify({
+      unitSlug: "u",
+      unitTitle: "Times tables",
+      description: "",
+      year: 3,
+      priorKnowledgeRequirements: ["Counting"],
+    })),
+  }, ["build/6_edges.tsv"]);
+});
+Deno.test("postproc: an Oak prior statement is a named prereq; a higher Skills England level is no prereq", async () => {
+  const out = await oakSeP();
+  assertEquals(out.code, 0, out.stderr);
+  assertEquals(
+    out.files["build/6_edges.tsv"],
+    "skill_id\tprereq_id\nmultiplication\tcounting\n",
+  );
+});
+
+// Bands: counting 1, addition 2, multiplication 3. Both seeds put a harder
+// prereq first: the Khan one stays, the course-catalog one drops.
+const courseP = early(() =>
+  runIn("postproc", {
+    ...finalBuild(),
+    "build/5_prereqs.tsv": "addition\tnone\n",
+    "build/1e_seed_edges.tsv": seedHeader +
+      "addition\tcounting\tkhan\t1.00\t0\t0\n" +
+      "multiplication\tcounting\tcourses\t1.00\t0\t0\n",
+  }, ["build/6_edges.tsv"])
+);
+Deno.test("postproc: an inverted course seed drops; an inverted expert seed stays", async () => {
+  const out = await courseP();
+  assertEquals(out.code, 0, out.stderr);
+  assertEquals(
+    out.files["build/6_edges.tsv"],
+    "skill_id\tprereq_id\ncounting\taddition\n",
   );
 });
 

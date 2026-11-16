@@ -40,6 +40,7 @@ import {
   stagePilot,
   stagePostproc,
   stagePrereq,
+  stageSnap,
   SUBJECT_MIN,
   subjectAreaEdge,
 } from "./prereq.ts";
@@ -538,6 +539,7 @@ const stages: Record<string, () => void | Promise<void>> = {
   "seed-edges": stageSeedEdges,
   difficulty: stageDifficulty,
   prereq: stagePrereq,
+  snap: stageSnap,
   postproc: stagePostproc,
   finalize: stageFinalize,
   status: stageStatus,

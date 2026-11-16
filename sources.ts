@@ -513,6 +513,33 @@ export function readOak(): { units: OakUnit[]; tracks: OakPosition[][] } {
   return { units, tracks };
 }
 
+// Unit slug → the skill that carries its oak:<slug> tag.
+const oakSkillOf = (tagged: { id: string; tags: string }[]) => {
+  const bySlug = new Map<string, string>();
+  for (const s of tagged) {
+    for (const t of s.tags.split(",")) {
+      if (t.startsWith("oak:") && !bySlug.has(t.slice(4))) {
+        bySlug.set(t.slice(4), s.id);
+      }
+    }
+  }
+  return bySlug;
+};
+
+// REVIEW: Each Oak prior-knowledge statement is a named prereq of its unit's
+// skill, matched by stage snap as Claude's expand names are. Alternative: a
+// seed pair through the seed-edges resolver. It resolved 390 of 8,800, and
+// 110 of those 388 kept edges contradicted the grade anchors.
+export function oakPriorNames(
+  tagged: { id: string; tags: string }[],
+): { dep: string; name: string }[] {
+  const bySlug = oakSkillOf(tagged);
+  return readOak().units.flatMap((u) => {
+    const dep = bySlug.get(u.slug);
+    return dep ? u.prior.map((name) => ({ dep, name })) : [];
+  });
+}
+
 // Within one track, a unit precedes the next unit that shares one of its
 // threads. Each option of a position pairs with each option of the next.
 export function oakThreadPairs(
@@ -2580,37 +2607,21 @@ export async function stageSeedEdges() {
   }
 
   const oakDropped: string[] = [];
-  // Oak: thread order within a track, and each unit's prior-knowledge
-  // statements as prereqs of the unit. A unit resolves through its oak:<slug>
-  // tag; a statement resolves like any other label.
+  // Oak: thread order within a track. A unit resolves through its oak:<slug>
+  // tag. Its prior-knowledge statements are free text: stage snap matches them.
   {
-    const oak = readOak();
-    const bySlug = new Map<string, string>();
-    for (const s of tagged) {
-      for (const t of s.tags.split(",")) {
-        if (t.startsWith("oak:") && !bySlug.has(t.slice(4))) {
-          bySlug.set(t.slice(4), s.id);
-        }
-      }
-    }
-    // A unit with no skill (stage list dropped it, or a merge hit the tag
-    // cap) goes to quarantine as no-skill, like a Learning Commons node.
-    const pair = (src: string, dst: string, source: string, raw: string) => {
-      if (src && dst) addRaw(src, dst, source, raw);
+    const bySlug = oakSkillOf(tagged);
+    for (const p of oakThreadPairs(readOak().tracks)) {
+      const src = bySlug.get(p.src), dst = bySlug.get(p.dst);
+      const raw = `${p.src}->${p.dst}`;
+      // A unit with no skill (stage list dropped it, or a merge hit the tag
+      // cap) goes to quarantine as no-skill, like a Learning Commons node.
+      if (src && dst) addRaw(src, dst, "oak_thread", raw);
       else {
         oakDropped.push(
-          `${src}\t${dst}\t${source}\t${raw}\tno-skill\tno-skill`,
+          `${p.src}\t${p.dst}\toak_thread\t${raw}\tno-skill\tno-skill`,
         );
-        (perSource[source] ??= { total: 0, resolved: 0 }).total++;
-      }
-    };
-    const id = (slug: string) => bySlug.get(slug) ?? "";
-    for (const p of oakThreadPairs(oak.tracks)) {
-      pair(id(p.src), id(p.dst), "oak_thread", `${p.src}->${p.dst}`);
-    }
-    for (const u of oak.units) {
-      for (const pre of u.prior) {
-        pair(pre, id(u.slug), "oak_prior", `${pre}->${u.slug}`);
+        (perSource.oak_thread ??= { total: 0, resolved: 0 }).total++;
       }
     }
   }
@@ -2993,8 +3004,6 @@ export async function stageSeedEdges() {
     digcomp: 0.9,
     // Ids from tags, as for DigComp.
     oak_thread: 0.9,
-    // Free-text statements: most name no skill (below-cos-0.9).
-    oak_prior: 0.04,
   };
   const short = Object.entries(perSource).flatMap(([src, s]) => {
     const floor = SEED_FLOORS[src];

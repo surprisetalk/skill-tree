@@ -19,9 +19,9 @@ deno task status                   # grades the last full build; exits 1 on a fa
 ```
 
 Stages, in order: `list` → `enrich` → `trees` → `embed` → `tag` → `dedupe` →
-`seed-edges` → `difficulty` → `prereq` → `postproc` → `finalize` → `status`.
-`pipeline.ts` dispatches them; `sources.ts`, `graph.ts`, and `prereq.ts` hold
-them; `lib.ts` holds what they share.
+`seed-edges` → `difficulty` → `prereq` → `snap` → `postproc` → `finalize` →
+`status`. `pipeline.ts` dispatches them; `sources.ts`, `graph.ts`, and
+`prereq.ts` hold them; `lib.ts` holds what they share.
 
 Final output: `skills.tsv`
 (`id title display_title description difficulty prereqs occupations topics grade_start grade_end`).

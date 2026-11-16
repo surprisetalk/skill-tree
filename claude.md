@@ -293,7 +293,7 @@ Florida, etc.), plus specialty frameworks (CASEL, 21st Century Skills, AP CS).
 
 `deno run -A pipeline.ts [stage]` runs one stage, or every stage in order:
 `list`, `enrich`, `trees`, `embed`, `tag`, `dedupe`, `seed-edges`, `difficulty`,
-`prereq`, `postproc`, `finalize`, `status`.
+`prereq`, `snap`, `postproc`, `finalize`, `status`.
 
 | File               | Holds                                                                  |
 | ------------------ | ---------------------------------------------------------------------- |
@@ -301,7 +301,7 @@ Florida, etc.), plus specialty frameworks (CASEL, 21st Century Skills, AP CS).
 | `lib.ts`           | Names that two files share: text cleanup, TSV/CSV, Claude, embeddings. |
 | `sources.ts`       | Stages `list`, `enrich`, `trees`, `seed-edges`.                        |
 | `graph.ts`         | Stages `embed`, `tag`, `dedupe`, `difficulty`.                         |
-| `prereq.ts`        | Stages `prereq`, `postproc`, `finalize`.                               |
+| `prereq.ts`        | Stages `prereq`, `snap`, `postproc`, `finalize`.                       |
 | `prereq_worker.ts` | One core's share of the prereq candidate search.                       |
 
 Parses datasets into a unified schema, embeds via Ollama `nomic-embed-text`,
@@ -356,8 +356,7 @@ A new build table gets a schema; a new id goes through `slugify`.
   `<…>` as text.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, course prerequisites,
   Oak (`oak_thread`: within one track — primary, then one exam board, exam
-  subject, and tier — a unit precedes the next unit of each of its threads;
-  `oak_prior`: each `priorKnowledgeRequirements` statement precedes its unit),
+  subject, and tier — a unit precedes the next unit of each of its threads),
   OpenSALT within-framework grade ordering, Learning Commons `buildsTowards`,
   DigComp level order (within one competence, each outcome of a level precedes
   each outcome of the next; a merged outcome sits at its lowest level). Learning
@@ -385,15 +384,18 @@ caches. Stage `list` applies them on its next run.
 **Prereq inference** (stage `prereq`): per-skill top-K candidates by cosine
 similarity (within-topic + ancestor + cross-topic pools; an IVF index serves the
 big pools), then the LLM picks true prerequisites. Then Claude names each
-skill's prereqs (`5b_expand.tsv`), and each name snaps to a skill: an exact
-match, else Claude picks from the name's 10 nearest skills (`5c_snap.tsv`, keyed
-by name slug). Stage `postproc` adds these named edges; one whose dependent has
-no anchor skips the easier-than check, and the chain lift orders its bands. One
-across two languages drops. Resumable via the three caches; a row that names an
-id outside the build, or a pick no easier than its skill, drops, and its prompt
-goes out again. `SKIP_LLM=1` reuses the caches, less the stale rows, for a
-regression build without the generator. It rewrites the three caches without the
-stale rows; before a commit, restore the paid rows with
+skill's prereqs (`5b_expand.tsv`). Stage `snap` matches each name, and each Oak
+`priorKnowledgeRequirements` statement, to a skill: an exact match, else Claude
+picks from the name's 10 nearest skills (`5c_snap.tsv`, keyed by name slug).
+Stage `postproc` adds these named edges, less one whose prereq has a higher
+Skills England level than its dependent (stage `prereq` keeps such a pair out of
+the candidate pool too); one whose dependent has no anchor skips the easier-than
+check, and the chain lift orders its bands. One across two languages drops.
+Resumable via the three caches; a row that names an id outside the build, or a
+pick no easier than its skill, drops, and its prompt goes out again.
+`SKIP_LLM=1` reuses the caches, less the stale rows, for a regression build
+without the generator. It rewrites the three caches without the stale rows;
+before a commit, restore the paid rows with
 `jj restore build/5_prereqs.tsv build/5b_expand.tsv build/5c_snap.tsv`.
 
 **Merge step** (stage `dedupe`): token-sort signature merge + per-topic
@@ -456,9 +458,10 @@ Columns:
   `seed_anchor_conflicts_by_source`). Stage `postproc` keeps every seed edge
   either way, as an edge or as a path after the transitive reduction, except an
   edge from a subject area (a skill whose id is the topic of 50 or more skills,
-  `SUBJECT_MIN`) to a skill that carries it as a topic. Stage `finalize` then
-  lifts along the final edges: an unanchored skill sits at least one band above
-  each prereq, and below each anchored skill above it, so a long chain carries a
+  `SUBJECT_MIN`) to a skill that carries it as a topic, and a course seed whose
+  prereq sits in a higher band than its dependent. Stage `finalize` then lifts
+  along the final edges: an unanchored skill sits at least one band above each
+  prereq, and below each anchored skill above it, so a long chain carries a
   skill past grade 12. The lift moves a skill at most 4 bands (`LIFT_CAP`). A
   non-seed edge whose prereq ends above that limit drops; one that ends in the
   same band stays as a tie.

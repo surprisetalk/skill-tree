@@ -984,6 +984,55 @@ export function stageDedupe() {
     `[dedupe] cosine+jaccard merges: ${merged} (blocked ${cosBlocked} antonym, skipped ${skippedHuge} oversize buckets)`,
   );
 
+  // CSP holds each standard once per state, reworded ("Explain the advantages
+  // and disadvantages of debt" / "Summarize ..."), and the topic merge above
+  // skips its oversize buckets. A CSP row meets each row that shares one of
+  // its two rarest title words.
+  // REVIEW: Merge a CSP pair at cosine >= 0.95 and word Jaccard >= 0.5; the
+  // grade and antonym guards of union still apply. On 3,000 sampled CSP rows,
+  // 7.8% had such a neighbour, and the 0.95-0.97 pairs read as duplicates.
+  // Below 0.95, progressions merge ("Expand simple sentences" / "complex
+  // sentences", 0.947). Alternative: 0.97. It merges half as many rows.
+  {
+    const CSP_COSINE = 0.95, CSP_JACCARD = 0.5, BUCKET_MAX = 2000;
+    const df = new Map<string, number>();
+    for (const s of sigSets) for (const t of s) df.set(t, (df.get(t) ?? 0) + 1);
+    const byTok = new Map<string, number[]>();
+    rows.forEach((_, i) => {
+      // A word that only this row holds meets no other row.
+      const rare = [...sigSets[i]].filter((t) => df.get(t)! > 1)
+        .sort((a, b) => df.get(a)! - df.get(b)!).slice(0, 2);
+      for (const t of rare) {
+        (byTok.get(t) ?? byTok.set(t, []).get(t)!).push(i);
+      }
+    });
+    const isCsp = rows.map((r) => r.sources.split(",").includes("csp"));
+    let cspMerged = 0, cspBlocked = 0, oversize = 0;
+    for (const idxs of byTok.values()) {
+      if (idxs.length > BUCKET_MAX) {
+        oversize++;
+        continue;
+      }
+      for (let a = 0; a < idxs.length; a++) {
+        for (let b = a + 1; b < idxs.length; b++) {
+          const i = idxs[a], j = idxs[b];
+          if (!isCsp[i] && !isCsp[j]) continue;
+          if (find(i) === find(j)) continue;
+          if (jaccard(wordSets[i], wordSets[j]) < CSP_JACCARD) continue;
+          let sc = 0;
+          const oi = i * EMBED_DIM, oj = j * EMBED_DIM;
+          for (let d = 0; d < EMBED_DIM; d++) sc += vecs[oi + d] * vecs[oj + d];
+          if (sc < CSP_COSINE) continue;
+          if (union(i, j)) cspMerged++;
+          else cspBlocked++;
+        }
+      }
+    }
+    console.log(
+      `[dedupe] csp rare-word merges: ${cspMerged} (blocked ${cspBlocked} by grade or antonym, ${oversize} words in over ${BUCKET_MAX} rows skipped)`,
+    );
+  }
+
   // Learning Commons candidates skip the topic bucket and the Jaccard gate, and
   // the cosine test decides. A pair whose skills share a code:* tag with
   // OpenSALT needs 0.90, because the code is evidence. A pair that the graph

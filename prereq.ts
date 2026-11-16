@@ -52,8 +52,27 @@ import {
   YEAR_RE,
 } from "./lib.ts";
 import type { Columns, Schema } from "./lib.ts";
+import { oakPriorNames } from "./sources.ts";
 
 // ---------- stage prereq ----------
+
+// A skill's Skills England levels, 2 (GCSE) to 7 (master's): one per standard
+// that states it.
+const seLevels = (tags: string): number[] =>
+  [...tags.matchAll(/(?:^|,)skillsengland:level:(\d)/g)].map((m) =>
+    Number(m[1])
+  );
+// REVIEW: A prereq whose lowest Skills England level sits above its
+// dependent's highest level is no prereq: a level-6 statement does not lead
+// to a level-2 one. Stage prereq leaves it out of the candidate pool, and
+// stage postproc drops such a named edge. Alternative: a status condition
+// that counts them. It reports such edges but ships them.
+const seMin = (tags: string) => Math.min(...seLevels(tags), 99);
+const seMax = (tags: string) => Math.max(...seLevels(tags), 0);
+const seInverted = (depTags: string, preTags: string) => {
+  const d = seLevels(depTags), p = seLevels(preTags);
+  return d.length > 0 && p.length > 0 && seMin(preTags) > seMax(depTags);
+};
 
 type SkillWithDiff = {
   id: string;
@@ -240,6 +259,7 @@ export function candidateShare(
     !/\b(esco|onet|lightcast)\b/.test(s.sources)
   );
   const isStudyMeta = skills.map((s) => STUDY_SKILL_RE.test(s.id));
+  const seTags = skills.map((s) => s.tags.includes("skillsengland:level:"));
   const topQuintileRaw = (() => {
     const sorted = [...raw].sort((a, b) => a - b);
     return sorted[Math.floor(sorted.length * 0.8)] ?? Infinity;
@@ -259,6 +279,9 @@ export function candidateShare(
     const lj = slugLangs[j];
     if (lj && slugLangs[i] && lj !== slugLangs[i]) return false; // R6
     if (gradeGapReject(i, j)) return false; // R2
+    if (seTags[i] && seTags[j] && seInverted(skills[i].tags, skills[j].tags)) {
+      return false;
+    }
     // REVIEW: A candidate only needs a lower raw than its target. Expert seed
     // pairs sit close in difficulty: a 1.5 gap admitted 22% of them, fewer than
     // the 38% of random pairs it admitted, and a 0 gap admits 60%. Alternative:
@@ -582,7 +605,6 @@ export async function stagePrereq() {
       (ps === "none" || ps.split(",").every((p) => easier(dOf.get(p), ds)));
   });
   prune(EXPAND, (s) => dOf.has(s));
-  prune(SNAP, (_, m) => m === "none" || dOf.has(m));
   // SKIP_LLM=1 reuses the caches, less stale rows: a regression build needs no
   // generator.
   if (Deno.env.get("SKIP_LLM") === "1") {
@@ -652,21 +674,45 @@ export async function stagePrereq() {
       },
     },
   );
+}
+
+// ---------- stage snap ----------
+
+// Matches each named prereq to a skill: Claude's expand names, and Oak's
+// prior-knowledge statements. An exact match needs no prompt; else Claude
+// picks from the name's SNAP_K nearest skills.
+export async function stageSnap() {
+  const { skills } = parseSkillsWithDifficulty();
+  const ids = new Set(skills.map((s) => s.id));
+  // A merge in stage dedupe renames a match; postproc follows the alias.
+  const alias = loadAliasesCollapsed();
+  prune(SNAP, (_, m) => m === "none" || ids.has(alias.get(m) ?? m));
+  if (Deno.env.get("SKIP_LLM") === "1") {
+    console.log("[snap] SKIP_LLM=1: using existing caches only");
+    return;
+  }
+  const named: { dep: string; name: string }[] = [
+    ...[...loadTsvCache(EXPAND.path)].flatMap(([dep, names]) =>
+      names === "none" || !ids.has(dep)
+        ? []
+        : names.split("; ").map((name) => ({ dep, name }))
+    ),
+    ...oakPriorNames(skills),
+  ];
+  const vecs = normalizedEmbeddingsForSkills(skills.map((s) => s.id));
+  const ivf = ivfIndex(vecs, skills.length);
   const idx = skillIndex(skills);
   const snapped = loadTsvCache(SNAP.path);
   const exact: string[][] = [];
   const toSnap = new Map<string, { id: string; name: string; dep: string }>();
-  for (const [dep, names] of loadTsvCache(EXPAND.path)) {
-    if (names === "none" || !dOf.has(dep)) continue;
-    for (const name of names.split("; ")) {
-      const key = slugify(name);
-      if (snapped.has(key) || toSnap.has(key)) continue;
-      const id = resolveConcept(name, idx);
-      if (id) {
-        snapped.set(key, id);
-        exact.push([key, id]);
-      } else toSnap.set(key, { id: key, name, dep });
-    }
+  for (const { dep, name } of named) {
+    const key = slugify(name);
+    if (snapped.has(key) || toSnap.has(key)) continue;
+    const id = resolveConcept(name, idx);
+    if (id) {
+      snapped.set(key, id);
+      exact.push([key, id]);
+    } else toSnap.set(key, { id: key, name, dep });
   }
   // An exact match needs no prompt; it joins the cache as an answer.
   if (exact.length) {
@@ -679,13 +725,13 @@ export async function stagePrereq() {
   const byId = new Map(skills.map((s) => [s.id, s]));
   const ask = [...toSnap.values()];
   console.log(
-    `[prereq:snap] ${exact.length} exact, ${ask.length} to snap`,
+    `[snap] ${exact.length} exact, ${ask.length} to snap`,
   );
   const vecsOf = await embedBatch(
     ask.map((t) =>
       t.name.length < 40 ? `${t.name}. Skill: ${t.name}. ${t.name}.` : t.name
     ),
-    "prereq:snap",
+    "snap",
   );
   const snapJobs = ask.map((t, k) => ({
     ...t,
@@ -698,7 +744,7 @@ export async function stagePrereq() {
     ).map((c) => skills[c.idx].id),
   }));
   await resumableClaude(
-    "prereq:snap",
+    "snap",
     SNAP.path,
     snapJobs,
     (j) =>
@@ -809,19 +855,22 @@ export function stagePostproc() {
   });
   const named = new Set<string>();
   let names = 0, unsnapped = 0;
+  const addNamed = (s: string, name: string) => {
+    names++;
+    const m = snapOf.get(slugify(name));
+    if (m === undefined) unsnapped++;
+    if (m === undefined || m === "none") return;
+    const p = alias.get(m) ?? m;
+    if (p !== s) named.add(`${s}\t${p}`);
+  };
   readTable(EXPAND).forEach(({ skill: s0, names: ns }, i) => {
     if (ns === "none") return;
     inSkills(s0, EXPAND.path, i + 1);
-    const s = alias.get(s0) ?? s0;
-    for (const name of ns.split("; ")) {
-      names++;
-      const m = snapOf.get(slugify(name));
-      if (m === undefined) unsnapped++;
-      if (m === undefined || m === "none") continue;
-      const p = alias.get(m) ?? m;
-      if (p !== s) named.add(`${s}\t${p}`);
-    }
+    for (const name of ns.split("; ")) addNamed(alias.get(s0) ?? s0, name);
   });
+  for (const { dep, name } of oakPriorNames(readTable(TAGGED_DEDUPED))) {
+    addNamed(dep, name);
+  }
   // A rejected snap reply stays unanswered, as a rejected prereq reply does.
   // More than that means stage prereq did not finish.
   if (unsnapped > names * 0.05) {
@@ -844,6 +893,16 @@ export function stagePostproc() {
   const seedEdgeKeys = new Set(seeds.map((e) => `${e.dep}\t${e.pre}`));
   const isSeed = (s: string, p: string): boolean =>
     seedEdgeKeys.has(`${s}\t${p}`);
+  // REVIEW: A course-catalog seed whose prereq sits in a higher band than its
+  // dependent drops; an expert seed stays. A catalog names a course
+  // requirement ("calculus → probability"), and stage difficulty orders course
+  // seeds last, so an inverted one contradicts the anchors and expert pairs.
+  // Alternative: drop every course seed. Recall fell 54 → 31 at CSP scale.
+  const expertKeys = new Set(
+    seeds.filter((e) => e.source !== "courses").map((e) =>
+      `${e.dep}\t${e.pre}`
+    ),
+  );
   console.log(`[postproc] seed keys: ${seeds.length}`);
 
   // K-3 ELA frameworks give holiday-retell leaves 1,800+ dependents, and the
@@ -874,6 +933,15 @@ export function stagePostproc() {
   });
   console.log(
     `[postproc] dropped ${beforeLang - raw.length} cross-language edges`,
+  );
+  const beforeSe = raw.length;
+  raw = raw.filter(([s, p]) =>
+    isSeed(s, p) || !seInverted(skill.get(s)!.tags, skill.get(p)!.tags)
+  );
+  console.log(
+    `[postproc] dropped ${
+      beforeSe - raw.length
+    } edges whose prereq has a higher Skills England level`,
   );
 
   // Filter 0: band-inverted
@@ -1178,7 +1246,7 @@ export function stagePostproc() {
   console.log(`[postproc] cross-domain: dropped ${droppedCross}`);
 
   // Seed ingestion
-  let seedAdded = 0, seedDup = 0, seedMissing = 0;
+  let seedAdded = 0, seedDup = 0, seedMissing = 0, courseInverted = 0;
   {
     const existing = new Set(final.map(([s, p]) => `${s}\t${p}`));
     for (const { pre: src, dep: dst } of seeds) {
@@ -1187,6 +1255,10 @@ export function stagePostproc() {
         continue;
       }
       const key = `${dst}\t${src}`;
+      if (!expertKeys.has(key) && diffOf(src).band > diffOf(dst).band) {
+        courseInverted++;
+        continue;
+      }
       if (existing.has(key)) {
         seedDup++;
         continue;
@@ -1197,7 +1269,7 @@ export function stagePostproc() {
     }
   }
   console.log(
-    `[postproc] seeds: added=${seedAdded}, dup=${seedDup}, missing=${seedMissing}`,
+    `[postproc] seeds: added=${seedAdded}, dup=${seedDup}, missing=${seedMissing}, inverted course seeds dropped=${courseInverted}`,
   );
 
   // A subject area is no prereq of a skill inside it (SUBJECT_MIN), seed
