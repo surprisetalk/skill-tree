@@ -68,8 +68,11 @@ first for `enrich` and `prereq`).
       approved, spend held). Decision: every current set; the 1,508 sets that
       state no licence count as permitted for now (you, 10 Nov).
   1. Run the full chain with `.env` loaded: stage `prereq` sends about 116M
-     input and 59M output tokens at 15 candidates a skill. If the 35-candidate
-     pool lands first, re-estimate (about 2.3× input) and ask again.
+     input and 59M output tokens at 15 candidates a skill. Oak and Skills
+     England add about 42k skills (11%): about 128M input and 65M output, plus
+     17k `enrich` summaries of long Skills England statements. If the
+     35-candidate pool lands first, re-estimate (about 2.3× input) and ask
+     again.
 
 - [ ] ASN standards that CSP lacks appear in `skills.tsv`. Blocker: ASN's reply.
       You sent the bulk-access request through
@@ -77,28 +80,3 @@ first for `enrich` and `prereq`).
   1. Only single documents download
      (`asn.desire2learn.com/resources/{id}_full.json`). CSP first imported its
      states from ASN, so ASN adds mostly duplicates.
-
-- [ ] England's school curriculum (Oak National Academy, KS1–KS4, 17 subjects)
-      appears in `skills.tsv`, with unit order as seed edges. Blocker: the API
-      key you requested (12 Nov), by email. Put it in `.env` as `OAK_API_KEY`.
-      Keys do not expire. Calls send `Authorization: Bearer <key>`.
-  1. Fetch the bulk JSON per subject and phase. Before you parse it, check one
-     file for quiz fields: the schema has none, but the bulk page lists them.
-  2. Each unit becomes a skill. Consecutive units within one `thread` become
-     seed pairs.
-  3. Resolve each `priorKnowledgeRequirements` string to a skill id with the
-     `seed-edges` resolver.
-  4. Skip lessons with `restricted: true`. OGL v3 covers the rest.
-
-- [ ] Apprenticeship knowledge, skills, and behaviours (Skills England, levels
-      2–7) appear in `skills.tsv`, tagged by occupation. Blocker: the API key
-      you requested (12 Nov), granted at Skills England's discretion, by email.
-      Put it in `.env` as `SKILLS_ENGLAND_API_KEY`. The licence (OGL v3)
-      requires the Skills England logo and "© Skills England 2025" on every
-      derived product. Decision: sponge carries the logo.
-  1. `GET occupational-maps-api.skillsengland.education.gov.uk/api/v1/Occupations`
-     with header `X-API-KEY`, then each `/Occupations/{stdCode}`.
-  2. Each `knowledges`, `skills`, and `behaviours` item becomes a skill. Its
-     standard's `level` is a difficulty anchor, and `soc` links the occupation.
-  3. `/OccupationalProgression/{stdCode}` gives `stdCodeFrom → stdCodeTo`
-     occupation edges. Keep them out of the skill DAG.

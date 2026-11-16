@@ -660,6 +660,16 @@ export async function stageTag() {
         );
       }
     }
+    // Skills England names a statement's occupations in occupation:* tags.
+    const tagOccs = s.tags.split(",").filter((t) => t.startsWith("occupation:"))
+      .map((t) => t.slice("occupation:".length));
+    if (tagOccs.length && !skipOccs) {
+      occs = withDirect(
+        occs,
+        tagOccs.slice(0, DIRECT_OCC_CAP),
+        DIRECT_OCC_CAP,
+      );
+    }
     if (s.sources.includes("onet") && !skipOccs) {
       const dOcc = directOnet.get(s.id);
       if (dOcc?.length) {

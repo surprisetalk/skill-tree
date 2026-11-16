@@ -272,6 +272,328 @@ function readBncc(): BnccRow[] {
   return rows;
 }
 
+// Each file holds one JSON line, as data/download.ts writes it.
+function gunzipJson(paths: string[]): unknown[] {
+  const fix = "Re-download: deno run -A data/download.ts";
+  return paths.map((path) => {
+    const line = gunzipText(path, fix).trim();
+    if (!line || line.includes("\n")) {
+      throw new Error(
+        `${path}: expected one JSON line, received ${
+          line ? "several lines" : "an empty file"
+        }. ${fix}`,
+      );
+    }
+    try {
+      return JSON.parse(line);
+    } catch (e) {
+      throw new Error(
+        `${path}: expected JSON, received ${(e as Error).message}. ${fix}`,
+      );
+    }
+  });
+}
+
+// Decoders for the raw API bodies of the keyed crawls. A shape that does not
+// match stops the stage: the API changed.
+const bodyFail = (where: string, expected: string, got: unknown): never => {
+  throw new Error(
+    `${where}: expected ${expected}, received ${
+      JSON.stringify(got)?.slice(0, 120)
+    }. The API changed: update the reader in sources.ts, or re-download with data/download.ts.`,
+  );
+};
+const obj = (v: unknown, where: string): Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v)
+    ? v as Record<string, unknown>
+    : bodyFail(where, "an object", v);
+const arr = (v: unknown, where: string): unknown[] =>
+  Array.isArray(v) ? v : bodyFail(where, "an array", v);
+const str = (v: unknown, where: string): string =>
+  typeof v === "string" && v.trim()
+    ? v.trim()
+    : bodyFail(where, "a non-empty string", v);
+const int = (v: unknown, where: string): number =>
+  Number.isInteger(v) ? v as number : bodyFail(where, "an integer", v);
+// A key outside the known set means the API renamed or added a field.
+const onlyKeys = (
+  o: Record<string, unknown>,
+  keys: string[],
+  where: string,
+) => {
+  const extra = Object.keys(o).filter((k) => !keys.includes(k));
+  if (extra.length) bodyFail(where, `only the keys ${keys.join(", ")}`, extra);
+};
+const unique = (xs: string[], where: string): string[] => {
+  const seen = new Set<string>();
+  for (const x of xs) {
+    if (seen.has(x)) bodyFail(where, "each entry once", x);
+    seen.add(x);
+  }
+  return xs;
+};
+
+// A question title ("How to analyze performance") names a skill after its
+// verb, as cleanStandard does for OpenSALT.
+const unquestion = (title: string, where: string): string => {
+  const t = title.replace(/^(Can|Could|Should|How to|What is|Why does)\s+/i, "")
+    .replace(/\?$/, "");
+  if (!t) {
+    throw new Error(
+      `${where}: expected a title with words after the question prefix, received ${
+        JSON.stringify(title)
+      }. Fix the title in the source, or drop the prefix from unquestion in sources.ts.`,
+    );
+  }
+  return t[0].toUpperCase() + t.slice(1);
+};
+
+// ---------- Oak National Academy (England, KS1-KS4) ----------
+
+type OakUnit = {
+  slug: string;
+  title: string;
+  description: string;
+  // England's school year, 1-11.
+  year: number;
+  prior: string[];
+};
+// A position holds one unit, or the options a school picks one unit from.
+type OakPosition = { slugs: string[]; threads: string[] };
+
+// A track is one path through a subject: the primary sequence, then one
+// secondary sequence (exam board), one exam subject, and one tier.
+export function readOak(): { units: OakUnit[]; tracks: OakPosition[][] } {
+  const dir = "data/oak";
+  const index = obj(
+    gunzipJson([`${dir}/index.json.gz`])[0],
+    `${dir}/index.json.gz`,
+  );
+  const bySubject = obj(index.sequences, `${dir}/index.json.gz sequences`);
+  const unitSlugs = unique(
+    arr(index.units, `${dir}/index.json.gz units`).map((u) =>
+      str(u, `${dir}/index.json.gz units`)
+    ),
+    `${dir}/index.json.gz units`,
+  );
+  const units = gunzipJson(unitSlugs.map((u) => `${dir}/units/${u}.json.gz`))
+    .map((body, i): OakUnit => {
+      const w = `${dir}/units/${unitSlugs[i]}.json.gz`;
+      const u = obj(body, w);
+      const year = int(u.year, `${w} year`);
+      if (year < 1 || year > 11) bodyFail(`${w} year`, "a year of 1-11", year);
+      if (u.unitSlug !== unitSlugs[i]) {
+        bodyFail(w, `unitSlug "${unitSlugs[i]}"`, u.unitSlug);
+      }
+      return {
+        slug: unitSlugs[i],
+        title: str(u.unitTitle, `${w} unitTitle`),
+        description: typeof u.description === "string"
+          ? u.description.trim()
+          : bodyFail(`${w} description`, "a string", u.description),
+        year,
+        prior: arr(u.priorKnowledgeRequirements, `${w} prior`).map((p) =>
+          str(p, `${w} priorKnowledgeRequirements`)
+        ),
+      };
+    });
+  const known = new Set(unitSlugs);
+  const position = (v: unknown, w: string): OakPosition => {
+    const u = obj(v, w);
+    onlyKeys(u, [
+      "unitTitle",
+      "unitOrder",
+      "unitSlug",
+      "unitOptions",
+      "threads",
+      "categories",
+    ], w);
+    if ("unitOptions" in u === "unitSlug" in u) {
+      bodyFail(w, "unitSlug or unitOptions, not both", Object.keys(u));
+    }
+    const slugs = "unitOptions" in u
+      ? arr(u.unitOptions, `${w} unitOptions`).map((o) =>
+        str(obj(o, w).unitSlug, `${w} unitOptions`)
+      )
+      : [str(u.unitSlug, `${w} unitSlug`)];
+    if (!slugs.length) bodyFail(`${w} unitOptions`, "at least one option", []);
+    for (const s of slugs) {
+      if (!known.has(s)) bodyFail(w, `a unit of index.json.gz`, s);
+    }
+    return {
+      slugs,
+      // 207 units belong to no thread: they make no thread pair.
+      threads: "threads" in u
+        ? arr(u.threads, `${w} threads`).map((t) =>
+          str(obj(t, w).threadSlug, `${w} threadSlug`)
+        )
+        : [],
+    };
+  };
+  const ordered = (v: unknown, w: string): OakPosition[] =>
+    arr(v, w).map((u, i) => ({
+      order: int(obj(u, `${w}[${i}]`).unitOrder, `${w}[${i}].unitOrder`),
+      p: position(u, `${w}[${i}]`),
+    })).sort((a, b) => a.order - b.order).map((x) => x.p);
+  // A year holds units, tiers, or exam subjects that hold units or tiers.
+  type Block = { all: OakPosition[] } | {
+    variants: Map<string, OakPosition[]>;
+  };
+  const blocks = (q: string): Block[] => {
+    const w = `${dir}/sequences/${q}.json.gz`;
+    return arr(gunzipJson([w])[0], w).map((y, i) => {
+      const yw = `${w}[${i}]`, b = obj(y, yw);
+      const kinds = ["units", "tiers", "examSubjects"].filter((k) => k in b);
+      if (kinds.length !== 1) {
+        bodyFail(yw, "one of units, tiers, or examSubjects", kinds);
+      }
+      onlyKeys(b, ["year", "title", ...kinds], yw);
+      if ("units" in b) return { all: ordered(b.units, `${yw}.units`) };
+      const variants = new Map<string, OakPosition[]>();
+      const add = (k: string, units: unknown, vw: string) => {
+        if (variants.has(k)) bodyFail(vw, "a variant named once", k);
+        variants.set(k, ordered(units, `${vw}.units`));
+      };
+      // A slug holds no space, so "biology foundation" names one variant.
+      const tiers = (v: unknown, prefix: string, tw: string) => {
+        for (const [j, t] of arr(v, tw).entries()) {
+          const o = obj(t, `${tw}[${j}]`);
+          add(
+            prefix + str(o.tierSlug, `${tw}[${j}].tierSlug`),
+            o.units,
+            `${tw}[${j}]`,
+          );
+        }
+      };
+      if ("tiers" in b) tiers(b.tiers, "", `${yw}.tiers`);
+      else if ("examSubjects" in b) {
+        for (
+          const [j, e] of arr(b.examSubjects, `${yw}.examSubjects`)
+            .entries()
+        ) {
+          const ew = `${yw}.examSubjects[${j}]`, o = obj(e, ew);
+          const s = str(o.examSubjectSlug, `${ew}.examSubjectSlug`);
+          if ("tiers" in o) tiers(o.tiers, `${s} `, `${ew}.tiers`);
+          else add(s, o.units, ew);
+        }
+      } else bodyFail(yw, "units, tiers, or examSubjects", Object.keys(b));
+      if (!variants.size) bodyFail(yw, "at least one tier or exam subject", []);
+      return { variants };
+    });
+  };
+  const flatten = (q: string): OakPosition[][] => {
+    const bs = blocks(q);
+    const keys = new Set(
+      bs.flatMap((b) => "variants" in b ? [...b.variants.keys()] : []),
+    );
+    return (keys.size ? [...keys] : [""]).map((k) =>
+      bs.flatMap((b) => {
+        if ("all" in b) return b.all;
+        const v = b.variants.get(k);
+        // Every tiered year of one sequence names the same variants.
+        return v ?? bodyFail(`${dir}/sequences/${q}.json.gz`, `variant ${k}`, [
+          ...b.variants.keys(),
+        ]);
+      })
+    );
+  };
+  const tracks: OakPosition[][] = [];
+  for (const [subject, v] of Object.entries(bySubject)) {
+    const seqs = arr(v, `${dir}/index.json.gz ${subject}`).map((q) =>
+      str(q, `${dir}/index.json.gz ${subject}`)
+    );
+    const primary = seqs.filter((q) => q.endsWith("-primary"))
+      .flatMap(flatten);
+    if (primary.length > 1) {
+      bodyFail(`${dir}/index.json.gz ${subject}`, "one primary track", seqs);
+    }
+    const secondary = seqs.filter((q) => !q.endsWith("-primary"))
+      .flatMap(flatten);
+    const lead = primary[0] ?? [];
+    if (secondary.length) {
+      for (const t of secondary) tracks.push([...lead, ...t]);
+    } else tracks.push(lead);
+  }
+  return { units, tracks };
+}
+
+// Within one track, a unit precedes the next unit that shares one of its
+// threads. Each option of a position pairs with each option of the next.
+export function oakThreadPairs(
+  tracks: OakPosition[][],
+): { src: string; dst: string }[] {
+  const out = new Map<string, { src: string; dst: string }>();
+  for (const track of tracks) {
+    const last = new Map<string, string[]>();
+    for (const p of track) {
+      for (const t of p.threads) {
+        for (const src of last.get(t) ?? []) {
+          for (const dst of p.slugs) {
+            if (src !== dst) out.set(`${src}>${dst}`, { src, dst });
+          }
+        }
+        last.set(t, p.slugs);
+      }
+    }
+  }
+  return [...out.values()];
+}
+
+// ---------- Skills England (apprenticeship standards) ----------
+
+type SeItem = {
+  kind: "knowledges" | "skills" | "behaviours";
+  text: string;
+  occupation: string;
+};
+
+// The API leaves out a list that a standard does not have: 147 occupations
+// (one approved) have none, and one draft has no behaviours.
+function readSkillsEngland(): { items: SeItem[]; empty: number } {
+  const dir = "data/skillsengland";
+  const codes = unique(
+    arr(gunzipJson([`${dir}/index.json.gz`])[0], `${dir}/index.json.gz`)
+      .map((c) => str(c, `${dir}/index.json.gz`)),
+    `${dir}/index.json.gz`,
+  );
+  const items: SeItem[] = [];
+  let empty = 0;
+  gunzipJson(codes.map((c) => `${dir}/occupations/${c}.json.gz`)).forEach(
+    (body, i) => {
+      const w = `${dir}/occupations/${codes[i]}.json.gz`;
+      const o = obj(body, w);
+      const keys = ["knowledges", "skills", "behaviours"] as const;
+      // A renamed list would read as missing; any other array key stops.
+      for (const [k, v] of Object.entries(o)) {
+        if (Array.isArray(v) && ![...keys, "duties"].includes(k)) {
+          bodyFail(w, "list keys knowledges, skills, behaviours, duties", k);
+        }
+      }
+      const occupation = str(o.name, `${w} name`);
+      if (keys.every((k) => !(k in o))) empty++;
+      for (const key of keys) {
+        if (!(key in o)) continue;
+        for (const [j, x] of arr(o[key], `${w} ${key}`).entries()) {
+          const dw = `${w} ${key}[${j}].detail`;
+          items.push({
+            kind: key,
+            // "Core - " and "Option 2 - " name the part of the standard. The
+            // source writes "manufacturer™s" for "manufacturer's" 13 times.
+            text: str(
+              str(obj(x, dw).detail, dw)
+                .replace(/^(Core|Option \d+)\s*[-–:]\s*/, "")
+                .replace(/™s\b/g, "'s"),
+              `${dw} after its "Core -" or "Option N -" label`,
+            ),
+            occupation,
+          });
+        }
+      }
+    },
+  );
+  return { items, empty };
+}
+
 const SHORT_TECH_WHITELIST = new Set([
   "r",
   "go",
@@ -1077,27 +1399,10 @@ export function stageList() {
       listCodes = 0;
     for (let c = 0; c < files.length; c += 2000) {
       const chunk = files.slice(c, c + 2000);
-      const out = new Deno.Command("sh", {
-        args: ["-c", 'for f; do gzip -dc "$f" && echo; done', "sh", ...chunk],
-        stdout: "piped",
-        stderr: "piped",
-      }).outputSync();
-      const lines = new TextDecoder().decode(out.stdout).split("\n").filter(
-        Boolean,
-      );
-      if (out.code !== 0 || lines.length !== chunk.length) {
-        throw new Error(
-          `data/csp: expected ${chunk.length} gzipped JSON sets from ${
-            chunk[0]
-          } on, received ${lines.length} (gzip exit ${out.code}: ${
-            new TextDecoder().decode(out.stderr).trim().slice(0, 200)
-          }). Re-download: deno run -A data/download.ts`,
-        );
-      }
-      lines.forEach((line, k) => {
+      gunzipJson(chunk).forEach((body, k) => {
         const path = chunk[k];
         // deno-lint-ignore no-explicit-any -- CSP sets, read field by field
-        const set = JSON.parse(line) as any;
+        const set = body as any;
         if (typeof set?.standards !== "object" || !set.standards) {
           throw new Error(
             `${path}: expected a CSP set with a standards object, received keys ${
@@ -1404,23 +1709,9 @@ export function stageList() {
             nNonLatin++;
             continue;
           }
-          // A question title ("How to analyze performance") names a skill
-          // after its verb, as cleanStandard does for OpenSALT.
-          let title = o.title.replace(
-            /^(Can|Could|Should|How to|What is|Why does)\s+/i,
-            "",
-          ).replace(/\?$/, "");
-          if (!title) {
-            throw new Error(
-              `${path} ${e.name} / ${d.name}: expected an objective title with words after the question prefix, received ${
-                JSON.stringify(o.title)
-              }. Fix the title in the source, or drop the prefix from the strip in stageList.`,
-            );
-          }
-          title = title[0].toUpperCase() + title.slice(1);
           raw.push({
             id: "",
-            title,
+            title: unquestion(o.title, `${path} ${e.name} / ${d.name}`),
             description: `${e.name} (${e.body}), ${d.name}.${
               o.sub.length ? " " + o.sub.join("; ") : ""
             }`,
@@ -1467,6 +1758,52 @@ export function stageList() {
       });
     }
     console.log(`  bncc: ${rows.length} objectives`);
+  }
+
+  // Oak: one skill per unit. The oak:<slug> tag lets stage seed-edges find
+  // the unit's skill, as khan:<slug> does for a Khan exercise.
+  {
+    const { units } = readOak();
+    for (const u of units) {
+      // England's Year 1 starts at age 5, as US kindergarten does.
+      const grade = u.year === 1 ? "K" : String(u.year - 1);
+      raw.push({
+        id: "",
+        title: unquestion(u.title, `data/oak/units/${u.slug}.json.gz`),
+        description: u.description,
+        sources: ["oak"],
+        tags: [`oak:${u.slug}`, `grade:${grade}`],
+      });
+    }
+    console.log(`  oak: ${units.length} units`);
+  }
+
+  // Skills England: one skill per knowledge, skill, or behaviour statement of
+  // an apprenticeship standard. Stage tag reads the occupation:<slug> tags.
+  // REVIEW: The standard's level (2-7) anchors no difficulty, as O*NET job
+  // zones do not. Alternative: level 2 at grade 10 and level 3 at grade 12.
+  // A workplace skill is then pinned to a school grade, and levels 4-7 are
+  // college levels, which you ruled out as anchors (11 Nov).
+  // A behaviour reads "Team-focused - works as part of a team...": the head
+  // is the title, and the whole statement is the description. A knowledge or
+  // skill head names a category ("Tools - the key equipment..."): no split.
+  {
+    const { items, empty } = readSkillsEngland();
+    for (const it of items) {
+      const head = it.kind === "behaviours"
+        ? it.text.match(/^([^.;:]{3,60}?)\s+[–—-]\s+\S/)?.[1]
+        : undefined;
+      raw.push({
+        id: "",
+        title: head ?? unquestion(it.text, `skillsengland ${it.occupation}`),
+        description: head ? it.text : "",
+        sources: ["skillsengland"],
+        tags: [`occupation:${slugify(it.occupation)}`],
+      });
+    }
+    console.log(
+      `  skillsengland: ${items.length} statements (${empty} occupations list none)`,
+    );
   }
 
   // Normalize + denoise
@@ -1690,6 +2027,8 @@ export function stageList() {
       "certatlas",
       "bncc",
       "csp",
+      "oak",
+      "skillsengland",
     ]
       .map((
         src,
@@ -2258,6 +2597,42 @@ export async function stageSeedEdges() {
     }
   }
 
+  const oakDropped: string[] = [];
+  // Oak: thread order within a track, and each unit's prior-knowledge
+  // statements as prereqs of the unit. A unit resolves through its oak:<slug>
+  // tag; a statement resolves like any other label.
+  {
+    const oak = readOak();
+    const bySlug = new Map<string, string>();
+    for (const s of tagged) {
+      for (const t of s.tags.split(",")) {
+        if (t.startsWith("oak:") && !bySlug.has(t.slice(4))) {
+          bySlug.set(t.slice(4), s.id);
+        }
+      }
+    }
+    // A unit with no skill (stage list dropped it, or a merge hit the tag
+    // cap) goes to quarantine as no-skill, like a Learning Commons node.
+    const pair = (src: string, dst: string, source: string, raw: string) => {
+      if (src && dst) addRaw(src, dst, source, raw);
+      else {
+        oakDropped.push(
+          `${src}\t${dst}\t${source}\t${raw}\tno-skill\tno-skill`,
+        );
+        (perSource[source] ??= { total: 0, resolved: 0 }).total++;
+      }
+    };
+    const id = (slug: string) => bySlug.get(slug) ?? "";
+    for (const p of oakThreadPairs(oak.tracks)) {
+      pair(id(p.src), id(p.dst), "oak_thread", `${p.src}->${p.dst}`);
+    }
+    for (const u of oak.units) {
+      for (const pre of u.prior) {
+        pair(pre, id(u.slug), "oak_prior", `${pre}->${u.slug}`);
+      }
+    }
+  }
+
   // AL-CPL — per readme: "*.preqs: concept pairs with prerequisite relations.
   // The second concept (2nd column) is a prerequisite of the first concept (1st column)."
   for (const domain of ["data_mining", "geometry", "physics", "precalculus"]) {
@@ -2677,6 +3052,7 @@ export async function stageSeedEdges() {
       });
     }
   }
+  quarantine.push(...oakDropped);
   // Course edges whose code has no sure title carry no label to resolve.
   (perSource.courses ??= { total: 0, resolved: 0 }).total +=
     courses.dropped.length;
@@ -2749,6 +3125,10 @@ export async function stageSeedEdges() {
     learningcommons: 0.71,
     // Ids from tags, so every pair resolves.
     digcomp: 0.9,
+    // Ids from tags, as for DigComp.
+    oak_thread: 0.9,
+    // Free-text statements: most name no skill (below-cos-0.9).
+    oak_prior: 0.04,
   };
   const short = Object.entries(perSource).flatMap(([src, s]) => {
     const floor = SEED_FLOORS[src];

@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { gunzipSync } from "node:zlib";
 import { parse as parseCsvText } from "@std/csv/parse";
 import { unescape } from "@std/html/entities";
 import entityList from "@std/html/named-entity-list.json" with {
@@ -1670,21 +1671,14 @@ export type LearningCommons = {
   }[];
 };
 
-// Shells out to gzip, because Deno has no sync gunzip.
 export function gunzipText(path: string, fix: string): string {
-  const out = new Deno.Command("gzip", {
-    args: ["-dc", path],
-    stdout: "piped",
-    stderr: "piped",
-  }).outputSync();
-  if (out.code !== 0) {
+  try {
+    return new TextDecoder().decode(gunzipSync(Deno.readFileSync(path)));
+  } catch (e) {
     throw new Error(
-      `${path}: expected a gzip file, received gzip exit ${out.code}: ${
-        new TextDecoder().decode(out.stderr).trim()
-      }. ${fix}`,
+      `${path}: expected a gzip file, received ${(e as Error).message}. ${fix}`,
     );
   }
-  return new TextDecoder().decode(out.stdout);
 }
 
 export const LC_EXTRACT = "data/learningcommons/graph.jsonl.gz";

@@ -50,6 +50,21 @@ link to the licence, and a note of changes.
 A skill that merges a CSP and an OpenSALT standard of one code keeps both
 sources, so both credits apply.
 
+Oak National Academy (`data/oak/`): Open Government Licence v3.0
+(https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3).
+Credit: "Contains Oak National Academy curriculum data, licensed under the Open
+Government Licence v3.0."
+
+Skills England (`data/skillsengland/`): every product built on this data must
+show the Skills England logo and this statement:
+
+> © Skills England 2025 This information is licensed under the Open Government
+> Licence
+> https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3
+
+Both crawls need a key in `.env`: `OAK_API_KEY` and `DWP_OCC_API_KEY`. Git
+tracks the raw API bodies, so stage `list` needs no key.
+
 ## Pending design
 
 Evidence for each note: `research.md`.

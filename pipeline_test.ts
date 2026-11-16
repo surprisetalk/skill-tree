@@ -218,6 +218,8 @@ Deno.test("list stats: all four sources contribute, and dedupe merged rows", () 
       "digcomp",
       "certatlas",
       "bncc",
+      "oak",
+      "skillsengland",
     ]
   ) {
     assertGreater(s.per_source[src], 0, `${src} has 0 rows`);
@@ -1296,6 +1298,26 @@ Deno.test("list: BNCC objectives carry the source, subject, and the grades of th
   assertEquals(grades("EF67LP08"), ["grade:6", "grade:7"]);
   assertEquals(grades("EI01CG01"), ["grade:PK"]);
   assertEquals(grades("EM13MAT101"), ["grade:10", "grade:11", "grade:12"]);
+});
+
+Deno.test("list: an Oak unit carries its slug and its US grade; a Skills England statement carries its occupation", () => {
+  const tags = (title: string, src: string) =>
+    rows.find((c) => c[1] === title && c[3].includes(src))?.[4].split(",");
+  const unit = tags("Counting to and from 20", "oak");
+  assert(unit?.includes("oak:counting-to-and-from-20"), `tags: ${unit}`);
+  // Year 1 in England is US kindergarten.
+  assert(unit?.includes("grade:K"), `tags: ${unit}`);
+  const k = tags(
+    "Principles of cybersecurity and working safely online within a finance and accounting context",
+    "skillsengland",
+  );
+  assert(k?.includes("occupation:assistant-accountant"), `tags: ${k}`);
+  // A behaviour's head is its title; the whole statement is its description.
+  const b = rows.find((c) =>
+    c[3].includes("skillsengland") &&
+    c[2].startsWith("Collaborative and inclusive - builds strong")
+  );
+  assertEquals(b?.[1], "Collaborative and inclusive");
 });
 
 Deno.test("list: Cert Atlas objectives carry the source and the exam; dropped vendors stay out", () => {
@@ -2600,6 +2622,47 @@ Deno.test("digcompSeedEdges: each level of a competence is a prereq of the next;
     msg = (e as Error).message;
   }
   assert(msg.includes("digcomp:competence:*"), msg);
+});
+
+Deno.test("oakThreadPairs: a unit precedes the next unit of each of its threads; options pair each way", async () => {
+  const { oakThreadPairs } = await import("./sources.ts");
+  const pairs = oakThreadPairs([
+    [
+      { slugs: ["a"], threads: ["number"] },
+      { slugs: ["b"], threads: ["shape"] },
+      { slugs: ["c1", "c2"], threads: ["number", "shape"] },
+      { slugs: ["d"], threads: [] },
+      { slugs: ["e"], threads: ["number"] },
+    ],
+    // A second track repeats a→c1: one pair.
+    [{ slugs: ["a"], threads: ["number"] }, {
+      slugs: ["c1"],
+      threads: ["number"],
+    }],
+  ]);
+  assertEquals(pairs.map((p) => `${p.src}>${p.dst}`).sort(), [
+    "a>c1",
+    "a>c2",
+    "b>c1",
+    "b>c2",
+    "c1>e",
+    "c2>e",
+  ]);
+});
+
+Deno.test("readOak: every subject yields a track, and each thread pair names a known unit", async () => {
+  const { readOak, oakThreadPairs } = await import("./sources.ts");
+  const { units, tracks } = readOak();
+  const slugs = new Set(units.map((u) => u.slug));
+  const placed = new Set(tracks.flat().flatMap((p) => p.slugs));
+  // Every unit sits in some track.
+  assertEquals([...slugs].filter((s) => !placed.has(s)), []);
+  const pairs = oakThreadPairs(tracks);
+  assertGreater(pairs.length, 2000, "too few thread pairs");
+  assertEquals(
+    pairs.filter((p) => !slugs.has(p.src) || !slugs.has(p.dst)),
+    [],
+  );
 });
 
 Deno.test("resolveConcept: a plural or -ing form finds its skill, and a fold two skills share finds none", () => {

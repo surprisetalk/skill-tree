@@ -839,6 +839,247 @@ async function csp() {
   }
 }
 
+const readGzipJson = async (path: string): Promise<unknown> =>
+  JSON.parse(
+    await new Response(
+      (await Deno.open(path)).readable.pipeThrough(
+        new DecompressionStream("gzip"),
+      ),
+    ).text(),
+  );
+
+const API_TIMEOUT_MS = 60_000;
+// A 429 waits for the window the server names. Oak's window is one hour.
+const API_MAX_WAITS = 6;
+const API_MAX_WAIT_MS = 65 * 60_000;
+
+// One GET with a key header. Retries once on a network error or a 5xx. On a
+// 429 it sleeps until the reset the server names, at most API_MAX_WAITS times.
+async function keyedGet(
+  url: string,
+  headers: Record<string, string>,
+  keyName: string,
+): Promise<unknown> {
+  let tries = 0, waits = 0, last = "";
+  for (;;) {
+    let r: Response;
+    try {
+      r = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      });
+    } catch (e) {
+      last = (e as Error).message;
+      if (++tries < 2) continue;
+      break;
+    }
+    if (r.ok) {
+      const text = await r.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error(
+          `${url}: expected a JSON body, received ${(e as Error).message} (${
+            JSON.stringify(text.slice(0, 80))
+          }). A gateway or login page answered: retry later, or check ${keyName}.`,
+        );
+      }
+    }
+    await r.body?.cancel();
+    last = `${r.status} ${r.statusText}`;
+    if (r.status === 401 || r.status === 403) {
+      throw new Error(
+        `${url}: expected 200, received ${last}. The key in ${keyName} is wrong or revoked: check .env.`,
+      );
+    }
+    if (r.status === 429) {
+      // Oak names the reset as epoch ms; other hosts send Retry-After seconds.
+      const reset = Number(r.headers.get("x-ratelimit-reset"));
+      const after = Number(r.headers.get("retry-after"));
+      const ms = reset > 0 ? reset - Date.now() + 5_000 : after * 1000;
+      if (!(ms > 0) || ms > API_MAX_WAIT_MS || ++waits > API_MAX_WAITS) {
+        throw new Error(
+          `${url}: expected 200, received 429 after ${waits} waits (next wait ${
+            Math.round(ms / 1000)
+          } s). Run the downloader again later; finished files skip.`,
+        );
+      }
+      console.log(
+        `  429: wait ${Math.round(ms / 60_000)} min (wait ${waits})`,
+      );
+      await new Promise((ok) => setTimeout(ok, ms));
+      continue;
+    }
+    if (r.status >= 500 && ++tries < 2) continue;
+    break;
+  }
+  throw new Error(
+    `${url}: expected 200, received ${last} after ${
+      tries || 1
+    } tries. Run the downloader again; finished files skip.`,
+  );
+}
+
+const needKey = (name: string): string => {
+  const key = Deno.env.get(name);
+  if (!key) {
+    throw new Error(
+      `expected ${name} in the environment, received nothing. Put the key in .env, then run with the .env loaded: set -a; . ./.env; set +a.`,
+    );
+  }
+  return key;
+};
+
+const safeSlug = (s: unknown, where: string): string => {
+  // A slug names a file, so anything outside [A-Za-z0-9_-] could escape the dir.
+  if (typeof s !== "string" || !/^[\w-]+$/.test(s)) {
+    throw new Error(
+      `${where}: expected a slug of [A-Za-z0-9_-], received ${
+        JSON.stringify(s)
+      }. The API changed: update data/download.ts.`,
+    );
+  }
+  return s;
+};
+
+// Fetches each slug into dir/{slug}.json.gz, one at a time, and skips files
+// that exist, so a crawl that a rate limit stops resumes where it stopped.
+async function crawl(
+  dir: string,
+  slugs: string[],
+  url: (slug: string) => string,
+  get: (url: string) => Promise<unknown>,
+) {
+  await mkdir(dir);
+  let fetched = 0;
+  const t0 = performance.now();
+  for (const slug of slugs) {
+    const dest = `${dir}${slug}.json.gz`;
+    if (await exists(dest)) continue;
+    await writeGzip(dest, JSON.stringify(await get(url(slug))));
+    if (++fetched % 100 === 0) {
+      console.log(
+        `  ${dir}: ${fetched} fetched, ${
+          Math.round((performance.now() - t0) / 1000)
+        } s`,
+      );
+    }
+  }
+  console.log(`  ${dir}: ${fetched} fetched, ${slugs.length} in all`);
+}
+
+// Oak National Academy curriculum API (England, KS1-KS4), OGL v3. A key
+// (OAK_API_KEY) allows 1000 calls an hour, and the crawl needs about 1900.
+// REVIEW: Track the raw API bodies, one gzip per sequence and per unit, like
+// CSP. Alternative: one slim gzip like Cert Atlas. It costs a 2-hour recrawl
+// whenever stage list needs another field. Lesson bodies stay out: a unit is
+// one skill, and only lessons carry the `restricted` third-party flag.
+const OAK_API = "https://open-api.thenational.academy/api/v0";
+const OAK_DIR = DATA + "oak/";
+
+async function oak() {
+  // index.json.gz goes last, so it marks a finished crawl.
+  const index = OAK_DIR + "index.json.gz";
+  if (await exists(index)) {
+    console.log(`  skip: ${index} exists`);
+    return;
+  }
+  const headers = { Authorization: `Bearer ${needKey("OAK_API_KEY")}` };
+  const get = (url: string) => keyedGet(url, headers, "OAK_API_KEY");
+  const subjects = await get(`${OAK_API}/subjects`);
+  if (!Array.isArray(subjects) || !subjects.length) {
+    throw new Error(
+      `${OAK_API}/subjects: expected a non-empty array of slugs, received ${
+        JSON.stringify(subjects).slice(0, 80)
+      }. The Oak API changed: update oak() in data/download.ts.`,
+    );
+  }
+  const sequences: Record<string, string[]> = {};
+  for (const s of subjects) {
+    const slug = safeSlug(s, `${OAK_API}/subjects`);
+    const body = await get(`${OAK_API}/subjects/${slug}`) as Json;
+    if (!Array.isArray(body.sequenceSlugs)) {
+      throw new Error(
+        `${OAK_API}/subjects/${slug}: expected a sequenceSlugs array, received ${
+          JSON.stringify(body.sequenceSlugs)
+        }. The Oak API changed: update oak() in data/download.ts.`,
+      );
+    }
+    sequences[slug] = (body.sequenceSlugs as Json[]).map((q) =>
+      safeSlug(q.sequenceSlug, `${OAK_API}/subjects/${slug}`)
+    );
+  }
+  const seqDir = OAK_DIR + "sequences/";
+  const seqSlugs = Object.values(sequences).flat();
+  await crawl(seqDir, seqSlugs, (q) => `${OAK_API}/sequences/${q}/units`, get);
+  // A unit sits in a year, a tier, an exam subject, or a unit option: walk it.
+  const units = new Set<string>();
+  const walk = (x: unknown, where: string) => {
+    if (Array.isArray(x)) { for (const v of x) walk(v, where); }
+    else if (x && typeof x === "object") {
+      if ("unitSlug" in x) units.add(safeSlug(x.unitSlug, where));
+      for (const v of Object.values(x)) walk(v, where);
+    }
+  };
+  for (const q of seqSlugs) {
+    walk(await readGzipJson(`${seqDir}${q}.json.gz`), `${seqDir}${q}.json.gz`);
+  }
+  console.log(`  ${seqSlugs.length} sequences, ${units.size} units`);
+  await crawl(
+    OAK_DIR + "units/",
+    [...units].sort(),
+    (u) => `${OAK_API}/units/${u}/summary`,
+    get,
+  );
+  await writeGzip(index, JSON.stringify({ sequences, units: [...units] }));
+}
+
+// Skills England occupational maps API, OGL v3. A key (DWP_OCC_API_KEY) is
+// granted at Skills England's discretion. Every derived product must carry the
+// Skills England logo and "© Skills England 2025".
+// REVIEW: Track the raw occupation bodies with their knowledge, skill, and
+// behaviour lists, one gzip each. Alternative: also fetch the occupational
+// progression edges. They link occupations, not skills, and nothing reads them.
+const SE_API =
+  "https://occupational-maps-api.skillsengland.education.gov.uk/api/v1";
+const SE_DIR = DATA + "skillsengland/";
+
+async function skillsEngland() {
+  const index = SE_DIR + "index.json.gz";
+  if (await exists(index)) {
+    console.log(`  skip: ${index} exists`);
+    return;
+  }
+  const headers = { "X-API-KEY": needKey("DWP_OCC_API_KEY") };
+  const get = (url: string) => keyedGet(url, headers, "DWP_OCC_API_KEY");
+  const list = await get(`${SE_API}/Occupations`);
+  if (!Array.isArray(list) || !list.length) {
+    throw new Error(
+      `${SE_API}/Occupations: expected a non-empty array, received ${
+        JSON.stringify(list).slice(0, 80)
+      }. The Skills England API changed: update skillsEngland() in data/download.ts.`,
+    );
+  }
+  const codes = list.map((o: Json) =>
+    safeSlug(o.stdCode, `${SE_API}/Occupations`)
+  );
+  await crawl(
+    SE_DIR + "occupations/",
+    codes,
+    (c) => `${SE_API}/Occupations/${c}?expand=occupation.dutiesKSB`,
+    get,
+  );
+  await writeGzip(index, JSON.stringify(codes));
+}
+
+steps.push(
+  { label: "oak national academy units (England KS1-KS4, keyed)", fn: oak },
+  {
+    label: "skills england apprenticeship standards (keyed)",
+    fn: skillsEngland,
+  },
+);
+
 console.log(`Downloading ${steps.length} datasets to ${DATA}\n`);
 
 const failed: string[] = [];

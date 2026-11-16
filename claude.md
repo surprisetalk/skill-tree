@@ -278,6 +278,31 @@ each standard set's raw API body to **{setId}.json.gz**. A set has `subject`,
 `parentId`). Each set states its own licence (CC BY 4.0 US or CC BY 3.0 US);
 1,508 state none. Stage `list` reads every set.
 
+### data/oak/ — Oak National Academy (gzipped JSON, tracked in git)
+
+England's school curriculum, KS1–KS4, OGL v3. The API at
+open-api.thenational.academy needs `OAK_API_KEY` and allows 1000 calls an hour,
+so `data/download.ts` crawls one file at a time and resumes. Raw API bodies:
+
+- **index.json.gz** — `{sequences: {subject: [sequenceSlug]}, units: [slug]}`.
+  It is written last, so it marks a finished crawl.
+- **sequences/{slug}.json.gz** — `/sequences/{slug}/units`: one block per year,
+  holding `units`, `tiers[].units`, or `examSubjects[]` with `units` or `tiers`.
+  A unit has `unitOrder`, `unitSlug` or `unitOptions[]`, and `threads[]`.
+- **units/{slug}.json.gz** — `/units/{slug}/summary`: `unitTitle`,
+  `description`, `year` (England's Year 1–11), `priorKnowledgeRequirements[]`.
+
+### data/skillsengland/ — Skills England Apprenticeship Standards (gzipped JSON)
+
+Occupational maps API, OGL v3; every derived product shows the Skills England
+logo and its attribution (readme). Needs `DWP_OCC_API_KEY` (header `X-API-KEY`).
+
+- **index.json.gz** — every `stdCode`, written last.
+- **occupations/{stdCode}.json.gz** —
+  `/Occupations/{stdCode}?expand=occupation.dutiesKSB`: `name`, `level` (2–7),
+  `statusName`, and `knowledges[]`, `skills[]`, `behaviours[]`, each with
+  `detail`.
+
 ### data/opensalt/ — OpenSALT Standards Frameworks (CASE JSON)
 
 K-12 standards frameworks from opensalt.net in 1EdTech CASE format. Includes
@@ -333,16 +358,21 @@ A new build table gets a schema; a new id goes through `slugify`.
 **Parsers**:
 
 - Stage `list`: ESCO, O\*NET (Skills/Knowledge/Abilities/Tasks/DWAs/Tech),
-  Lightcast, OpenSALT, Learning Commons, DigComp, Cert Atlas, BNCC, CSP, and the
-  hubs in `data/_foundations.json`. Each leaf standard of a current CSP set is
-  one skill with source `csp`, tags `csp`, `grade:*` when the set names at most
-  4 grades, and `code:<statementNotation>` unless the notation lists several
-  codes; a standard that parents another is a heading. Each BNCC objective is
-  one skill with source `bncc`, tags `bncc:objective`, `bncc:subject:*`,
-  `grade:*`, and `code:<codigo>`. Each Cert Atlas objective is one skill with
-  source `certatlas`, no tags, and a description of exam, certifying body,
-  domain, and sub-objectives; a title with no Latin letter is dropped and
-  counted. Each DigComp LearningOutcome is one skill with tags
+  Lightcast, OpenSALT, Learning Commons, DigComp, Cert Atlas, BNCC, CSP, Oak,
+  Skills England, and the hubs in `data/_foundations.json`. Each Oak unit is one
+  skill with source `oak`, tags `oak:<unitSlug>` and `grade:*` (Year N is grade
+  N−1; Year 1 is K). Each Skills England knowledge, skill, or behaviour
+  statement is one skill with source `skillsengland` and tag
+  `occupation:<slug>`, which stage `tag` reads as a direct occupation; a
+  behaviour "Head - text" takes the head as its title. Each leaf standard of a
+  current CSP set is one skill with source `csp`, tags `csp`, `grade:*` when the
+  set names at most 4 grades, and `code:<statementNotation>` unless the notation
+  lists several codes; a standard that parents another is a heading. Each BNCC
+  objective is one skill with source `bncc`, tags `bncc:objective`,
+  `bncc:subject:*`, `grade:*`, and `code:<codigo>`. Each Cert Atlas objective is
+  one skill with source `certatlas`, no tags, and a description of exam,
+  certifying body, domain, and sub-objectives; a title with no Latin letter is
+  dropped and counted. Each DigComp LearningOutcome is one skill with tags
   `digcomp:outcome`, `digcomp:area:*`, `digcomp:competence:*`, and
   `digcomp:level:*`; stage `seed-edges` turns the levels into seed order. An
   OpenSALT item with no `educationLevel` takes its nearest `isChildOf`
@@ -358,20 +388,23 @@ A new build table gets a schema; a new id goes through `slugify`.
   `learningcommons:coherence` and skips the long-title drop. Other sources keep
   `<…>` as text.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, course
-  prerequisites, OpenSALT precedes, OpenSALT within-framework grade ordering,
-  Learning Commons `buildsTowards`, DigComp level order (within one competence,
-  each outcome of a level precedes each outcome of the next; a merged outcome
-  sits at its lowest level). Learning Commons resolves through
-  `build/1m_lc_ids.tsv` and `3b_aliases.tsv`, not by label. A pair with an end
-  that stage `list` dropped goes to `build/1e_unresolved.tsv` with reason
-  `no-skill`. Pairs resolve to skill IDs by exact match (case, plurals, and
-  -ing/-ed folded, unless two skills share the fold), then by embedding (cosine
-  ≥ 0.90 and a shared token). Past √n labels, the IVF index of stage `prereq`
-  finds each label's nearest skill. Unresolved pairs go to
-  `build/1e_unresolved.tsv` with a reason per label. A source that gives both A
-  → B and B → A loses both, as does a course pair inside a seed cycle
-  (`contested-order`): expert sources outrank course catalogs. Each Khan
-  exercise resolves through the `khan:<slug>` tag of its OpenSALT item.
+  prerequisites, Oak (`oak_thread`: within one track — primary, then one exam
+  board, exam subject, and tier — a unit precedes the next unit of each of its
+  threads; `oak_prior`: each `priorKnowledgeRequirements` statement precedes its
+  unit), OpenSALT precedes, OpenSALT within-framework grade ordering, Learning
+  Commons `buildsTowards`, DigComp level order (within one competence, each
+  outcome of a level precedes each outcome of the next; a merged outcome sits at
+  its lowest level). Learning Commons resolves through `build/1m_lc_ids.tsv` and
+  `3b_aliases.tsv`, not by label. A pair with an end that stage `list` dropped
+  goes to `build/1e_unresolved.tsv` with reason `no-skill`. Pairs resolve to
+  skill IDs by exact match (case, plurals, and -ing/-ed folded, unless two
+  skills share the fold), then by embedding (cosine ≥ 0.90 and a shared token).
+  Past √n labels, the IVF index of stage `prereq` finds each label's nearest
+  skill. Unresolved pairs go to `build/1e_unresolved.tsv` with a reason per
+  label. A source that gives both A → B and B → A loses both, as does a course
+  pair inside a seed cycle (`contested-order`): expert sources outrank course
+  catalogs. Each Khan exercise resolves through the `khan:<slug>` tag of its
+  OpenSALT item.
 - Stage `trees`: LCSH (gunzip) and DBpedia (bzcat) SKOS broader chains, cached
   as `slug → ancestors[]`. The same pass picks each dump's 5000 most-used
   broader targets as the topic refs of stage `tag`.
