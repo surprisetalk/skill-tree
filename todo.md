@@ -34,6 +34,14 @@ first for `enrich` and `prereq`).
 
 ## Blocked on you
 
+- [ ] Oak's prior-knowledge statements become named prereqs of their units.
+      Stage `snap` matches them, but the Anthropic API usage limit stopped it
+      until 2026-12-01 00:00 UTC (16 Nov): about 6,800 prompts, 3.4M input
+      tokens. You chose to wait rather than try a local judge.
+  1. After the reset, run
+     `set -a; . ./.env; set +a; deno run -A pipeline.ts
+     snap`.
+
 - [ ] A skill's band says when a typical learner can first learn it. Sanity fit
       is 12/23 at CSP scale (goal 80%), Kendall τ 0.76. Decision (you, 11 Nov):
       no college-level anchors. Misses: `nutrition` 13, `grammar` 12, `drawing`
