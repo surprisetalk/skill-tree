@@ -1,1 +1,0 @@
-* The HDP topic model can be viewed as a nonparametric generalization of "latent Dirichlet allocation":latent_dirichlet_allocation

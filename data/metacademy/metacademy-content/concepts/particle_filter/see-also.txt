@@ -1,1 +1,0 @@
-* The particle filter is a special case of the more general "sequential Monte Carlo":sequential_monte_carlo framework.

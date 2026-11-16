@@ -1,1 +1,0 @@
-linear regression: closed-form solution

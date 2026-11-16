@@ -1,3 +1,0 @@
-tag: random-variables
-reason: The CDF is a property of a probability distribution.
-

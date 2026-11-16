@@ -1,1 +1,0 @@
-The Karush-Kuhn-Tucker (KKT) conditions are a set of optimality conditions for optimization problems in terms of the optimization variables and Lagrange multipliers. 

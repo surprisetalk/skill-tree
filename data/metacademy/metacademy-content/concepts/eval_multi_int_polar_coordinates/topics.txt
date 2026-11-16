@@ -1,1 +1,0 @@
-* evaluating double integrals using polar coordinates

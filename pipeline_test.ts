@@ -253,9 +253,6 @@ const gzip = async (text: string) =>
       new Blob([text]).stream().pipeThrough(new CompressionStream("gzip")),
     ).arrayBuffer(),
   );
-const MOOC_GZ = await gzip(
-  '{"c1":"函数","c2":"欧拉函数","ground_truth":1}\n{"c1":"集合","c2":"函数","ground_truth":0}\n',
-);
 // LectureBank files in the layout of the clone. Topics: 1 counting, 2 addition,
 // 3 calculus, 4 multiplication. Pair 1->2 is a graph edge, 2->3 sits two edges
 // apart, 1->4 likewise, and 1->3 is annotated 0 with no edge. Topic 9 has no
@@ -359,14 +356,9 @@ const goodBuild = (): Fixture => {
     }),
     "build/5_prereqs.tsv":
       "addition\tcounting\nmultiplication\taddition\nbiology\tnone\n",
-    "build/1f_translate.tsv":
-      "函数\tfunction\n欧拉函数\tEuler's totient function\n",
     // Fixture bands: addition 2 (K-1 is bands 2-3), calculus 15 (11-13 is 13-15).
     "data/_sanity.tsv":
       "id\tsubject\tgrade_from\tgrade_to\twhy\naddition\tmath\tK\t1\tx\ncalculus\tmath\t11\t13\tx\n",
-    "data/mooccubex/cs.json.gz": MOOC_GZ,
-    "data/mooccubex/math.json.gz": MOOC_GZ,
-    "data/mooccubex/psy.json.gz": MOOC_GZ,
     ...lbFixture(),
     ...junyiFixture(),
   };
@@ -511,24 +503,6 @@ Deno.test(
 );
 
 Deno.test(
-  "status: a missing or still-Chinese translation scores below 1",
-  early(async () => {
-    for (
-      const cache of ["函数\tfunction\n", "函数\tfunction\n欧拉函数\t欧拉\n"]
-    ) {
-      const build = goodBuild();
-      build["build/1f_translate.tsv"] = cache;
-      const { code, score } = await runIn("status", build);
-      assertEquals(code, 1);
-      assertEquals(
-        score("Every Chinese MOOCCubeX label has an English translation."),
-        0.5,
-      );
-    }
-  }),
-);
-
-Deno.test(
   "status: seed pairs that contradict the anchors or sit in a cycle score below 1",
   early(async () => {
     const stats = (key: string) => {
@@ -620,11 +594,6 @@ Deno.test(
         "build/5_prereqs.tsv",
         "addition\n",
         "build/5_prereqs.tsv:1: expected 2 tab-separated fields, received 1",
-      ],
-      [
-        "data/mooccubex/cs.json.gz",
-        await gzip("null\n"),
-        "cs.json.gz:1: expected a JSON object",
       ],
     ] as const;
     await Promise.all(cases.map(async ([path, body, expected]) => {
@@ -1300,7 +1269,7 @@ Deno.test("list: BNCC objectives carry the source, subject, and the grades of th
   assertEquals(grades("EM13MAT101"), ["grade:10", "grade:11", "grade:12"]);
 });
 
-Deno.test("list: an Oak unit carries its slug and its US grade; a Skills England statement carries its occupation", () => {
+Deno.test("list: an Oak unit carries its slug and its US grade; a Skills England statement carries its occupation and level", () => {
   const tags = (title: string, src: string) =>
     rows.find((c) => c[1] === title && c[3].includes(src))?.[4].split(",");
   const unit = tags("Counting to and from 20", "oak");
@@ -1312,12 +1281,7 @@ Deno.test("list: an Oak unit carries its slug and its US grade; a Skills England
     "skillsengland",
   );
   assert(k?.includes("occupation:assistant-accountant"), `tags: ${k}`);
-  // A behaviour's head is its title; the whole statement is its description.
-  const b = rows.find((c) =>
-    c[3].includes("skillsengland") &&
-    c[2].startsWith("Collaborative and inclusive - builds strong")
-  );
-  assertEquals(b?.[1], "Collaborative and inclusive");
+  assert(k?.includes("skillsengland:level:3"), `tags: ${k}`);
 });
 
 Deno.test("list: Cert Atlas objectives carry the source and the exam; dropped vendors stay out", () => {

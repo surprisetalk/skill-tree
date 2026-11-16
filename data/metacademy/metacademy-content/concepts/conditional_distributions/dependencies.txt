@@ -1,6 +1,0 @@
-tag: random-variables
-
-tag: multivariate_distributions
-
-tag: conditional-probability
-

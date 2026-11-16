@@ -1,1 +1,0 @@
-tag: propositional_logic

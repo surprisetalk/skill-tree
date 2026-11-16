@@ -1,2 +1,0 @@
-tag: linear_systems_as_matrices
-reason: Gaussian elimination is a method for solving linear systems.

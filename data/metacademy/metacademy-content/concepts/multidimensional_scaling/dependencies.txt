@@ -1,3 +1,0 @@
-tag: optimization_problems
-reason: Multidimensional scaling is formulated as an optimization problem.
-

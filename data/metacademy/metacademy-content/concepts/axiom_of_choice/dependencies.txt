@@ -1,2 +1,0 @@
-tag: zermelo_frankl_axioms
-reason: The Axiom of Choice is often added to the Z-F axioms.

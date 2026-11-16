@@ -1,1 +1,0 @@
-* using formulas for numbers of permutations and combinations to compute probabilities of events

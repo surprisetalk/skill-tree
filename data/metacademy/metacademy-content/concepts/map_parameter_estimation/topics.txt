@@ -1,3 +1,0 @@
-* definition
-* why the mode is sometimes an atypical point
-* why MAP estimation isn't invariant to reparameterization

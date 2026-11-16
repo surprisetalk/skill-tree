@@ -1,3 +1,0 @@
-* Know the PDF of the beta distribution
-* Be able to compute the expectation of a beta random variable
-* Express the uniform distribution as a special case of the beta distribution

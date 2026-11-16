@@ -1,1 +1,0 @@
-Max-product is an algorithm for MAP estimation in graphical models, based on dynamic programming. It is a generalization of the Viterbi algorithm for hidden Markov models.

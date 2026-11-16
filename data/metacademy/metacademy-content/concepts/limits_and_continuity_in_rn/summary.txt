@@ -1,1 +1,0 @@
-The concept of a limit extends naturally to functions of multiple variables, and higher-dimensional limits share many of the same properties as the single-variable ones.

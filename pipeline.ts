@@ -13,19 +13,15 @@ import {
   embeddingFallback,
   type ExpertPair,
   expertScores,
-  HAN_RE,
   isJunkTopic,
-  isTranslation,
   listDefects,
   loadRawEmbeddings,
-  loadTsvCache,
   need,
   PREREQS,
   readDifficulty,
   readJson,
   readJunyi,
   readLectureBank,
-  readMoocPairs,
   readSeeds,
   readTable,
   readTsv,
@@ -36,7 +32,6 @@ import {
   SKILLS_OUT,
   TAGGED_DEDUPED,
   topoOrder,
-  TRANSLATE_CACHE,
   withRawEmbeddingsMemo,
 } from "./lib.ts";
 import {
@@ -228,23 +223,6 @@ async function stageStatus() {
         return grade(stale.length / rows.length, 0, 1);
       },
     ],
-    ["Every Chinese MOOCCubeX label has an English translation.", async () => {
-      const translations = loadTsvCache(need(TRANSLATE_CACHE));
-      const labels = new Set(
-        (await readMoocPairs()).flatMap((p) => [p.c1, p.c2]).filter((l) =>
-          HAN_RE.test(l)
-        ),
-      );
-      if (!labels.size) {
-        throw new Error(
-          "data/mooccubex/*.json.gz: expected Chinese labels in the ground_truth 1 pairs, received none.",
-        );
-      }
-      const done = [...labels].filter((l) =>
-        isTranslation(translations.get(l))
-      );
-      return grade(done.length / labels.size, 1, 0);
-    }],
     // A wrong edge lifts every skill above it. Stage finalize caps the lift
     // (LIFT_CAP) and drops each edge it cannot order, so many drops mean noisy
     // edges.

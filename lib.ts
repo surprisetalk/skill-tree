@@ -70,7 +70,6 @@ export const slugify = (s: string) => {
 const STAGE_OF: Record<string, string> = {
   [`${BUILD}/1_skills.tsv`]: "list",
   [`${BUILD}/1e_seed_edges.tsv`]: "seed-edges",
-  [`${BUILD}/1f_translate.tsv`]: "enrich",
   [`${BUILD}/1m_lc_ids.tsv`]: "list",
   [`${BUILD}/1j_lcsh_tree.tsv`]: "trees",
   [`${BUILD}/1k_dbpedia_tree.tsv`]: "trees",
@@ -922,82 +921,6 @@ export function normalizedEmbeddingsForSkills(
     );
   }
   return vecs;
-}
-
-// ---------- MOOCCubeX ----------
-
-export const TRANSLATE_CACHE = `${BUILD}/1f_translate.tsv`;
-export const HAN_RE = /\p{Script=Han}/u;
-
-type MoocPair = { domain: string; c1: string; c2: string };
-
-// The cache value that seed-edges accepts as a translation.
-export const isTranslation = (t: string | undefined): t is string =>
-  !!t?.trim() && !HAN_RE.test(t) && !/[\t\r\n]/.test(t);
-
-// Expert-confirmed (ground_truth 1) prereq pairs, c1 → c2.
-export async function readMoocPairs(): Promise<MoocPair[]> {
-  const pairs: MoocPair[] = [];
-  for (const domain of ["cs", "math", "psy"]) {
-    const path = `data/mooccubex/${domain}.json.gz`;
-    let text: string;
-    try {
-      const stream = new Blob([Deno.readFileSync(path)]).stream().pipeThrough(
-        new DecompressionStream("gzip"),
-      );
-      text = await new Response(stream).text();
-    } catch (e) {
-      if (e instanceof Deno.errors.NotFound) throw e;
-      throw new Error(
-        `${path}: expected a gzip file of JSON lines, received an error: ${
-          (e as Error).message
-        }. Re-download it: deno run -A data/download.ts`,
-      );
-    }
-    const before = pairs.length;
-    text.split("\n").forEach((line, i) => {
-      if (!line) return;
-      const where = `${path}:${i + 1}`;
-      let o: { c1?: unknown; c2?: unknown; ground_truth?: unknown };
-      try {
-        o = JSON.parse(line);
-      } catch {
-        throw new Error(
-          `${where}: expected a JSON object, received ${line.slice(0, 80)}`,
-        );
-      }
-      if (typeof o !== "object" || o === null || Array.isArray(o)) {
-        throw new Error(
-          `${where}: expected a JSON object, received ${line.slice(0, 80)}`,
-        );
-      }
-      if (![-1, 0, 1].includes(o.ground_truth as number)) {
-        throw new Error(
-          `${where}: expected ground_truth as the number -1, 0, or 1, received ${
-            JSON.stringify(o.ground_truth)
-          }`,
-        );
-      }
-      if (o.ground_truth !== 1) return;
-      if (
-        typeof o.c1 !== "string" || typeof o.c2 !== "string" || !o.c1 ||
-        !o.c2 || /[\t\n]/.test(o.c1 + o.c2)
-      ) {
-        throw new Error(
-          `${where}: expected labels c1 and c2 as non-empty strings without tabs, received ${
-            JSON.stringify([o.c1, o.c2])
-          }`,
-        );
-      }
-      pairs.push({ domain, c1: o.c1, c2: o.c2 });
-    });
-    if (pairs.length === before) {
-      throw new Error(
-        `${path}: expected at least one pair with ground_truth 1, received none. Re-download it: deno run -A data/download.ts`,
-      );
-    }
-  }
-  return pairs;
 }
 
 // ---------- University course prerequisites ----------

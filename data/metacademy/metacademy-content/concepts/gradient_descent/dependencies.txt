@@ -1,4 +1,0 @@
-tag: gradient
-
-tag: functions_of_several_variables
-reason: gradient descent is typically applied to functions of several variables

@@ -1,1 +1,0 @@
-The PDF of a continuous function of continuous random variables can be computed in terms of the joint PDF and the Jacobian of the function.

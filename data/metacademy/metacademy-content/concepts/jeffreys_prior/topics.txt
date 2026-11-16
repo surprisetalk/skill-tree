@@ -1,2 +1,0 @@
-* definition
-* invariance to transformation

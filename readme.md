@@ -80,8 +80,8 @@ Evidence for each note: `research.md`.
   learner data shows that the fixed weight fails.
 - `skills.tsv` gets a `sources` column, and `lib.ts` maps each source to its
   licence and attribution string. The readme lists the attributions.
-  Alternative: drop every non-commercial or copyleft source (Junyi, MOOCCubeX
-  GPL-3.0). That loses the MOOCCubeX CS and math seed pairs.
+  Alternative: drop every non-commercial or copyleft source. Junyi is eval only,
+  and MOOCCubeX (GPL-3.0) is gone.
 - Git tracks a filtered extract of Learning Commons
   (`data/learningcommons/graph.jsonl.gz`, CC BY 4.0), and `data/download.ts`
   streams the 986 MB export to build it. The extract keeps the rows of current

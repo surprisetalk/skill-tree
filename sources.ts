@@ -9,8 +9,6 @@ import {
   embeddingFallback,
   gunzipText,
   h32,
-  HAN_RE,
-  isTranslation,
   LC_EXTRACT,
   LC_IDS,
   loadTsvCache,
@@ -18,7 +16,6 @@ import {
   readCsv,
   readJson,
   readLearningCommons,
-  readMoocPairs,
   readTable,
   readTsv,
   resolveConcept,
@@ -33,7 +30,6 @@ import {
   stronglyConnected,
   TAGGED_DEDUPED,
   TOPIC_REFS,
-  TRANSLATE_CACHE,
   writeAtomic,
   writeStats,
   writeTable,
@@ -542,13 +538,18 @@ export function oakThreadPairs(
 // ---------- Skills England (apprenticeship standards) ----------
 
 type SeItem = {
-  kind: "knowledges" | "skills" | "behaviours";
   text: string;
   occupation: string;
+  // The standard's level, 2 (GCSE) to 7 (master's).
+  level: number;
 };
 
 // The API leaves out a list that a standard does not have: 147 occupations
-// (one approved) have none, and one draft has no behaviours.
+// (one approved) have none.
+// REVIEW: Read knowledge and skill statements, not behaviours. A behaviour
+// ("Collaborative and inclusive - builds strong working relationships") is a
+// trait, not a learnable skill. Alternative: keep the 7,662 behaviours. They
+// add prereq spend and no prereq order.
 function readSkillsEngland(): { items: SeItem[]; empty: number } {
   const dir = "data/skillsengland";
   const codes = unique(
@@ -570,13 +571,17 @@ function readSkillsEngland(): { items: SeItem[]; empty: number } {
         }
       }
       const occupation = str(o.name, `${w} name`);
+      const level = int(o.level, `${w} level`);
+      if (level < 2 || level > 7) {
+        bodyFail(`${w} level`, "a level of 2-7", level);
+      }
       if (keys.every((k) => !(k in o))) empty++;
-      for (const key of keys) {
+      for (const key of ["knowledges", "skills"] as const) {
         if (!(key in o)) continue;
         for (const [j, x] of arr(o[key], `${w} ${key}`).entries()) {
           const dw = `${w} ${key}[${j}].detail`;
           items.push({
-            kind: key,
+            level,
             // "Core - " and "Option 2 - " name the part of the standard. The
             // source writes "manufacturer™s" for "manufacturer's" 13 times.
             text: str(
@@ -1778,27 +1783,25 @@ export function stageList() {
     console.log(`  oak: ${units.length} units`);
   }
 
-  // Skills England: one skill per knowledge, skill, or behaviour statement of
-  // an apprenticeship standard. Stage tag reads the occupation:<slug> tags.
+  // Skills England: one skill per knowledge or skill statement of an
+  // apprenticeship standard. Stage tag reads the occupation:<slug> tags, and
+  // stage prereq reads skillsengland:level:<n>.
   // REVIEW: The standard's level (2-7) anchors no difficulty, as O*NET job
   // zones do not. Alternative: level 2 at grade 10 and level 3 at grade 12.
   // A workplace skill is then pinned to a school grade, and levels 4-7 are
   // college levels, which you ruled out as anchors (11 Nov).
-  // A behaviour reads "Team-focused - works as part of a team...": the head
-  // is the title, and the whole statement is the description. A knowledge or
-  // skill head names a category ("Tools - the key equipment..."): no split.
   {
     const { items, empty } = readSkillsEngland();
     for (const it of items) {
-      const head = it.kind === "behaviours"
-        ? it.text.match(/^([^.;:]{3,60}?)\s+[–—-]\s+\S/)?.[1]
-        : undefined;
       raw.push({
         id: "",
-        title: head ?? unquestion(it.text, `skillsengland ${it.occupation}`),
-        description: head ? it.text : "",
+        title: unquestion(it.text, `skillsengland ${it.occupation}`),
+        description: "",
         sources: ["skillsengland"],
-        tags: [`occupation:${slugify(it.occupation)}`],
+        tags: [
+          `occupation:${slugify(it.occupation)}`,
+          `skillsengland:level:${it.level}`,
+        ],
       });
     }
     console.log(
@@ -2217,27 +2220,6 @@ export async function stageEnrich() {
     (t) =>
       `Describe this K-12 academic standard in one sentence (<150 chars) that a teacher would use to explain what a student learns. Start with a noun or verb. Do not use "Students will". No preamble, no quotation marks.\n\nStandard: ${t.title}\n\nDescription:`,
     { numPredict: 140 },
-  );
-
-  // MOOCCubeX labels are Simplified Chinese; seed-edges matches English titles.
-  const hanLabels = new Set(
-    (await readMoocPairs()).flatMap((p) => [p.c1, p.c2]).filter((l) =>
-      HAN_RE.test(l)
-    ),
-  );
-  await resumableClaude(
-    "enrich:translate",
-    TRANSLATE_CACHE,
-    [...hanLabels].map((id) => ({ id })),
-    (t) =>
-      `Translate this concept from a Chinese university course into the short English name an English textbook index would use (1-6 words). Output only the name.\n\nConcept: ${t.id}\n\nEnglish:`,
-    {
-      numPredict: 200,
-      clean: (raw) => {
-        const c = cleanDef(raw);
-        return HAN_RE.test(c) ? "" : c;
-      },
-    },
   );
 }
 
@@ -2660,74 +2642,6 @@ export async function stageSeedEdges() {
     }
   }
 
-  // Metacademy — raw concept dependencies.txt (393 concept dirs)
-  {
-    const CONCEPTS = "data/metacademy/metacademy-content/concepts";
-    const titleByDir = new Map<string, string>();
-    const dirs: string[] = [];
-    for (const f of readDirSorted(CONCEPTS)) {
-      if (!f.isDirectory || f.name === "ANNOTATED_EXAMPLE") continue;
-      dirs.push(f.name);
-      titleByDir.set(
-        f.name,
-        Deno.readTextFileSync(`${CONCEPTS}/${f.name}/title.txt`).trim(),
-      );
-    }
-    const resolveTag = (tag: string): string => {
-      const t = tag.trim();
-      if (!t) return "";
-      const dashToUnder = t.replace(/-/g, "_");
-      const underToDash = t.replace(/_/g, "-");
-      for (const key of [t, dashToUnder, underToDash]) {
-        const title = titleByDir.get(key);
-        if (title) return title;
-      }
-      return t.replace(/[_-]/g, " ");
-    };
-    let emitted = 0;
-    for (const dir of dirs) {
-      const target = titleByDir.get(dir) || dir.replace(/_/g, " ");
-      const deps = Deno.readTextFileSync(`${CONCEPTS}/${dir}/dependencies.txt`);
-      for (const line of deps.split("\n")) {
-        const m = line.match(/^\s*tag:\s*(\S+)\s*$/);
-        if (!m) continue;
-        const pre = resolveTag(m[1]);
-        if (pre && target) {
-          addRaw(pre, target, "metacademy_raw", `${m[1]}->${dir}`);
-          emitted++;
-        }
-      }
-    }
-    console.log(
-      `[seed-edges] metacademy_raw: ${emitted} pairs from ${dirs.length} concept dirs`,
-    );
-  }
-
-  // MOOCCubeX
-  {
-    const translations = loadTsvCache(TRANSLATE_CACHE);
-    const english = (label: string) => {
-      if (!HAN_RE.test(label)) return label;
-      const t = translations.get(label);
-      if (!isTranslation(t)) {
-        throw new Error(
-          `MOOCCubeX label "${label}": expected an English translation in ${TRANSLATE_CACHE}, received ${
-            JSON.stringify(t)
-          }. Delete that row if present, then run: deno run -A pipeline.ts enrich`,
-        );
-      }
-      return t;
-    };
-    for (const p of await readMoocPairs()) {
-      addRaw(
-        english(p.c1),
-        english(p.c2),
-        `moocx_${p.domain}`,
-        `${p.c1}->${p.c2}`,
-      );
-    }
-  }
-
   // University course prerequisites
   // REVIEW: Keep courses although about 85% of its distinct topics name no
   // skill (7 Nov: 6,275 below the gate, 1,552 edges resolve). The unresolved
@@ -2738,49 +2652,6 @@ export async function stageSeedEdges() {
   console.log(
     `[seed-edges] courses: ${courses.pairs.length} title pairs from ${courses.timingCounts.before} before-edges (${courses.timingCounts.concurrent} concurrent and ${courses.timingCounts.before_or_concurrent} before_or_concurrent edges skipped), ${courses.dropped.length} dropped`,
   );
-
-  // OpenSALT precedes
-  {
-    for (const f of readDirSorted("data/opensalt")) {
-      if (!f.name.endsWith(".json") || f.name === "index.json") continue;
-      const doc: {
-        CFItems?: {
-          identifier: string;
-          humanCodingScheme?: string;
-          fullStatement?: string;
-        }[];
-        CFAssociations?: {
-          associationType?: string;
-          originNodeURI?: { identifier?: string; title?: string };
-          destinationNodeURI?: { identifier?: string; title?: string };
-        }[];
-      } = readJson(`data/opensalt/${f.name}`);
-      const itemMap = new Map<string, { code: string; statement: string }>();
-      for (const it of doc.CFItems || []) {
-        itemMap.set(it.identifier, {
-          code: it.humanCodingScheme || "",
-          statement: it.fullStatement || "",
-        });
-      }
-      for (const a of doc.CFAssociations || []) {
-        if ((a.associationType || "").toLowerCase() !== "precedes") continue;
-        const o = a.originNodeURI || {}, d = a.destinationNodeURI || {};
-        const lbl = (x: { identifier?: string; title?: string }) => {
-          if (x.identifier && itemMap.has(x.identifier)) {
-            return itemMap.get(x.identifier)!.statement || x.title ||
-              x.identifier || "";
-          }
-          return x.title || x.identifier || "";
-        };
-        addRaw(
-          lbl(o),
-          lbl(d),
-          "opensalt_precedes",
-          `${o.identifier || o.title}->${d.identifier || d.title}`,
-        );
-      }
-    }
-  }
 
   // OpenSALT within-framework grade ordering
   {
@@ -3114,12 +2985,7 @@ export async function stageSeedEdges() {
     alcpl_physics: 0.044,
     alcpl_precalculus: 0.072,
     metacademy: 0.04,
-    metacademy_raw: 0.0137,
-    moocx_cs: 0.0037,
-    moocx_math: 0.0023,
-    moocx_psy: 0.079,
     courses: 0.065,
-    opensalt_precedes: 0.0106,
     opensalt_grade: 0.201,
     foundation: 0.9,
     learningcommons: 0.71,

@@ -1,3 +1,0 @@
-* Know the statement of the chain rule (in matrix form)
-* Be able to use it to compute partial derivatives
-* Understand the justification in terms of linear approximations of functions

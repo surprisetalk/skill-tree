@@ -1,3 +1,0 @@
-* Two common algorithms for combining decision trees include:
-** "bagging":bagging, which reduces variance by sampling random training sets
-** "boosting":ada_boost, which makes the model class more expressive

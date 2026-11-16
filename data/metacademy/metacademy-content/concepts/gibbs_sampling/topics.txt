@@ -1,3 +1,0 @@
-* definition of the algorithm
-* why it preserves the stationary distribution
-* why it's inefficient when the variables are tightly coupled

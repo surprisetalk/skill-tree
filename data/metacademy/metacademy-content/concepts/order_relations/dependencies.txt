@@ -1,3 +1,0 @@
-tag: equivalence_relations
-reason: The definition of order relations parallels that of equivalence relations.
-

@@ -1,3 +1,0 @@
-* Know what it means for a relation to be a well ordering
-* Know the transfinite induction principle and why it is justified
-* Be able to define functions using transfinite recursion

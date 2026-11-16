@@ -1,1 +1,0 @@
-Basic operations on sets include intersection, union, and difference. The power set of a set A is the set of all subsets of A.

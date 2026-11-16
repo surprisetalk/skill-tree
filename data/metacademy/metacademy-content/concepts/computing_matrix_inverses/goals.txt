@@ -1,1 +1,0 @@
-* Be able to use Gaussian elimination to compute the inverse of a matrix.

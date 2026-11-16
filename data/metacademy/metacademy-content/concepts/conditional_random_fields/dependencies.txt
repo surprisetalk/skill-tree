@@ -1,2 +1,0 @@
-tag: markov_random_fields
-reason: CRFs are defined in terms of MRFs.

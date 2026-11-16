@@ -1,3 +1,0 @@
-* probabilistic model
-* optimization problem
-* example learned dictionary for natural images

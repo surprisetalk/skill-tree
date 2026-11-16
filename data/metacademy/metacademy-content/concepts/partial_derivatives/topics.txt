@@ -1,3 +1,0 @@
-* definition of partial derivatives
-* interpretation as rate of change
-* interpretation as tangent line

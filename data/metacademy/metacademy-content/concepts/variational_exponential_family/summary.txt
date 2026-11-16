@@ -1,1 +1,0 @@
-Variational inference algorithms based on mean field turn out to have especially nice forms in exponential family models with appropriate conjugate structure.

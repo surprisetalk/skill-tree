@@ -1,1 +1,0 @@
-Sequential Monte Carlo is a general framework for Monte Carlo algorithms which involve sampling from a sequence of distributions. It encompasses sequential importance sampling, particle filters, and annealed importance sampling as special cases.

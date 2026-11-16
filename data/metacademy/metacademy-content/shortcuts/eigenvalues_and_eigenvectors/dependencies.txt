@@ -1,3 +1,0 @@
-tag: matrix_multiplication
-reason: Eigenvalues and eigenvectors are a way of analyzing matrix multiplication.
-

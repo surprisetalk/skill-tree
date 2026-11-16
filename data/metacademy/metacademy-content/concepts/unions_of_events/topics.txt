@@ -1,3 +1,0 @@
-* formula for the probability of a union of events (not necessarily joint or independent)
-* derivation from the probability axioms
-* that the probability of the union is bounded by the sum of the probabilities

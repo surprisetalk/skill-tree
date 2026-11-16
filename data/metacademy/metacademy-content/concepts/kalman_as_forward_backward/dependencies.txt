@@ -1,3 +1,0 @@
-tag: kalman_smoother
-
-tag: forward_backward_algorithm

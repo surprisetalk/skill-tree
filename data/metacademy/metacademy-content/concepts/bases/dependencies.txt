@@ -1,3 +1,0 @@
-tag: subspaces
-reason: A basis is a way of representing a subspace.
-

@@ -1,2 +1,0 @@
-tag: positive-definite-matrices
-reason: The Schur product theorem is a fact about PSD matrices.

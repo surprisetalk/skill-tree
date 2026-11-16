@@ -1,1 +1,0 @@
-The transformation method is a way of sampling from univariate probability distributions by sampling a uniform random variable and inverting the CDF.

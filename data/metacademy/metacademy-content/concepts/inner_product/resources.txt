@@ -1,4 +1,0 @@
-source: axler
-edition: 2
-location: Chapter 6, "Inner product spaces," subsections "Inner products" and "Norms"
-core: 1

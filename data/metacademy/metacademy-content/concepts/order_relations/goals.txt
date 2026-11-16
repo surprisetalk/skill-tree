@@ -1,4 +1,0 @@
-* Define order relation 
-* Know the distinction between total orders and partial orders
-* Be able to show that something is total or partial order
-* Know the distinction between maximal element and largest element

@@ -1,1 +1,0 @@
-* Cross-validation is a common technique used to measure the "generalization":generalization of a statistical model on all data present in a dataset

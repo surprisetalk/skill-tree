@@ -1,2 +1,0 @@
-* state the Compactness Theorem of propositional logic
-* prove the Compactness Theorem

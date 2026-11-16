@@ -1,2 +1,0 @@
-* update rules
-* computational complexity

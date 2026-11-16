@@ -1,2 +1,0 @@
-* be able to use the Recursion Theorem to define functions over recursively defined structures
-* prove the Recursion Theorem

@@ -1,1 +1,0 @@
-* "Variational logistic regression":variational_logistic_regression is the analogue for classification.

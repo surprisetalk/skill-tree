@@ -1,2 +1,0 @@
-* update rules
-* why it's advantageous over the closed-form solution (in terms of computational complexity)

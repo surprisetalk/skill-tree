@@ -1,1 +1,0 @@
-variational inference and convex duality

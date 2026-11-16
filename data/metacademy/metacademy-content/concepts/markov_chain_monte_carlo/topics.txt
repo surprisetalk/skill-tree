@@ -1,3 +1,0 @@
-* problem setup: want to get approximate samples from an intractable distribution
-* how to check that a Markov chain has the right stationary distribution
-* that you can combine multiple transition operators with the same stationary distribution

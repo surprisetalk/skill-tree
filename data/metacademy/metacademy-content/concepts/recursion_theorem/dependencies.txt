@@ -1,2 +1,0 @@
-tag: structural_induction
-reason: The Recursion Theorem is proved using structural induction.

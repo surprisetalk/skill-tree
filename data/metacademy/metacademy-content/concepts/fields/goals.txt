@@ -1,3 +1,0 @@
-* Know the field axioms
-* Be able to show that something is a field
-* Be able to derive simple consequences of the field axioms

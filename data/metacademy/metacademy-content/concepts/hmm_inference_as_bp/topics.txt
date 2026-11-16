@@ -1,3 +1,0 @@
-* representing an HMM as a factor graph
-* equivalence between the forward-backward and sum-product updates
-* equivalence between the Viterbi and max-product updates

@@ -1,2 +1,0 @@
-* Gaussian lower bound on the sigmoid function
-* derivation of update rules and marginal likelihood lower bound

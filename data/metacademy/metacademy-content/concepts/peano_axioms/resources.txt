@@ -1,2 +1,0 @@
-source: wikipedia
-location: Article "Peano axioms" [http://en.wikipedia.org/wiki/Peano_axioms]

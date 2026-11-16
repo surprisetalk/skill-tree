@@ -1,1 +1,0 @@
-The bias-variance decomposition (often referred to as the bias-variance tradeoff) is a frequentist analysis of the generalization capability of an estimator, i.e. a learning algorithm.

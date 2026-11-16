@@ -1,1 +1,0 @@
-Resolution is an inference rule for first-order logic which is a key part of many automated theorem provers.

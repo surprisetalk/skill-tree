@@ -1,2 +1,0 @@
-* Know the definition of the AIC.
-* How is the AIC justified in terms of performance on held-out data?

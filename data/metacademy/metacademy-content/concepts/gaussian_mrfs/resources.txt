@@ -1,4 +1,0 @@
-source: pgm
-edition: 1
-location: Section 7.3, pages 254-257
-

@@ -1,3 +1,0 @@
-* Know the perceptron update rule
-* Optional: show that the algorithm terminates if the data are separated by some margin
-* Why can't the algorithm terminate if the data are not linearly separable?

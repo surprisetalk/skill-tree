@@ -1,5 +1,0 @@
-tag: bayesian-parameter-estimation
-reason: This is an example of Bayesian parameter estimation.
-
-tag: multinomial-distribution
-

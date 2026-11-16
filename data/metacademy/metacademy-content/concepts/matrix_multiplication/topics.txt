@@ -1,7 +1,0 @@
-* three interpretations of matrix multiplication
-** dot products
-** outer products
-** matrix-vector products
-* constraint on the sizes of the matrices
-* basic properties (associative, distributive, not commutative)
-* identity matrix

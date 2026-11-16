@@ -1,1 +1,0 @@
-* Understand the k-means++ initialization procedure, how it's a stochastic algorithm, and the interpretation of the optimality guarantee

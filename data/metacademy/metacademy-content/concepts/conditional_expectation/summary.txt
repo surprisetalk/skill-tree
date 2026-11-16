@@ -1,1 +1,0 @@
-The conditional expectation E[X | Y] is the expectation of X in the conditional distribution P(X | Y). 

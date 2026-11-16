@@ -1,1 +1,0 @@
-* The bound implies that "maximum likelihood estimation is asymptotically efficient":asymptotics_of_maximum_likelihood.

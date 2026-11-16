@@ -1,3 +1,0 @@
-* iterated integrals
-* that the order of integration doesn't matter
-* using iterated integrals to compute areas and volumes

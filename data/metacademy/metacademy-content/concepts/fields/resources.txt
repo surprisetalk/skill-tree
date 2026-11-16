@@ -1,2 +1,0 @@
-source: wikipedia
-location: Article "Field (mathematics)" [http://en.wikipedia.org/wiki/Field_(mathematics)]

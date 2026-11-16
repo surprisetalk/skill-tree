@@ -1,2 +1,0 @@
-* Know the steps of Isomap
-* Understand the motivation: what undesirable property of MDS is it alleviating?

@@ -1,4 +1,0 @@
-* distinction between filtering and smoothing
-* update rules
-* computational complexity
-

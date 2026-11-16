@@ -1,3 +1,0 @@
-* The Schur product theorem gives a way to "construct kernels compositionally":constructing_kernels by multiplying simpler kernels.
-
-

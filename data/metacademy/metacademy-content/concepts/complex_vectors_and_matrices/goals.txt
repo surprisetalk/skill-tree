@@ -1,2 +1,0 @@
-* Know the definitions of the Hermitian operator and the complex dot product
-* Why is the Hermitian operator used for complex matrices rather than the matrix transpose?

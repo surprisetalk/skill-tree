@@ -1,1 +1,0 @@
-The projection of a vector b onto a subspace X is the closest point to b contained in X. Projection is a linear operation, and can be computed using a projection matrix. It is used in linear least squares approximation.

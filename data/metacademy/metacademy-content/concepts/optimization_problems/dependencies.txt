@@ -1,3 +1,0 @@
-tag: partial_derivatives
-reason: Partial derivatives are necessary to characterize the critical points.
-

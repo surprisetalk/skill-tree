@@ -1,2 +1,0 @@
-tag: vectors
-reason: Linear systems are represented in terms of matrix-vector multiplication.

@@ -1,3 +1,0 @@
-source: bishop
-edition: 1
-location: Section 13.3.2, pages 642-644

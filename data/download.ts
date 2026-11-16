@@ -328,23 +328,6 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
     },
   },
   {
-    label: "metacademy-content (ML/AI concept graph with dependencies)",
-    fn: async () => {
-      const dir = DATA + "metacademy";
-      if (await exists(dir + "/metacademy-content")) {
-        console.log("  skip: already cloned");
-        return;
-      }
-      await mkdir(dir);
-      await run([
-        "git",
-        "clone",
-        "--depth=1",
-        "https://github.com/metacademy/metacademy-content.git",
-      ], dir);
-    },
-  },
-  {
     label: "metacademy figshare (prerequisite pairs mapped to wikipedia)",
     fn: async () => {
       const dir = DATA + "metacademy";
@@ -364,23 +347,6 @@ const steps: { label: string; fn: () => Promise<void> }[] = [
       );
       await run(["unzip", "-o", zip, "-d", dir]);
       await Deno.remove(zip);
-    },
-  },
-  {
-    label: "mooccubex prerequisites (CS, math, psychology — ~280MB total)",
-    fn: async () => {
-      const dir = DATA + "mooccubex";
-      await mkdir(dir);
-      const base =
-        "https://lfs.aminer.cn/misc/moocdata/data/mooccube2/prerequisites";
-      for (const name of ["psy.json", "math.json", "cs.json"]) {
-        // git tracks the gzip; the plain file is the optional original.
-        if (await exists(`${dir}/${name}.gz`)) {
-          console.log(`  skip: ${name}.gz exists`);
-          continue;
-        }
-        await get(`${base}/${name}`, `${dir}/${name}`);
-      }
     },
   },
   {

@@ -1,3 +1,0 @@
-tag: propositional_satisfiability
-reason: The DPLL procedure is an algorithm for SAT.
-

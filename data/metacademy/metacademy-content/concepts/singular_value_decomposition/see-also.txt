@@ -1,1 +1,0 @@
-* "Principal component analysis (PCA)":principal_component_analysis is a data analysis method based on the SVD.

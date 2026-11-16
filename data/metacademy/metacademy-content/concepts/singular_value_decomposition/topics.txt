@@ -1,3 +1,0 @@
-* statement of the SVD
-* relationship with the eigenvalues and eigenvectors of A^T A and A A^T
-* obtaining orthogonal bases for the four fundamental subspaces

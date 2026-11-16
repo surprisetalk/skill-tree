@@ -1,1 +1,0 @@
-The chain rule for partial derivatives gives a way of computing the partial derivatives of compositions of functions in terms of the partial derivatives of the individual functions.

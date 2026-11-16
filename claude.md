@@ -116,41 +116,9 @@ pairs across 4 domains: Data Mining, Geometry, Physics, Precalculus. CC BY 4.0.
 
 ### data/metacademy/ — ML/AI Concept Prerequisite Graph
 
-Two sources combined:
-
-**metacademy-content/concepts/{name}/** — ML/AI concepts, each a directory with:
-
-- `title.txt` — concept name
-- `dependencies.txt` — prerequisite concepts as `tag: {concept_id}` + `reason:`
-  pairs
-- `summary.txt`, `goals.txt`, `resources.txt`
-
 **Metacademy-prerequisite-pairs-transformed-to-wikipedia.csv** — prerequisite
 pairs mapped to Wikipedia:
 `prereq_wiki_canonical_title preq, MA preq, MA concept, concept_wiki_canonical_title_concept`
-
-### data/mooccubex/ — MOOCCubeX Prerequisites (JSONL, gzipped in git)
-
-From github.com/THU-KEG/MOOCCubeX. Concept prerequisite pairs with model
-predictions for CS, math, and psychology (Chinese university MOOCs). Each line
-is a JSON object:
-
-```json
-{
-  "c1": "函数的定义域",
-  "c2": "欧拉函数",
-  "ground_truth": 1,
-  "text_predict": [0.03, 0.97],
-  "graph_predict": [0.02, 0.98]
-}
-```
-
-- `c1` → `c2` prerequisite direction; `ground_truth`: 1 = confirmed prerequisite
-- **cs.json.gz**, **math.json.gz**, **psy.json.gz**
-- Uncompressed .json files are gitignored
-- Stage `enrich` translates the Chinese labels with Claude into
-  `build/1f_translate.tsv`. Stage `seed-edges` throws on a label with no
-  translation.
 
 ### data/courses/ — University Course Prerequisites (CSV, gzipped in git)
 
@@ -301,7 +269,7 @@ logo and its attribution (readme). Needs `DWP_OCC_API_KEY` (header `X-API-KEY`).
 - **occupations/{stdCode}.json.gz** —
   `/Occupations/{stdCode}?expand=occupation.dutiesKSB`: `name`, `level` (2–7),
   `statusName`, and `knowledges[]`, `skills[]`, `behaviours[]`, each with
-  `detail`.
+  `detail`. Stage `list` reads knowledge and skill statements only.
 
 ### data/opensalt/ — OpenSALT Standards Frameworks (CASE JSON)
 
@@ -361,20 +329,19 @@ A new build table gets a schema; a new id goes through `slugify`.
   Lightcast, OpenSALT, Learning Commons, DigComp, Cert Atlas, BNCC, CSP, Oak,
   Skills England, and the hubs in `data/_foundations.json`. Each Oak unit is one
   skill with source `oak`, tags `oak:<unitSlug>` and `grade:*` (Year N is grade
-  N−1; Year 1 is K). Each Skills England knowledge, skill, or behaviour
-  statement is one skill with source `skillsengland` and tag
-  `occupation:<slug>`, which stage `tag` reads as a direct occupation; a
-  behaviour "Head - text" takes the head as its title. Each leaf standard of a
-  current CSP set is one skill with source `csp`, tags `csp`, `grade:*` when the
-  set names at most 4 grades, and `code:<statementNotation>` unless the notation
-  lists several codes; a standard that parents another is a heading. Each BNCC
-  objective is one skill with source `bncc`, tags `bncc:objective`,
-  `bncc:subject:*`, `grade:*`, and `code:<codigo>`. Each Cert Atlas objective is
-  one skill with source `certatlas`, no tags, and a description of exam,
-  certifying body, domain, and sub-objectives; a title with no Latin letter is
-  dropped and counted. Each DigComp LearningOutcome is one skill with tags
-  `digcomp:outcome`, `digcomp:area:*`, `digcomp:competence:*`, and
-  `digcomp:level:*`; stage `seed-edges` turns the levels into seed order. An
+  N−1; Year 1 is K). Each Skills England knowledge or skill statement is one
+  skill with source `skillsengland`, tag `occupation:<slug>`, which stage `tag`
+  reads as a direct occupation, and tag `skillsengland:level:<n>`. Each leaf
+  standard of a current CSP set is one skill with source `csp`, tags `csp`,
+  `grade:*` when the set names at most 4 grades, and `code:<statementNotation>`
+  unless the notation lists several codes; a standard that parents another is a
+  heading. Each BNCC objective is one skill with source `bncc`, tags
+  `bncc:objective`, `bncc:subject:*`, `grade:*`, and `code:<codigo>`. Each Cert
+  Atlas objective is one skill with source `certatlas`, no tags, and a
+  description of exam, certifying body, domain, and sub-objectives; a title with
+  no Latin letter is dropped and counted. Each DigComp LearningOutcome is one
+  skill with tags `digcomp:outcome`, `digcomp:area:*`, `digcomp:competence:*`,
+  and `digcomp:level:*`; stage `seed-edges` turns the levels into seed order. An
   OpenSALT item with no `educationLevel` takes its nearest `isChildOf`
   ancestor's. Each item of a framework that grades no item (SCED, Praxis) gets
   `opensalt:ungraded-framework`. OpenSALT statements parse as HTML with
@@ -387,22 +354,22 @@ A new build table gets a schema; a new id goes through `slugify`.
   `code:<statementCode>`. A `buildsTowards` endpoint also gets
   `learningcommons:coherence` and skips the long-title drop. Other sources keep
   `<…>` as text.
-- Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, MOOCCubeX, course
-  prerequisites, Oak (`oak_thread`: within one track — primary, then one exam
-  board, exam subject, and tier — a unit precedes the next unit of each of its
-  threads; `oak_prior`: each `priorKnowledgeRequirements` statement precedes its
-  unit), OpenSALT precedes, OpenSALT within-framework grade ordering, Learning
-  Commons `buildsTowards`, DigComp level order (within one competence, each
-  outcome of a level precedes each outcome of the next; a merged outcome sits at
-  its lowest level). Learning Commons resolves through `build/1m_lc_ids.tsv` and
-  `3b_aliases.tsv`, not by label. A pair with an end that stage `list` dropped
-  goes to `build/1e_unresolved.tsv` with reason `no-skill`. Pairs resolve to
-  skill IDs by exact match (case, plurals, and -ing/-ed folded, unless two
-  skills share the fold), then by embedding (cosine ≥ 0.90 and a shared token).
-  Past √n labels, the IVF index of stage `prereq` finds each label's nearest
-  skill. Unresolved pairs go to `build/1e_unresolved.tsv` with a reason per
-  label. A source that gives both A → B and B → A loses both, as does a course
-  pair inside a seed cycle (`contested-order`): expert sources outrank course
+- Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, course prerequisites,
+  Oak (`oak_thread`: within one track — primary, then one exam board, exam
+  subject, and tier — a unit precedes the next unit of each of its threads;
+  `oak_prior`: each `priorKnowledgeRequirements` statement precedes its unit),
+  OpenSALT within-framework grade ordering, Learning Commons `buildsTowards`,
+  DigComp level order (within one competence, each outcome of a level precedes
+  each outcome of the next; a merged outcome sits at its lowest level). Learning
+  Commons resolves through `build/1m_lc_ids.tsv` and `3b_aliases.tsv`, not by
+  label. A pair with an end that stage `list` dropped goes to
+  `build/1e_unresolved.tsv` with reason `no-skill`. Pairs resolve to skill IDs
+  by exact match (case, plurals, and -ing/-ed folded, unless two skills share
+  the fold), then by embedding (cosine ≥ 0.90 and a shared token). Past √n
+  labels, the IVF index of stage `prereq` finds each label's nearest skill.
+  Unresolved pairs go to `build/1e_unresolved.tsv` with a reason per label. A
+  source that gives both A → B and B → A loses both, as does a course pair
+  inside a seed cycle (`contested-order`): expert sources outrank course
   catalogs. Each Khan exercise resolves through the `khan:<slug>` tag of its
   OpenSALT item.
 - Stage `trees`: LCSH (gunzip) and DBpedia (bzcat) SKOS broader chains, cached
@@ -411,9 +378,9 @@ A new build table gets a schema; a new id goes through `slugify`.
 
 **LLM enrichment** (stage `enrich`): fill missing Lightcast descriptions;
 summarize each title over 120 characters or with a slug over 80 into a 3-7 word
-name; expand short O\*NET task statements and OpenSALT standards; translate
-MOOCCubeX labels and BNCC objectives (first, since stage `list` needs them).
-Resumable via the `1b`–`1g` caches. Stage `list` applies them on its next run.
+name; expand short O\*NET task statements and OpenSALT standards; translate BNCC
+objectives (first, since stage `list` needs them). Resumable via the `1b`–`1g`
+caches. Stage `list` applies them on its next run.
 
 **Prereq inference** (stage `prereq`): per-skill top-K candidates by cosine
 similarity (within-topic + ancestor + cross-topic pools; an IVF index serves the
@@ -511,10 +478,10 @@ Caches for per-stage resumption. Key files:
 - `1m_lc_ids.tsv` — Learning Commons node id to skill id (`node_id, skill_id`),
   written by stage `list`.
 - `1b_infill.tsv`, `1c_summarize.tsv`, `1d_onet_desc.tsv`,
-  `1e_opensalt_desc.tsv`, `1f_translate.tsv`, `1g_bncc_translate.tsv` — LLM
-  enrichment caches, `key<TAB>value`.
+  `1e_opensalt_desc.tsv`, `1g_bncc_translate.tsv` — LLM enrichment caches,
+  `key<TAB>value`.
 - `1e_seed_edges.tsv` — resolved expert-labeled prereq pairs from
-  Khan/AL-CPL/Metacademy/MOOCCubeX/courses/OpenSALT.
+  Khan/AL-CPL/Metacademy/courses/Oak/OpenSALT/Learning Commons/DigComp.
 - `1e_unresolved.tsv` — seed pairs that failed to resolve, with a reason per
   label (below-cos / no-token-overlap / no-match).
 - `1j_lcsh_tree.tsv`, `1k_dbpedia_tree.tsv` — SKOS broader-chain caches:

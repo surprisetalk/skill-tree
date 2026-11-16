@@ -1,2 +1,0 @@
-* statement and proof of the strong law of large numbers
-* why almost sure convergence implies convergence in probability

@@ -1,3 +1,0 @@
-tag: mean-field
-
-tag: exponential-families

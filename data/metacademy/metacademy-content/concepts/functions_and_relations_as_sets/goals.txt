@@ -1,2 +1,0 @@
-* Define ordered pairs, functions, and relations in terms of sets
-* Show that the definitions correspond with our intuitions for how these objects should behave

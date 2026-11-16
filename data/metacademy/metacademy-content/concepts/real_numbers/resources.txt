@@ -1,4 +1,0 @@
-source: rudin_mathematical_analysis
-edition: 3
-location: Chapter 1, "The real and complex number systems," up through subsection "The real field," pages 1-11
-core: 1

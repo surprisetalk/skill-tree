@@ -1,1 +1,0 @@
-weight decay in neural networks
