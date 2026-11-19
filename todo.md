@@ -10,6 +10,30 @@ first for `enrich` and `prereq`).
   1. Time each condition in `stageStatus` with `performance.now()`. Cut the
      slowest before you guess.
 
+- [ ] `deno task status` passes "Every 5_prereqs.tsv row names skills of the
+      current difficulty stage, each pick easier than its skill." Cause:
+      `build/4_difficulty.tsv` (16 Nov) is newer than `build/5_prereqs.tsv` and
+      `skills.tsv` (14 Nov). Difficulty reran after `prereq`, so 37% of rows
+      name skills that the new difficulty stage lacks, or picks that sit above
+      their skill.
+  1. After the API limit resets, run
+     `set -a; . ./.env; set +a; sh build/chain/chain.sh prereq`. The `prereq`
+     purge re-asks only the stale rows, and the chain then runs `snap`,
+     `postproc`, `finalize`, and `status`.
+  2. Read `build/chain/status.log`. If this condition passes and the edge
+     conditions move, note which in the entries below.
+
+- [ ] `deno task status` passes "At least 80% of seed edges survive into
+      skills.tsv." and "Under 20% of skills have no prereqs and no dependents."
+      Cause: unknown. Ruled out: the stale `5_prereqs.tsv` alone, because these
+      two conditions have failed since 21 Oct, before the CSP merge.
+  1. Count the seed edges that miss `skills.tsv` by reason: area edge dropped,
+     chain-lift drop, or an endpoint absent. Read `above()` and `areaEdge()` in
+     `pipeline.ts`.
+  2. Read 20 skills with no prereqs and no dependents. Check whether each is a
+     leaf with no candidate, or a skill whose picks the purge removed. Fix the
+     larger group first.
+
 - [ ] Stage `prereq` reaches more expert prereq pairs in its candidate pool, and
       classifies with Cloudflare Clef where Clef beats Haiku 5.5. Facts:
       `@cf/cloudflare/clef-flash` (9B), `noul` yes/no questions, 1–64 per call,
