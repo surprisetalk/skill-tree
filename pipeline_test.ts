@@ -393,9 +393,18 @@ const runIn = async (
   const stderr = new TextDecoder().decode(out.stderr);
   const stdout = new TextDecoder().decode(out.stdout);
   // Stage status prints one JSON object, or nothing when it crashes.
-  const report = stage === "status" && stdout
-    ? JSON.parse(stdout) as Record<string, { "0": number }>
-    : {};
+  let report: Record<string, { "0": number }> = {};
+  if (stage === "status" && stdout) {
+    try {
+      report = JSON.parse(stdout);
+    } catch {
+      throw new Error(
+        `status stdout: expected one JSON object, received "${
+          stdout.slice(0, 200)
+        }" (exit ${out.code}). A stage log line went to stdout: send it to console.error.`,
+      );
+    }
+  }
   return {
     code: out.code,
     stderr,

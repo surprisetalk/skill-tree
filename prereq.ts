@@ -597,20 +597,30 @@ function prune<C extends Columns>(
 // skills.tsv, `deno task status` passes "Every 5_prereqs.tsv row names skills
 // of the current difficulty stage, each pick easier than its skill.", and
 // Oak's prior-knowledge statements become named prereqs of their units.
-// Blocker: your go on the LLM spend (you, 14 Nov: timings approved, spend
-// held). Decision: every current set; the 1,508 sets that state no licence
-// count as permitted for now (you, 10 Nov).
+// Blocker: the API usage limit you set in the Anthropic Console. Spend
+// approved (you, 20 Nov: about $23 at Haiku 5.5 batch rates). Decision: every
+// current set; the 1,508 sets that state no licence count as permitted for
+// now (you, 10 Nov).
 //   1. Facts: 4_difficulty.tsv holds 412,879 skills (16 Nov) and
 //      5_prereqs.tsv 93,601 rows (14 Nov), so this run asks every CSP skill.
 //      It sends about 128M input and 65M output tokens at 15 candidates a
 //      skill, plus 17k `enrich` summaries of long Skills England statements.
 //      Stage snap then sends about 6,800 Oak prompts (3.4M input tokens).
-//   2. The Anthropic API usage limit holds until 2026-12-01 00:00 UTC.
+//   2. On 20 Nov enrich got 400 "You have reached your specified API usage
+//      limits. You will regain access on 2026-12-01 at 00:00 UTC." Credits
+//      remain; the cap blocks. You raise the cap in the Console's limits
+//      page, or wait for 2026-12-01.
 //   3. If the 35-candidate pool (TODO at candidateShare) lands first,
 //      re-estimate (about 2.3× input) and ask again.
 //   4. Run `set -a; . ./.env; set +a; sh build/chain/chain.sh prereq`. The
 //      chain then runs snap, postproc, finalize, and status.
-//   5. Read build/chain/status.log. Note which edge conditions move.
+//   5. Read build/chain/status.log. "At least 80% of seed edges survive"
+//      and "Under 20% of skills have no prereqs and no dependents" should
+//      pass. On 20 Nov they failed because skills.tsv (14 Nov) predates the
+//      CSP and Oak build: 2,217 of 2,532 missed seeds are oak_thread pairs
+//      whose units skills.tsv lacks (96% survive without them), and 50,843
+//      of 55,299 isolated skills (49k CSP) have no 5_prereqs.tsv row. If
+//      either still fails, count the misses by reason again.
 export async function stagePrereq() {
   const { skills, diff, raw } = parseSkillsWithDifficulty();
   // A cache row is stale when it names an id outside this build (a rename or
