@@ -1,8 +1,9 @@
 # claude.md
 
 skill-tree aggregates open datasets to build a skill prerequisite graph. See
-`todo.md` for data source tracking, `research.md` for prior work, and
-`readme.md` for the dataset catalog, schemas, stage details, and build files.
+`TODO:` comments and readme `TODO:` items for the backlog, `research.md` for
+prior work, and `readme.md` for the dataset catalog, schemas, stage details, and
+build files.
 
 ## Commands
 

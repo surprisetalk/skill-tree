@@ -392,7 +392,8 @@ const runIn = async (
   Deno.removeSync(dir, { recursive: true });
   const stderr = new TextDecoder().decode(out.stderr);
   const stdout = new TextDecoder().decode(out.stdout);
-  const report = stdout.startsWith("{")
+  // Stage status prints one JSON object, or nothing when it crashes.
+  const report = stage === "status" && stdout
     ? JSON.parse(stdout) as Record<string, { "0": number }>
     : {};
   return {
@@ -2534,6 +2535,42 @@ Deno.test(
     ) assertEquals(score(name), 0, name);
     assertEquals(
       score("Enough expert prereq pairs resolve to skills to grade them."),
+      1,
+    );
+  }),
+);
+
+// The cached embedding of "counting objects" points along counting's, so the
+// fallback matches it without Ollama.
+Deno.test(
+  "status: an expert label resolves by embedding, and stdout stays one JSON object",
+  early(async () => {
+    const vec = new Float32Array(768);
+    vec[0] = 1;
+    const rec = new Uint8Array(32 + 768 * 4);
+    rec.set(
+      new Uint8Array(
+        await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode("counting objects"),
+        ),
+      ),
+    );
+    rec.set(new Uint8Array(vec.buffer), 32);
+    const build = {
+      ...goodBuild(),
+      // Without the fallback, 1 positive resolves, under EXPERT_MIN_POSITIVES.
+      ...junyiFixture([
+        "addition_1,counting_objects,7",
+        "multiplication,counting_objects,7",
+        "calculus,addition_1,7",
+      ]),
+      "build/2_cache.bin": rec,
+    };
+    const { code, score, stderr } = await runIn("status", build);
+    assertEquals(code, 0, stderr);
+    assertEquals(
+      score("Enough junyi crowd prereq pairs resolve to skills to grade them."),
       1,
     );
   }),

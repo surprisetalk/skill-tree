@@ -16,6 +16,7 @@ deno run -A pipeline.ts seed-edges # one stage
 deno task check                    # fmt, lint, typecheck
 deno task test                     # runs stage list for real, in seconds
 deno task status                   # grades the last full build; exits 1 on a failing condition
+sh build/chain/chain.sh prereq     # one stage, then every later stage (load .env first for enrich and prereq)
 ```
 
 Stages, in order: `list` → `enrich` → `trees` → `embed` → `tag` → `dedupe` →
@@ -298,6 +299,13 @@ each standard set's raw API body to **{setId}.json.gz**. A set has `subject`,
 `parentId`). Each set states its own licence (CC BY 4.0 US or CC BY 3.0 US);
 1,508 state none. Stage `list` reads every set.
 
+- TODO: You: ASN standards that CSP lacks appear in `skills.tsv`. Blocker: ASN's
+  reply. You sent the bulk-access request through
+  `asn.desire2learn.com/content/contact-us` (12 Nov).
+  1. Only single documents download
+     (`asn.desire2learn.com/resources/{id}_full.json`). CSP first imported its
+     states from ASN, so ASN adds mostly duplicates.
+
 ### data/oak/ — Oak National Academy (gzipped JSON, tracked in git)
 
 England's school curriculum, KS1–KS4, OGL v3. The API at
@@ -347,14 +355,14 @@ Florida, etc.), plus specialty frameworks (CASEL, 21st Century Skills, AP CS).
 `list`, `enrich`, `trees`, `embed`, `tag`, `dedupe`, `seed-edges`, `difficulty`,
 `prereq`, `snap`, `postproc`, `finalize`, `status`.
 
-| File               | Holds                                                                  |
-| ------------------ | ---------------------------------------------------------------------- |
-| `pipeline.ts`      | Entry point: stage dispatch and stage `status`.                        |
-| `lib.ts`           | Names that two files share: text cleanup, TSV/CSV, Claude, embeddings. |
-| `sources.ts`       | Stages `list`, `enrich`, `trees`, `seed-edges`.                        |
-| `graph.ts`         | Stages `embed`, `tag`, `dedupe`, `difficulty`.                         |
-| `prereq.ts`        | Stages `prereq`, `snap`, `postproc`, `finalize`.                       |
-| `prereq_worker.ts` | One core's share of the prereq candidate search.                       |
+| File          | Holds                                                                  |
+| ------------- | ---------------------------------------------------------------------- |
+| `pipeline.ts` | Entry point: stage dispatch and stage `status`.                        |
+| `lib.ts`      | Names that two files share: text cleanup, TSV/CSV, Claude, embeddings. |
+| `sources.ts`  | Stages `list`, `enrich`, `trees`, `seed-edges`.                        |
+| `graph.ts`    | Stages `embed`, `tag`, `dedupe`, `difficulty`.                         |
+| `prereq.ts`   | Stages `prereq`, `snap`, `postproc`, `finalize`.                       |
+| `worker.ts`   | One core's share of the prereq candidate or nearest-skill search.      |
 
 Parses datasets into a unified schema, embeds via Ollama `nomic-embed-text`,
 assigns occupations/topics, dedupes, infers difficulty (isotonic PAV + kNN
@@ -402,8 +410,8 @@ smoothing), ranks prerequisites via Claude Haiku 5.5, breaks cycles, and emits
   label. A pair with an end that stage `list` dropped goes to
   `build/1e_unresolved.tsv` with reason `no-skill`. Pairs resolve to skill IDs
   by exact match (case, plurals, and -ing/-ed folded, unless two skills share
-  the fold), then by embedding (cosine ≥ 0.90 and a shared token). Past √n
-  labels, the IVF index of stage `prereq` finds each label's nearest skill.
+  the fold), then by embedding (cosine ≥ 0.90 and a shared token). An exact
+  scan, split across one worker per core, finds each label's nearest skill.
   Unresolved pairs go to `build/1e_unresolved.tsv` with a reason per label. A
   source that gives both A → B and B → A loses both, as does a course pair
   inside a seed cycle (`contested-order`): expert sources outrank course

@@ -2657,7 +2657,7 @@ export async function stageSeedEdges() {
   // REVIEW: Keep courses although about 85% of its distinct topics name no
   // skill (7 Nov: 6,275 below the gate, 1,552 edges resolve). The unresolved
   // ones go to quarantine and cost nothing. Alternative: drop the source, as
-  // todo.md planned when most titles fail. It loses a third of the seed edges.
+  // planned when most titles fail. It loses a third of the seed edges.
   const courses = await readCoursePairs();
   for (const p of courses.pairs) addRaw(p.src, p.dst, "courses", p.raw);
   console.log(
@@ -2965,6 +2965,19 @@ export async function stageSeedEdges() {
   // postproc break the cycle by rank. It keeps the cycle in the seeds that
   // stage difficulty reads. One pass suffices: dropping edges only splits
   // a cycle, so no kept course edge enters one.
+  // TODO: A course-catalog seed never puts a college requirement before a
+  // school concept: academic-writing → drawing, songwriting → music-theory,
+  // medical-nutrition-therapy → nutrition, calculus → probability. These are
+  // course seeds, not named prereqs: only 18 named edges put a specialisation
+  // first. Dropping every course seed is rejected: at CSP scale recall falls
+  // 54 → 31 and sanity stays 13/23. 97% of course pairs come from one
+  // institution, so a two-institution rule drops nearly all of them.
+  //   1. Wait for the CSP prereq run (TODO at stagePrereq): recall decides.
+  //   2. The resolver fold (14 Nov) grades 382 LectureBank positives, not 258:
+  //      rerun the drop-all-course-seeds comparison on it.
+  //   3. Read the 80 course seeds that conflict with an anchor at CSP scale
+  //      (seed_anchor_conflicts_by_source in build/4_stats.json), and find a
+  //      rule that drops those without the recall loss.
   // Stage difficulty reads the non-holdout seeds only. stronglyConnected
   // leaves out a node in no cycle, so comp.has guards the comparison.
   const succ = new Map<string, string[]>();

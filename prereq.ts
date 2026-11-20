@@ -14,6 +14,7 @@ import {
   EXPAND,
   expertScores,
   FRAMEWORK_RE,
+  inWorkers,
   type Ivf,
   IVF_EXACT_MAX,
   ivfIndex,
@@ -173,6 +174,7 @@ const FOUNDATION_IDS = new Set([
 // One worker's share of the candidate search: skills w, w + of, w + 2·of, …
 // The arrays sit on SharedArrayBuffers, so no worker copies them.
 export type CandidateShare = {
+  job: "candidates";
   vecs: Float32Array;
   cent: Float32Array;
   // The IVF lists end to end: list c is members[starts[c]..starts[c + 1]].
@@ -210,6 +212,27 @@ export function candidateShare(
     }
   }
   const pathological = new Set(readTable(PATHOLOGICAL).map((r) => r.id));
+  // TODO: Stage prereq reaches more expert prereq pairs in its candidate
+  // pool, and classifies with Cloudflare Clef where Clef beats Haiku 5.5.
+  // Facts: `@cf/cloudflare/clef-flash` (9B), `noul` yes/no questions, 1–64 per
+  // call, $0.038/M input, 10k neurons a day free. CLOUDFLARE_API_TOKEN is in
+  // .env. Snap stays on Haiku: on 50 disagreements an Opus judge finds Haiku
+  // right 35 times, Clef 13 (build/clef/snap_labels.tsv; you spot-check rows
+  // 2, 4, 11, 14, 22, 26, 29, 32, 49, 50). Pool (14 Nov, LectureBank 258
+  // positives): 44% fail the easier-than guard in candOk, 37% share no topic
+  // with the dependent, 15% rank past the top slots, 2% reach the pool. Junyi:
+  // 17 of 70 reach it. Picks on Junyi (68 dependents): clef-flash p ≥ 0.5 8/8,
+  // Haiku 5/5; too few graded edges to decide. Expert labels resolve at most 1
+  // in 6 even with loose matching: about 60% name a concept the graph lacks
+  // (LectureBank is ML, NLP, vision, bio). Study scripts: build/clef/.
+  //   1. Add 20 exact-cosine slots from all valid skills, any topic, at the
+  //      end of candidateShare (K 15 → 35). Measured: LectureBank 5 → 12 of
+  //      258, Junyi 17 → 24 of 70. Cost: 2.3× prompt tokens a skill, which
+  //      voids the CSP spend estimate. Leave the easier-than guard on: a
+  //      harder candidate yields inverted edges.
+  //   2. Rerun the Junyi and LectureBank pick trials on the 35-candidate
+  //      pools. Switch prereq to clef-flash only if its precision holds on at
+  //      least 20 graded edges.
   const K = 15;
   // Shorter tokens ("prepar") link prepare-medication to prepare-pasta.
   const TOK_MIN = 7;
@@ -495,7 +518,8 @@ async function prereqCandidates(
   const starts = [0];
   for (const l of ivf.lists) starts.push(starts.at(-1)! + l.length);
   const share = {
-    vecs: shared((b) => new Float32Array(b), vecs),
+    job: "candidates" as const,
+    vecs,
     cent: shared((b) => new Float32Array(b), ivf.cent),
     members: shared((b) => new Int32Array(b), ivf.lists.flat()),
     starts: shared((b) => new Int32Array(b), starts),
@@ -508,35 +532,13 @@ async function prereqCandidates(
     ),
   );
   const t0 = performance.now();
-  const shares = await Promise.all(
-    Array.from(
-      { length: of },
-      (_, w) =>
-        new Promise<ReturnType<typeof candidateShare>>((resolve, reject) => {
-          const worker = new Worker(
-            new URL("./prereq_worker.ts", import.meta.url),
-            { type: "module" },
-          );
-          const fail = (why: string) => {
-            worker.terminate();
-            reject(
-              new Error(
-                `[prereq] candidate worker ${w} of ${of}: expected candidate lists, received ${why}. Rerun: deno run -A pipeline.ts prereq`,
-              ),
-            );
-          };
-          worker.onmessage = (e) => {
-            worker.terminate();
-            resolve(e.data);
-          };
-          worker.onerror = (e) => {
-            e.preventDefault();
-            fail(`an error: ${e.message}`);
-          };
-          worker.onmessageerror = () => fail("a message it could not read");
-          worker.postMessage({ ...share, w, of } satisfies CandidateShare);
-        }),
-    ),
+  const shares = await inWorkers<
+    CandidateShare,
+    ReturnType<typeof candidateShare>
+  >(
+    Array.from({ length: of }, (_, w) => ({ ...share, w, of })),
+    "prereq",
+    "candidate lists",
   );
   const secs: Record<string, number> = {};
   for (const r of shares) {
@@ -591,6 +593,24 @@ function prune<C extends Columns>(
   );
 }
 
+// TODO: You: Skills from every Common Standards Project (CSP) set appear in
+// skills.tsv, `deno task status` passes "Every 5_prereqs.tsv row names skills
+// of the current difficulty stage, each pick easier than its skill.", and
+// Oak's prior-knowledge statements become named prereqs of their units.
+// Blocker: your go on the LLM spend (you, 14 Nov: timings approved, spend
+// held). Decision: every current set; the 1,508 sets that state no licence
+// count as permitted for now (you, 10 Nov).
+//   1. Facts: 4_difficulty.tsv holds 412,879 skills (16 Nov) and
+//      5_prereqs.tsv 93,601 rows (14 Nov), so this run asks every CSP skill.
+//      It sends about 128M input and 65M output tokens at 15 candidates a
+//      skill, plus 17k `enrich` summaries of long Skills England statements.
+//      Stage snap then sends about 6,800 Oak prompts (3.4M input tokens).
+//   2. The Anthropic API usage limit holds until 2026-12-01 00:00 UTC.
+//   3. If the 35-candidate pool (TODO at candidateShare) lands first,
+//      re-estimate (about 2.3× input) and ask again.
+//   4. Run `set -a; . ./.env; set +a; sh build/chain/chain.sh prereq`. The
+//      chain then runs snap, postproc, finalize, and status.
+//   5. Read build/chain/status.log. Note which edge conditions move.
 export async function stagePrereq() {
   const { skills, diff, raw } = parseSkillsWithDifficulty();
   // A cache row is stale when it names an id outside this build (a rename or
@@ -769,7 +789,7 @@ export async function stageSnap() {
 // of 10 Nov. An edge drops when its prereq is a subject area and its dependent
 // carries that area as a topic: "mathematics → arithmetic" orders nothing.
 // "linear-algebra → dimensionality-reduction" stays. Alternative: drop every
-// edge of a subject area, as todo.md first said. Then 59 of the 258 expert
+// edge of a subject area, the first plan. Then 59 of the 258 expert
 // positives (linear-algebra → word-embedding, …) can never be recalled.
 // Topics come from 3b_tagged_deduped.tsv: stage finalize adds LCSH ancestors
 // after this stage, and the areas must not move under the filter.

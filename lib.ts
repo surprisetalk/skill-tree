@@ -797,7 +797,7 @@ export async function embedBatch(
   for (let i = 0; i < contents.length; i++) {
     if (!cache.has(hashHex[i])) missing.push(i);
   }
-  console.log(
+  console.error(
     `[${label}] embedding ${contents.length} (${missing.length} new)`,
   );
   let done = 0;
@@ -902,7 +902,10 @@ export function normalizedEmbeddingsForSkills(
   skillIds: string[],
 ): Float32Array {
   const { emb, idToEmbIdx } = loadRawEmbeddings();
-  const vecs = new Float32Array(skillIds.length * EMBED_DIM);
+  // Shared memory, so workers (inWorkers) read it without a copy.
+  const vecs = new Float32Array(
+    new SharedArrayBuffer(skillIds.length * EMBED_DIM * 4),
+  );
   for (let i = 0; i < skillIds.length; i++) {
     const ei = idToEmbIdx.get(skillIds[i]);
     if (ei === undefined) {
@@ -1891,6 +1894,68 @@ export function ivfTop(
   return top.sort((a, b) => b.score - a.score);
 }
 
+// One worker's share of the nearest-skill scan: labels w, w + of, w + 2·of, …
+// It writes each label's nearest row of mat above floor into nearest, else -1.
+// The arrays sit on SharedArrayBuffers, so no worker copies them.
+export type NearestShare = {
+  job: "nearest";
+  mat: Float32Array;
+  labels: Float32Array;
+  floor: number;
+  nearest: Int32Array;
+  w: number;
+  of: number;
+};
+
+export function nearestShare(
+  { mat, labels, floor, nearest, w, of }: NearestShare,
+): null {
+  const n = mat.length / EMBED_DIM;
+  for (let li = w; li < labels.length / EMBED_DIM; li += of) {
+    let best = -1, bestScore = floor;
+    for (let si = 0; si < n; si++) {
+      const sc = dot(labels, li * EMBED_DIM, mat, si * EMBED_DIM);
+      if (sc > bestScore) [best, bestScore] = [si, sc];
+    }
+    nearest[li] = best;
+  }
+  return null;
+}
+
+// Runs each job in its own worker.ts, in parallel, and returns the replies in
+// job order.
+export function inWorkers<M, R>(
+  jobs: M[],
+  stage: string,
+  what: string,
+): Promise<R[]> {
+  return Promise.all(jobs.map((job, w) =>
+    new Promise<R>((resolve, reject) => {
+      const worker = new Worker(new URL("./worker.ts", import.meta.url), {
+        type: "module",
+      });
+      const fail = (why: string) => {
+        worker.terminate();
+        reject(
+          new Error(
+            `[${stage}] worker ${w} of ${jobs.length}: expected ${what}, received ${why}. Rerun: deno run -A pipeline.ts ${stage}`,
+          ),
+        );
+      };
+      worker.onmessage = (e) => {
+        worker.terminate();
+        resolve(e.data);
+      };
+      worker.onerror = (e) => {
+        e.preventDefault();
+        fail(`an error: ${e.message}`);
+      };
+      worker.onmessageerror = () => fail("a message it could not read");
+      worker.postMessage(job);
+    })
+  ));
+}
+
 // Labels with no exact skill, matched by embedding. A match needs cosine
 // >= 0.90 and one shared token. `dropped` maps a label to its reason.
 export async function embeddingFallback(
@@ -1921,32 +1986,36 @@ export async function embeddingFallback(
   const { ids: embIds } = loadRawEmbeddings();
   const matIds = embIds.filter((id) => idSet.has(id));
   const mat = normalizedEmbeddingsForSkills(matIds);
-  console.log(`[${stage}] active vectors: ${matIds.length}/${embIds.length}`);
-  const labelVecs = (await embedBatch(labels, stage)).map((v, i) =>
-    normalize(v, `label "${labels[i]}"`)
+  console.error(`[${stage}] active vectors: ${matIds.length}/${embIds.length}`);
+  const labelVecs = new Float32Array(
+    new SharedArrayBuffer(labels.length * EMBED_DIM * 4),
   );
-  // REVIEW: Over √n labels, the IVF index finds each label's nearest skill.
-  // The index costs about n·√n dot products, and a label then costs about
-  // IVF_PROBE·√n, not n, so it pays only past √n labels. Alternative: the
-  // exact scan for every label. At the CSP scale (10,766 labels, 384k skills)
-  // it takes about an hour.
-  const n = matIds.length;
-  const ivf = labels.length > Math.sqrt(n) ? ivfIndex(mat, n) : null;
+  (await embedBatch(labels, stage)).forEach((v, i) =>
+    labelVecs.set(normalize(v, `label "${labels[i]}"`), i * EMBED_DIM)
+  );
+  // REVIEW: An exact scan finds each label's nearest skill, its labels split
+  // across one worker per core. Stage status: 66 s on one thread with the IVF
+  // index (145k skills, 665 labels), the index build 43 s of it. Alternative:
+  // the IVF index of stage prereq. Its build runs on one thread, about n·√n
+  // dot products, so it costs about as much as the parallel scan at 400k
+  // skills and 9k labels, and it misses a few nearest skills.
+  const nearest = new Int32Array(new SharedArrayBuffer(labels.length * 4));
+  const of = Math.min(navigator.hardwareConcurrency, labels.length);
+  await inWorkers(
+    Array.from({ length: of }, (_, w): NearestShare => ({
+      job: "nearest",
+      mat,
+      labels: labelVecs,
+      floor: FALLBACK,
+      nearest,
+      w,
+      of,
+    })),
+    stage,
+    "nearest skills",
+  );
   for (let li = 0; li < labels.length; li++) {
-    const lv = labelVecs[li];
-    let best = -1, bestScore = FALLBACK;
-    if (ivf) {
-      const [top] = ivfTop(ivf, mat, lv, 1, () => true);
-      if (top && top.score > FALLBACK) best = top.idx;
-    } else {
-      for (let si = 0; si < n; si++) {
-        const sc = dot(lv, 0, mat, si * EMBED_DIM);
-        if (sc > bestScore) {
-          bestScore = sc;
-          best = si;
-        }
-      }
-    }
+    const best = nearest[li];
     if (best < 0) {
       dropped.set(labels[li], `below-cos-${FALLBACK}`);
       continue;
@@ -1961,7 +2030,7 @@ export async function embeddingFallback(
     }
     matched.set(labels[li], matIds[best]);
   }
-  console.log(
+  console.error(
     `[${stage}] fallback matched ${matched.size}/${labels.length} @ cos≥${FALLBACK}`,
   );
   return { matched, dropped };

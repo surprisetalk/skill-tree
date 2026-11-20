@@ -89,8 +89,8 @@ const ANOMALOUS_HUB_RE =
 
 // REVIEW: Floors from the first full Claude build: 258 positives, precision
 // 6/12, recall 10/258 (0.039). Each floor tightens a placeholder and never
-// loosens one. Recall keeps its 0.05 placeholder and fails, and todo.md tracks
-// the fix. Alternative: set recall to 0.03 so status passes. Then the floor
+// loosens one. Recall keeps its 0.05 placeholder and fails, and the TODO at
+// candidateShare tracks the fix. Alternative: set recall to 0.03 so status passes. Then the floor
 // grades this build, not the goal. The positive count stays at 3, the
 // fixture's count. Alternative: 200, which catches a resolver regression on
 // the real build. It needs a fixture build with 200 positive pairs.
@@ -244,6 +244,14 @@ async function stageStatus() {
     // A transitively reduced DAG drops a seed edge that a path implies: the
     // path keeps the seed's order, so the seed counts as kept.
     // Stage postproc drops a subject area's edges on purpose, seeds included.
+    // TODO: `deno task status` passes this and "Under 20% of skills have no
+    // prereqs and no dependents." Cause: unknown. Ruled out: the stale
+    // 5_prereqs.tsv alone, because both have failed since 21 Oct.
+    //   1. Count the seed edges that miss skills.tsv by reason: area edge
+    //      dropped, chain-lift drop, or an endpoint absent.
+    //   2. Read 20 skills with no prereqs and no dependents. Check whether
+    //      each is a leaf with no candidate, or a skill whose picks the purge
+    //      removed. Fix the larger group first.
     ["At least 80% of seed edges survive into skills.tsv.", () => {
       const all = seeds().filter((e) => !areaEdge()(e.dep, e.pre));
       const kept = all.filter((e) => above()(e.dep).has(e.pre));
@@ -380,6 +388,18 @@ async function stageStatus() {
     // codes from memory. Correct any row, then drop this prefix. Do not tune a
     // stage to the list; it is the check, not the target. Alternative: no
     // sanity goal, and judge the band fix by eye on the overview page.
+    // TODO: You: A skill's band says when a typical learner can first learn
+    // it. Sanity fit is 12/23 at CSP scale (goal 80%), Kendall τ 0.76.
+    // Decision (you, 11 Nov): no college-level anchors. Misses: nutrition 13,
+    // grammar 12, drawing 9, chemical-reactions 11, machine-learning 12. A
+    // merged skill anchors at the lowest grade of its standards, so CSP pulls
+    // some down: reading-comprehension K, pythagorean-theorem grade 7,
+    // project-management grade 6. Rejected (14 Nov): the median grade as the
+    // anchor (sanity 12 → 11/23, a spot check fails, τ same). Rejected at 93k:
+    // a topic pool under 15 anchors falls back to all anchors.
+    //   1. You check the rows that CSP contradicts: reading-comprehension
+    //      (CCSS has K reading standards), pythagorean-theorem,
+    //      project-management, and the data/_sanity.tsv REVIEW: note above.
     ["At least 80% of the sanity skills sit in their expected band.", () => {
       const path = "data/_sanity.tsv";
       const rows = readTsv(path);
@@ -522,6 +542,10 @@ async function stageStatus() {
       report[name] = { "0": score };
     }
   });
+  // Since process start. It fails at 100 s, snitch's limit for a status command.
+  report["Stage status finishes in under 30 s."] = {
+    "0": grade(performance.now() / 1000, 30, 100),
+  };
   console.log(JSON.stringify(report, null, 2));
   if (Object.values(report).some((r) => !(r["0"] >= 1))) Deno.exit(1);
 }
