@@ -597,8 +597,10 @@ function prune<C extends Columns>(
 // skills.tsv, `deno task status` passes "Every 5_prereqs.tsv row names skills
 // of the current difficulty stage, each pick easier than its skill.", and
 // Oak's prior-knowledge statements become named prereqs of their units.
-// Blocker: the API usage limit you set in the Anthropic Console. Spend
-// approved (you, 20 Nov: about $23 at Haiku 5.5 batch rates). Decision: every
+// Blocker: your go on about $100, and the organization's $50 monthly spend
+// cap. You approved $23 on 20 Nov, but that counted the picks only: 8–12 Nov
+// cost $34.63 for 93.6k skills (295M input, 79M output, 570k batch requests:
+// picks, expand, and snap rows of 1, 1, and 1.9 per skill). Decision: every
 // current set; the 1,508 sets that state no licence count as permitted for
 // now (you, 10 Nov).
 //   1. Facts: 4_difficulty.tsv holds 412,879 skills (16 Nov) and
@@ -607,9 +609,12 @@ function prune<C extends Columns>(
 //      skill, plus 17k `enrich` summaries of long Skills England statements.
 //      Stage snap then sends about 6,800 Oak prompts (3.4M input tokens).
 //   2. On 20 Nov enrich got 400 "You have reached your specified API usage
-//      limits. You will regain access on 2026-12-01 at 00:00 UTC." Credits
-//      remain; the cap blocks. You raise the cap in the Console's limits
-//      page, or wait for 2026-12-01.
+//      limits. You will regain access on 2026-12-01 at 00:00 UTC." November
+//      spend reached $50.02 on 16 Nov (`ant beta:organization:analytics:cost
+//      list --profile admin --time-bucket-width 1d`). The spend-limit API
+//      rejects this organization type, so you raise the cap in the Console
+//      limits page to at least $150, or wait for 2026-12-01, when $100 of a
+//      $50 cap still does not fit.
 //   3. If the 35-candidate pool (TODO at candidateShare) lands first,
 //      re-estimate (about 2.3× input) and ask again.
 //   4. Run `set -a; . ./.env; set +a; sh build/chain/chain.sh prereq`. The
