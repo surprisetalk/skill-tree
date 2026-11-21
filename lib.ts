@@ -1410,6 +1410,10 @@ export const PATHOLOGICAL = table({
   empty: true,
   columns: { id: SLUG },
 });
+// TODO: A push of the paid caches never hits GitHub's 100 MB file limit. On
+// 20 Nov build/5b_expand.tsv is 78 MB and build/5_prereqs.tsv 62 MB, and
+// GitHub warns above 50 MB.
+//   1. Track each cache as a gzip, as data/ does, and read it through gunzip.
 export const PREREQS = table({
   path: PREREQ_CACHE,
   key: "skill",
