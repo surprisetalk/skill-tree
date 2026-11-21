@@ -363,6 +363,14 @@ async function stageStatus() {
       }
       return grade(bad / edgeCount(), 0, 1);
     }],
+    // TODO: Every occupation id and skill id stays under the 80-character slug
+    // cap. On 20 Nov 1,889 skills carry a hex-overflow occupation, all Skills
+    // England standards with an option ("domestic-and-sexual-abuse-support-
+    // worker-independent-sexual-violence-dfa103"), and 63 skills keep a long
+    // title: enrich rejected 39 of their summaries.
+    //   1. Name an occupation with an option by the option alone, if no two
+    //      standards share it.
+    //   2. Rerun enrich: it asks the rejected summaries again.
     [
       "No skill has a hex-overflow id, a junk topic, or a hex-overflow occupation.",
       () => {
@@ -381,17 +389,18 @@ async function stageStatus() {
     // stage to the list; it is the check, not the target. Alternative: no
     // sanity goal, and judge the band fix by eye on the overview page.
     // TODO: A skill's band says when a typical learner can first learn it.
-    // Sanity fit is 15/23 (goal 80%), Kendall τ 0.76. Decision (you, 11 Nov):
-    // no college-level anchors. Decision (you, 20 Nov): trust CSP's anchors,
-    // so reading-comprehension, pythagorean-theorem, and project-management
-    // admit their CSP grades. Misses: nutrition 13, grammar 12, drawing 9,
-    // chemical-reactions 11, machine-learning 12. Rejected (14 Nov): the
-    // median grade as the anchor (sanity 12 → 11/23, a spot check fails, τ
-    // same). Rejected at 93k: a topic pool under 15 anchors falls back to all
-    // anchors.
-    //   1. After the CSP run (TODO at stagePrereq), regrade with
-    //      `deno task status`.
-    //   2. For each miss, read the anchors that set its band in
+    // After the CSP run (20 Nov) sanity fit is 10/23 (goal 80%), 13/23 with
+    // the local commit that admits CSP grades. Decision (you, 11 Nov): no
+    // college-level anchors. Decision (you, 20 Nov): trust CSP's anchors, so
+    // reading-comprehension, pythagorean-theorem, and project-management admit
+    // their CSP grades. Misses (band, expected): nutrition 13 (4–7), grammar
+    // 12 (3–6), drawing 9 (2–4), chemical-reactions 11 (7–10),
+    // machine-learning 12 (15–18); new since the CSP run: spreadsheets 12
+    // (7–10), budgeting 11 (6–10), first-aid 11 (7–10), accounting 11
+    // (12–15), probability 7 (8–9). Rejected (14 Nov): the median grade as the
+    // anchor (sanity 12 → 11/23, a spot check fails, τ same). Rejected at 93k:
+    // a topic pool under 15 anchors falls back to all anchors.
+    //   1. For each miss, read the anchors that set its band in
     //      build/4_difficulty.tsv, and find the shared cause.
     ["At least 80% of the sanity skills sit in their expected band.", () => {
       const path = "data/_sanity.tsv";
