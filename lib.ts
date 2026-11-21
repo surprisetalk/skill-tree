@@ -286,11 +286,17 @@ export const YEAR_RE = /(^|-)(19|20)\d\d(-|$)|^\d+$/;
 export const isJunkTopic = (t: string): boolean =>
   FRAMEWORK_RE.test(t) || WIKI_CAT_RE.test(t) || YEAR_RE.test(t);
 
-// REVIEW: Claude Haiku 5.5 through the Batches API, adaptive thinking at effort
-// "low". About $2 for a full prereq run, and the laptop stays cool.
+// REVIEW: Claude Haiku 5.5 through the Batches API, and the laptop stays cool.
 // Alternative: gpt-oss:20b on Ollama. It costs nothing but runs about 3 days
 // at full load on the Mac.
 const GEN_MODEL = "claude-haiku-5-5";
+// REVIEW: resumableClaude sends thinking off. On the 212 skills with an
+// expert positive pair (20 Nov), picks + expand + snap with thinking off made
+// 75 expert hits at precision 0.50 and recall 0.132; adaptive thinking at
+// effort "low", run twice, made 67 and 65 at 0.55 and 0.117. The precision gap
+// (0.05) is one standard error. Output tokens fall 17× on picks and 11× on
+// snap, so the CSP run costs about $43 instead of $76. Alternative: adaptive
+// thinking at effort "low", the setting of every cache row before 20 Nov.
 // Thinking counts against max_tokens; a reply that hits the cap is rejected.
 const THINK_TOKENS = 2000;
 // A batch takes up to 100,000 requests. request_counts stays at 0 until the
@@ -571,8 +577,8 @@ export async function resumableClaude<T extends { id: string }>(
           custom_id: h,
           params: {
             model,
-            max_tokens: (opts.numPredict ?? 120) + THINK_TOKENS,
-            thinking: { type: "adaptive" },
+            max_tokens: opts.numPredict ?? 120,
+            thinking: { type: "disabled" },
             output_config: opts.schema
               ? {
                 effort: "low",

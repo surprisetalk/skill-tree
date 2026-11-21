@@ -597,26 +597,20 @@ function prune<C extends Columns>(
 // skills.tsv, `deno task status` passes "Every 5_prereqs.tsv row names skills
 // of the current difficulty stage, each pick easier than its skill.", and
 // Oak's prior-knowledge statements become named prereqs of their units.
-// Blocker: your go on about $100, and the organization's $50 monthly spend
-// cap. You approved $23 on 20 Nov, but that counted the picks only: 8–12 Nov
-// cost $34.63 for 93.6k skills (295M input, 79M output, 570k batch requests:
-// picks, expand, and snap rows of 1, 1, and 1.9 per skill). Decision: every
+// Blocker: your go on about $45 (you approved $23 on 20 Nov). Decision: every
 // current set; the 1,508 sets that state no licence count as permitted for
 // now (you, 10 Nov).
-//   1. Facts: 4_difficulty.tsv holds 412,879 skills (16 Nov) and
-//      5_prereqs.tsv 93,601 rows (14 Nov), so this run asks every CSP skill.
-//      It sends about 128M input and 65M output tokens at 15 candidates a
-//      skill, plus 17k `enrich` summaries of long Skills England statements.
-//      Stage snap then sends about 6,800 Oak prompts (3.4M input tokens).
-//   2. On 20 Nov enrich got 400 "You have reached your specified API usage
-//      limits. You will regain access on 2026-12-01 at 00:00 UTC." November
-//      spend reached $50.02 on 16 Nov (`ant beta:organization:analytics:cost
-//      list --profile admin --time-bucket-width 1d`). The spend-limit API
-//      rejects this organization type, so you raise the cap in the Console
-//      limits page to at least $150, or wait for 2026-12-01, when $100 of a
-//      $50 cap still does not fit.
+//   1. Facts: 320,208 of 412,878 skills have no 5_prereqs.tsv row. A sample
+//      of 200 of them, thinking off, at Batch prices: picks 468 in / 14 out
+//      tokens, expand 382 / 60, snap 1.9 prompts of 742 / 9 (53% of names
+//      already sit in 5c_snap.tsv, 9% match exactly). About $43, plus 17k
+//      `enrich` summaries and 6,800 Oak snap prompts.
+//   2. November spend passed the old $50 cap on 16 Nov; you raised it on
+//      20 Nov. The run needs about $45 of room above November's spend
+//      (`ant beta:organization:analytics:cost list --profile admin
+//      --time-bucket-width 1d`).
 //   3. If the 35-candidate pool (TODO at candidateShare) lands first,
-//      re-estimate (about 2.3× input) and ask again.
+//      re-estimate (about 2.3× picks input) and ask again.
 //   4. Run `set -a; . ./.env; set +a; sh build/chain/chain.sh prereq`. The
 //      chain then runs snap, postproc, finalize, and status.
 //   5. Read build/chain/status.log. "At least 80% of seed edges survive"
@@ -691,7 +685,9 @@ export async function stagePrereq() {
   // computer-vision). On the 85 dependents of 252 missed expert pairs (11 Nov,
   // Haiku 5.5) it named 28 of them. Haiku runs both steps, as in the trial.
   // Alternative: Sonnet 5.5 for the names, as the pilot does; a few times the
-  // cost over every skill.
+  // cost over every skill. Alternative: no expand. It saves about a quarter of
+  // the cost, but in the 14 Nov build LectureBank recall falls from 0.207 to
+  // 0.039 and Junyi recall from 0.173 to 0.128 without the named edges.
   await resumableClaude(
     "prereq:expand",
     EXPAND.path,
@@ -716,6 +712,10 @@ export async function stagePrereq() {
 // Matches each named prereq to a skill: Claude's expand names, and Oak's
 // prior-knowledge statements. An exact match needs no prompt; else Claude
 // picks from the name's SNAP_K nearest skills.
+// REVIEW: Every inexact name gets a prompt. Alternative: take the nearest
+// skill above a cosine gate without one. Over 21,634 cached answers, 0.5% of
+// names reach 0.90, and there Claude chose the nearest skill only 51% of the
+// time.
 export async function stageSnap() {
   const { skills } = parseSkillsWithDifficulty();
   const ids = new Set(skills.map((s) => s.id));
