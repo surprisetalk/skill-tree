@@ -500,21 +500,7 @@ async function stageStatus() {
         ],
       ] as [string, () => Promise<number>][]
     ),
-    ["The build disk has at least 10 GB free.", async () => {
-      const out = await new Deno.Command("df", {
-        args: ["-k", "."],
-        signal: AbortSignal.timeout(10_000),
-      }).output();
-      if (!out.success) throw new Error(`df -k . exited ${out.code}`);
-      const line = new TextDecoder().decode(out.stdout).split("\n")[1] ?? "";
-      const kb = Number(line.split(/\s+/)[3]);
-      if (!Number.isFinite(kb)) {
-        throw new Error(
-          `df -k .: expected available KB in column 4 of line 2, received "${line}"`,
-        );
-      }
-      return grade(kb / 1024 ** 2, 10, 0);
-    }],
+    // NOTE: The status check grades no free disk space. Alternative: grade it here. It turns red in every project on the host when one disk fills.
   ];
 
   const report: Record<string, { "0": number }> = {};
