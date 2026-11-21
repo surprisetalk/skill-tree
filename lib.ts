@@ -295,7 +295,9 @@ const GEN_MODEL = "claude-haiku-5-5";
 // 75 expert hits at precision 0.50 and recall 0.132; adaptive thinking at
 // effort "low", run twice, made 67 and 65 at 0.55 and 0.117. The precision gap
 // (0.05) is one standard error. Output tokens fall 17× on picks and 11× on
-// snap, so the CSP run costs about $43 instead of $76. Alternative: adaptive
+// snap, so the CSP run costs about $43 instead of $76. On 40 enrich summaries
+// adaptive thinking barely fired (662 vs 638 output tokens), and the names
+// differed only in wording. Alternative: adaptive
 // thinking at effort "low", the setting of every cache row before 20 Nov.
 // Thinking counts against max_tokens; a reply that hits the cap is rejected.
 const THINK_TOKENS = 2000;
