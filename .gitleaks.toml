@@ -1,0 +1,11 @@
+# The default rules, less the build caches.
+[extend]
+useDefault = true
+
+# REVIEW: The pre-commit secret scan skips build/*.tsv: Claude answers and
+# stage outputs, about 1M rows after the CSP run, held each commit 10 min.
+# Alternative: scan them. A secret could hide in a cache row only if a source
+# dataset carried one into a skill title.
+[[allowlists]]
+description = "build caches"
+paths = ['''^build/[^/]+\.tsv$''']
