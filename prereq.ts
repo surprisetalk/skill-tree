@@ -593,33 +593,6 @@ function prune<C extends Columns>(
   );
 }
 
-// TODO: You: Skills from every Common Standards Project (CSP) set appear in
-// skills.tsv, `deno task status` passes "Every 5_prereqs.tsv row names skills
-// of the current difficulty stage, each pick easier than its skill.", and
-// Oak's prior-knowledge statements become named prereqs of their units.
-// Blocker: your go on about $45 (you approved $23 on 20 Nov). Decision: every
-// current set; the 1,508 sets that state no licence count as permitted for
-// now (you, 10 Nov).
-//   1. Facts: 320,208 of 412,878 skills have no 5_prereqs.tsv row. A sample
-//      of 200 of them, thinking off, at Batch prices: picks 468 in / 14 out
-//      tokens, expand 382 / 60, snap 1.9 prompts of 742 / 9 (53% of names
-//      already sit in 5c_snap.tsv, 9% match exactly). About $43, plus 17k
-//      `enrich` summaries and 6,800 Oak snap prompts.
-//   2. November spend passed the old $50 cap on 16 Nov; you raised it on
-//      20 Nov. The run needs about $45 of room above November's spend
-//      (`ant beta:organization:analytics:cost list --profile admin
-//      --time-bucket-width 1d`).
-//   3. If the 35-candidate pool (TODO at candidateShare) lands first,
-//      re-estimate (about 2.3× picks input) and ask again.
-//   4. Run `set -a; . ./.env; set +a; sh build/chain/chain.sh prereq`. The
-//      chain then runs snap, postproc, finalize, and status.
-//   5. Read build/chain/status.log. "At least 80% of seed edges survive"
-//      and "Under 20% of skills have no prereqs and no dependents" should
-//      pass. On 20 Nov they failed because skills.tsv (14 Nov) predates the
-//      CSP and Oak build: 2,217 of 2,532 missed seeds are oak_thread pairs
-//      whose units skills.tsv lacks (96% survive without them), and 50,843
-//      of 55,299 isolated skills (49k CSP) have no 5_prereqs.tsv row. If
-//      either still fails, count the misses by reason again.
 export async function stagePrereq() {
   const { skills, diff, raw } = parseSkillsWithDifficulty();
   // A cache row is stale when it names an id outside this build (a rename or
@@ -671,6 +644,7 @@ export async function stagePrereq() {
     },
     {
       numPredict: 600,
+      think: true,
       // "" rejects the reply; "none" caches an empty pick list.
       clean: (raw, job) => {
         const picks = parsePrereqResponse(raw, job.cands.length);

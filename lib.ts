@@ -295,10 +295,13 @@ const GEN_MODEL = "claude-haiku-5-5";
 // 75 expert hits at precision 0.50 and recall 0.132; adaptive thinking at
 // effort "low", run twice, made 67 and 65 at 0.55 and 0.117. The precision gap
 // (0.05) is one standard error. Output tokens fall 17× on picks and 11× on
-// snap, so the CSP run costs about $43 instead of $76. On 40 enrich summaries
-// adaptive thinking barely fired (662 vs 638 output tokens), and the names
-// differed only in wording. Alternative: adaptive
-// thinking at effort "low", the setting of every cache row before 20 Nov.
+// snap. The CSP run (20 Nov) took 568M input and 27M output tokens, about
+// $35. On 40 enrich summaries adaptive thinking barely fired (662 vs 638
+// output tokens), and the names differed only in wording. Alternative:
+// adaptive thinking at effort "low", the setting of every cache row before
+// 20 Nov. Picks keep it (opts.think): without it 16,970 of 348,622 replies
+// reasoned in prose and named no numbers. A JSON schema fixes the format, but
+// then picks grow ("Count backward from 20": 8 picks), ungraded.
 // Thinking counts against max_tokens; a reply that hits the cap is rejected.
 const THINK_TOKENS = 2000;
 // A batch takes up to 100,000 requests. request_counts stays at 0 until the
@@ -394,6 +397,8 @@ export async function resumableClaude<T extends { id: string }>(
     model?: string;
     // A JSON schema for the reply; the API constrains the output to it.
     schema?: Record<string, unknown>;
+    // Adaptive thinking at effort "low"; else thinking off.
+    think?: true;
   } = {},
 ): Promise<void> {
   const cleanFn = opts.clean ?? cleanDef;
@@ -579,8 +584,9 @@ export async function resumableClaude<T extends { id: string }>(
           custom_id: h,
           params: {
             model,
-            max_tokens: opts.numPredict ?? 120,
-            thinking: { type: "disabled" },
+            max_tokens: (opts.numPredict ?? 120) +
+              (opts.think ? THINK_TOKENS : 0),
+            thinking: { type: opts.think ? "adaptive" : "disabled" },
             output_config: opts.schema
               ? {
                 effort: "low",

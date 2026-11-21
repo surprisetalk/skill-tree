@@ -1371,10 +1371,8 @@ Deno.test("list: an Oak unit carries its slug and its US grade; a Skills England
   assert(unit?.includes("oak:counting-to-and-from-20"), `tags: ${unit}`);
   // Year 1 in England is US kindergarten.
   assert(unit?.includes("grade:K"), `tags: ${unit}`);
-  const k = tags(
-    "Principles of cybersecurity and working safely online within a finance and accounting context",
-    "skillsengland",
-  );
+  // A short title: stage enrich renames a long one from the summary cache.
+  const k = tags("Reconcile financial data", "skillsengland");
   assert(k?.includes("occupation:assistant-accountant"), `tags: ${k}`);
   assert(k?.includes("skillsengland:level:3"), `tags: ${k}`);
 });
