@@ -1380,6 +1380,18 @@ export const DIFFICULTY = table({
     anchored: bit,
   },
 });
+// TODO: Each edge in 6_edges.tsv names the step that wrote it. Fact: a closure
+// audit found `rotary-engine` under `it-like-to-live-in-tanzania`, and only a
+// grep of 1e_seed_edges.tsv showed that `oak_thread` wrote the edge.
+//   1. Add a column `source: filled` here. Stage postproc (prereq.ts) fills
+//      it: the seed's `source` for a seed edge, `pick` for a 5_prereqs.tsv
+//      row, `snap` for a 5c_snap.tsv row. An edge with two origins names the
+//      seed.
+//   2. Stage finalize reads the column and ignores it. skills.tsv gets no new
+//      column.
+//   3. Print the edge count per source at the end of stage postproc.
+//   4. Add a fixture assertion in pipeline_test.ts: one edge of each origin
+//      carries its source.
 export const EDGES = table({
   path: `${BUILD}/6_edges.tsv`,
   empty: true,

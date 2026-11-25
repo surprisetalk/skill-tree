@@ -2126,6 +2126,19 @@ export function stageList() {
 
 // ---------- stage enrich: Ollama infill + summarize + onet-desc ----------
 
+// TODO: Every skill title is English. Fact (25 Nov): about 3,400 CSP skills
+// keep a French title and about 240 a Spanish one (a count of ids with two
+// function words, such as "-des-" and "-les-"), for example
+// `decrire-les-facons-d-obtenir-une-cote-de-credit`. Stage dedupe cannot
+// merge one with its English twin: the CSP rule needs a word Jaccard of 0.5.
+//   1. Find the language of a CSP set in data/csp (a field of the set or of
+//      its jurisdiction). If none exists, stop and report: do not detect a
+//      language by hand.
+//   2. Translate each non-English title and description as BNCC does below,
+//      into a cache keyed by skill id. You: this step pays for about 3,700
+//      Batches prompts.
+//   3. Stage list titles the skill by its translation, and throws on a
+//      non-English set with no translation.
 export async function stageEnrich() {
   // First, because stage list throws without these and the rest reads its output.
   await resumableClaude(

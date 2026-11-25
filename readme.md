@@ -587,12 +587,15 @@ Evidence for each note: `research.md`.
   1. Find the bottleneck before you change the suite.
   2. Fix the suite. Do not split it or park it. When the cheap cuts are spent,
      record the floor and its bottleneck in claude.md once.
-- TODO: A goal closure lists each pre-K skill once. Fact: in a closure audit of
-  20 occupational skills, 71% of closure members sat in bands 1 and 2, mostly
-  one infant milestone restated by many state frameworks.
-  1. Count the band 1 groups that stage `dedupe` leaves apart at cosine above
-     its merge threshold, and find the rule that blocks each merge.
-  2. Fix that rule. Do not lower the threshold for every band.
+- TODO: Work the audit items in this order, because each one changes the input
+  of the next. Each code item holds its own steps.
+  1. Edge sources: `TODO:` at `EDGES`, `lib.ts`.
+  2. Low-band duplicates, closure reach, and long edges: three `TODO:`
+     conditions at the end of `stageStatus`, `pipeline.ts`.
+  3. Guessed occupations and oversized topics: two `TODO:` items in `stageTag`,
+     `graph.ts`.
+  4. French and Spanish titles: `TODO:` at `stageEnrich`, `sources.ts`.
+  5. The three readme items below.
 - TODO: A unit sequence is not a prereq chain. Fact: `oak_thread` seed edges
   carry confidence 1.00, so `rotary-engine` needs `it-like-to-live-in-tanzania`
   and `change-startup-behavior` needs `introduction-to-vector-graphics`.
@@ -600,13 +603,6 @@ Evidence for each note: `research.md`.
      sample of 200.
   2. Below 80%, send `oak_thread` pairs to stage `prereq` as candidates, not as
      seed edges.
-- TODO: A direct prereq shares more than one word with its skill. Fact:
-  `initiates-explorations-investigations-and-interactions` (band 1) is a direct
-  prereq of `conduct-or-oversee-the-conduct-of-investigations-on-matters` (band
-  12), and `scene-size-up` (an EMT skill) of `identify-props`.
-  1. Count the direct edges that span more than 8 bands, and read 50.
-  2. If most are wrong, add a status condition for the share, then fix the
-     candidate retrieval or the judge prompt that lets them through.
 - TODO: Every skill is a task that an assessor can grade pass or fail. Fact:
   topic nouns are nodes today: `hotel-industry`, `water-quality`,
   `computer-systems`, `people-management`.
@@ -617,3 +613,16 @@ Evidence for each note: `research.md`.
      skill with Claude Batches into a build table keyed by id.
   3. A skill that fails becomes a topic, not a deleted row. Stage `finalize`
      moves its prereq edges to the skills under that topic, or drops them.
+- TODO: You see the badge that each skill counts toward, and the skills a badge
+  still needs.
+  1. NOTE: A badge is a topic that holds 10 to 100 skills. Alternative: cluster
+     the embeddings into badges. It adds a noun and a clustering step, and a
+     cluster has no name.
+  2. Start after the topic `TODO:` in `stageTag` and the testable filter: both
+     change which skills a topic holds.
+  3. Add a status condition for the share of skills in at least one badge.
+- TODO: The readme has no `## Pending design` section.
+  1. Move each note to its place as a `NOTE:` mark: a note about one function
+     goes next to that function, and a note that spans files goes in an
+     architecture paragraph of this readme.
+  2. Change no decision and no wording beyond the `NOTE:` prefix.

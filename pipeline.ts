@@ -509,6 +509,67 @@ async function stageStatus() {
         ],
       ] as [string, () => Promise<number>][]
     ),
+    // The three TODO conditions below share one sample: `occ` is every 45th
+    // skill with an occupation at band 11 or above (about 2,000 of 90,000), so
+    // that `above()` stays inside the 30 s limit. Define it once, above this
+    // array, when the first condition goes live:
+    //   const occ = () => skills().filter((s) => s.occupations.length && s.band >= 11).filter((_, i) => i % 45 === 0);
+    //
+    // TODO: An occupational skill's closure reaches a pre-K or kindergarten
+    // skill. Fact (25 Nov, sample of 2,000): 84% reach band 2 or below, and 3%
+    // have no prereq at all (`write-dialogues`).
+    //   1. Uncomment, run `deno task status`, and list 30 skills that fail.
+    //   2. Sort them by cause: no candidates in stage prereq, every pick
+    //      dropped in stage postproc, or a chain that ends at a root above
+    //      band 2. Print the counts.
+    //   3. Fix the largest cause. Do not add an edge by hand.
+    // ["At least 95% of occupational skills reach a skill in band 2 or below.", () => {
+    //   const m = byId();
+    //   const reach = occ().filter((s) => [...above()(s.id)].some((p) => m.get(p)!.band <= 2));
+    //   return grade(reach.length / occ().length, 0.95, 0);
+    // }],
+    //
+    // TODO: A goal closure lists each pre-K skill once. Fact (25 Nov): in the
+    // median occupational closure, 68% of the skills sit in bands 1 and 2,
+    // mostly one infant milestone that many state frameworks restate
+    // (`notices-and-responds-to-emotions-displayed-by-others` and its twins).
+    // `pod-security-admissions` has 3,245 closure skills, 1,211 in band 1.
+    // The pass grade: bands 1 and 2 are 2 of the 12 bands under band 13, about
+    // 17% of an even closure, and the grade allows twice that.
+    //   1. Take 200 band 1 skills. For each, print its 5 nearest band 1
+    //      neighbours with the cosine and the reason stage dedupe kept them
+    //      apart (graph.ts, stageDedupe: threshold, grade tags, the CSP
+    //      word-Jaccard rule at "Merge a CSP pair").
+    //   2. Fix the rule that blocks the most true twins. Do not lower the
+    //      threshold for every band.
+    //   3. Rerun from stage dedupe with SKIP_LLM=1, then restore the paid
+    //      caches (claude.md).
+    // ["Under 35% of the median occupational closure sits in bands 1 and 2.", () => {
+    //   const m = byId();
+    //   const shares = occ().map((s) => [...above()(s.id)]).filter((c) => c.length)
+    //     .map((c) => c.filter((p) => m.get(p)!.band <= 2).length / c.length).sort((a, b) => a - b);
+    //   return grade(shares[shares.length >> 1], 0.35, 1);
+    // }],
+    //
+    // TODO: A direct prereq sits near its skill in difficulty. Fact (25 Nov):
+    // 33,744 of 1,012,594 edges (3.3%) span 9 or more bands. Many prereqs are
+    // strand names that sit in band 2 (`data-and-analysis`,
+    // `algorithms-and-programming`, `safety-rules-and-laws`) or share one word
+    // with the skill: `initiates-explorations-investigations-and-interactions`
+    // (band 1) → `conduct-or-oversee-the-conduct-of-investigations-on-matters`
+    // (band 12).
+    //   1. Read 50 such edges. Label each: right, strand name, one shared
+    //      word, or wrong band. Print the counts.
+    //   2. Find which step wrote each wrong edge. This needs the source
+    //      column (TODO at EDGES, lib.ts).
+    //   3. Fix that step. NOTE: Do not drop every long edge in postproc.
+    //      Alternative: a span cap. It hides the step that writes the edge,
+    //      and it drops true edges such as counting → cash handling.
+    // ["Under 1% of prereq edges span 9 or more bands.", () => {
+    //   const m = byId();
+    //   const long = skills().flatMap((s) => s.prereqs.filter((p) => s.band - m.get(p)!.band >= 9));
+    //   return grade(long.length / edgeCount(), 0.01, 1);
+    // }],
     // NOTE: The status check grades no free disk space. Alternative: grade it here. It turns red in every project on the host when one disk fills.
   ];
 

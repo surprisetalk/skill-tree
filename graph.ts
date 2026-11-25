@@ -600,6 +600,22 @@ export async function stageTag() {
       !s.sources.includes("onet") && !s.sources.includes("esco");
     const skipOccs = khanSlug || lowGradeOnly;
 
+    // TODO: A skill lists an occupation only when its source names one. Fact
+    // (25 Nov): this embedding match is a guess. `lubricate-mower` lists
+    // crushing-grinding-and-polishing-machine-setters,
+    // `state-the-overall-objectives-of-the-ics` lists fitness-instructor, and
+    // 19,056 of the 29,554 skills in bands 1 and 2 list an occupation
+    // (`the-child-will-sort-seriate-classify-and-create-patterns` lists
+    // poets-lyricists-and-creative-writers).
+    //   1. Print the share of occupation assignments that come from this
+    //      match, and the share from directEsco, directOnet, and tagOccs.
+    //   2. Read 50 matched assignments at band 11 or above. Count the right
+    //      ones.
+    //   3. Under 80% right: delete the match (occPass, OCC_K, OCC_TH, occMask,
+    //      MANAGER_RE, OCC_FREQ_CAP) and keep the three direct sources. First
+    //      grep `occupations` in graph.ts and prereq.ts: stage dedupe and
+    //      stage difficulty read the column. NOTE: Alternative: raise OCC_TH.
+    //      The guess stays, and a threshold needs tuning per source.
     let occs: Picked[] = skipOccs ? [] : occPass.out[i]
       .filter((r) => occMask[r.idx])
       .map((r) => ({ slug: slugify(occRefs[r.idx].label), score: r.score }))
@@ -614,6 +630,17 @@ export async function stageTag() {
         .sort((a, b) => b.score - a.score).slice(0, OCC_K);
     }
 
+    // TODO: A topic holds skills on one subject, in a size a learner can
+    // finish. Fact (25 Nov): `differential-equations-numerical-solutions` has
+    // 5,131 skills, `image-processing-digital-techniques` 4,649, and `colors`
+    // 3,417; 50,615 skills have no topic. Only 3,400 of 7,118 topics hold 10
+    // to 100 skills, and they cover 20% of the skills. Badges (readme TODO)
+    // need this first.
+    //   1. Read 50 skills of each of the three topics above. Print how many
+    //      belong, and the cosine of the ones that do not.
+    //   2. Find why the ref wins: a vague label, a missing frequency cap
+    //      (occupations have OCC_FREQ_CAP), or TOPIC_TH.
+    //   3. Fix that cause, then print the topic size deciles before and after.
     let topics: Picked[] = topicPass.out[i]
       .filter((r) => topicMask[r.idx])
       .map((r) => ({ slug: slugify(topicRefs[r.idx].label), score: r.score }))
