@@ -23,8 +23,6 @@ build/*
 !build/5_prereqs.tsv
 !build/5b_expand.tsv
 !build/5c_snap.tsv
-!build/pilot_expand.tsv
-!build/pilot_snap.tsv
 skills.tsv
 skills.tsv.gz
 skills.tsv.tmp

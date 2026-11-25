@@ -568,18 +568,18 @@ Evidence for each note: `research.md`.
   an `lc:<id>` tag per node. It needs no file, but the tag cap of 20 loses most
   nodes of a statement that fifty states repeat.
 - Stages `prereq` and `difficulty` stay. A top-down LLM tree does not replace
-  them yet. Example from the pilot (`deno run -A pipeline.ts pilot`, report in
-  `build/pilot_stats.json`): Electricians → National Electrical Codes → … →
-  Professional Communication → Instructional Design → … → Applied Behavior
-  Analysis. From 20 roots the pilot reached 5,953 nodes; 47% matched no skill,
-  3,019 edges closed a cycle, chains ran 100 to 380 steps, and 22% of edges
-  between banded skills climbed a band. The tree drifts sideways through lateral
-  prereqs and wrong snaps ("checking responsiveness" in CPR became
-  `viewport-meta-tag`). On the 50 expert positives it reached, its closure
-  recalls 42% against 12% for `skills.tsv`, but it also holds 17% of the
-  negatives against 1%. Alternative: switch now. It needs a guard that each
-  prereq is easier than its skill, and a stricter snap, before the tree
-  converges.
+  them. A pilot grew the tree from 20 roots: Electricians → National Electrical
+  Codes → … → Professional Communication → Instructional Design → … → Applied
+  Behavior Analysis. It reached 5,953 nodes; 47% matched no skill, 3,019 edges
+  closed a cycle, chains ran 100 to 380 steps, and 22% of edges between banded
+  skills climbed a band. The tree drifts sideways through lateral prereqs and
+  wrong snaps ("checking responsiveness" in CPR became `viewport-meta-tag`). A
+  closure audit of 20 occupational skills then found the direct edges of
+  `skills.tsv` mostly right, and the wrong closures came from duplicate pre-K
+  skills and seed chains, which a tree does not fix. Alternative: the tree, with
+  a guard that each prereq is easier than its skill and a stricter snap. It
+  recalled 42% of the 50 expert positives it reached against 12%, but held 17%
+  of the negatives against 1%.
 
 ## TODO
 
