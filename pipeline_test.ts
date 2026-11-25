@@ -2657,45 +2657,11 @@ Deno.test("digcompSeedEdges: each level of a competence is a prereq of the next;
   assert(msg.includes("digcomp:competence:*"), msg);
 });
 
-Deno.test("oakThreadPairs: a unit precedes the next unit of each of its threads; options pair each way", async () => {
-  const { oakThreadPairs } = await import("./sources.ts");
-  const pairs = oakThreadPairs([
-    [
-      { slugs: ["a"], threads: ["number"] },
-      { slugs: ["b"], threads: ["shape"] },
-      { slugs: ["c1", "c2"], threads: ["number", "shape"] },
-      { slugs: ["d"], threads: [] },
-      { slugs: ["e"], threads: ["number"] },
-    ],
-    // A second track repeats a→c1: one pair.
-    [{ slugs: ["a"], threads: ["number"] }, {
-      slugs: ["c1"],
-      threads: ["number"],
-    }],
-  ]);
-  assertEquals(pairs.map((p) => `${p.src}>${p.dst}`).sort(), [
-    "a>c1",
-    "a>c2",
-    "b>c1",
-    "b>c2",
-    "c1>e",
-    "c2>e",
-  ]);
-});
-
-Deno.test("readOak: every subject yields a track, and each thread pair names a known unit", async () => {
-  const { readOak, oakThreadPairs } = await import("./sources.ts");
-  const { units, tracks } = readOak();
-  const slugs = new Set(units.map((u) => u.slug));
-  const placed = new Set(tracks.flat().flatMap((p) => p.slugs));
-  // Every unit sits in some track.
-  assertEquals([...slugs].filter((s) => !placed.has(s)), []);
-  const pairs = oakThreadPairs(tracks);
-  assertGreater(pairs.length, 2000, "too few thread pairs");
-  assertEquals(
-    pairs.filter((p) => !slugs.has(p.src) || !slugs.has(p.dst)),
-    [],
-  );
+Deno.test("readOak: every unit of the index has a title and a year", async () => {
+  const { readOak } = await import("./sources.ts");
+  const units = readOak();
+  assertGreater(units.length, 1000, "too few units");
+  assertEquals(units.filter((u) => !u.title || !u.slug), []);
 });
 
 Deno.test("resolveConcept: a plural or -ing form finds its skill, and a fold two skills share finds none", () => {

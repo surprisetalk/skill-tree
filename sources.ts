@@ -312,14 +312,6 @@ const str = (v: unknown, where: string): string =>
 const int = (v: unknown, where: string): number =>
   Number.isInteger(v) ? v as number : bodyFail(where, "an integer", v);
 // A key outside the known set means the API renamed or added a field.
-const onlyKeys = (
-  o: Record<string, unknown>,
-  keys: string[],
-  where: string,
-) => {
-  const extra = Object.keys(o).filter((k) => !keys.includes(k));
-  if (extra.length) bodyFail(where, `only the keys ${keys.join(", ")}`, extra);
-};
 const unique = (xs: string[], where: string): string[] => {
   const seen = new Set<string>();
   for (const x of xs) {
@@ -354,25 +346,19 @@ type OakUnit = {
   year: number;
   prior: string[];
 };
-// A position holds one unit, or the options a school picks one unit from.
-type OakPosition = { slugs: string[]; threads: string[] };
-
-// A track is one path through a subject: the primary sequence, then one
-// secondary sequence (exam board), one exam subject, and one tier.
-export function readOak(): { units: OakUnit[]; tracks: OakPosition[][] } {
+export function readOak(): OakUnit[] {
   const dir = "data/oak";
   const index = obj(
     gunzipJson([`${dir}/index.json.gz`])[0],
     `${dir}/index.json.gz`,
   );
-  const bySubject = obj(index.sequences, `${dir}/index.json.gz sequences`);
   const unitSlugs = unique(
     arr(index.units, `${dir}/index.json.gz units`).map((u) =>
       str(u, `${dir}/index.json.gz units`)
     ),
     `${dir}/index.json.gz units`,
   );
-  const units = gunzipJson(unitSlugs.map((u) => `${dir}/units/${u}.json.gz`))
+  return gunzipJson(unitSlugs.map((u) => `${dir}/units/${u}.json.gz`))
     .map((body, i): OakUnit => {
       const w = `${dir}/units/${unitSlugs[i]}.json.gz`;
       const u = obj(body, w);
@@ -393,124 +379,6 @@ export function readOak(): { units: OakUnit[]; tracks: OakPosition[][] } {
         ),
       };
     });
-  const known = new Set(unitSlugs);
-  const position = (v: unknown, w: string): OakPosition => {
-    const u = obj(v, w);
-    onlyKeys(u, [
-      "unitTitle",
-      "unitOrder",
-      "unitSlug",
-      "unitOptions",
-      "threads",
-      "categories",
-    ], w);
-    if ("unitOptions" in u === "unitSlug" in u) {
-      bodyFail(w, "unitSlug or unitOptions, not both", Object.keys(u));
-    }
-    const slugs = "unitOptions" in u
-      ? arr(u.unitOptions, `${w} unitOptions`).map((o) =>
-        str(obj(o, w).unitSlug, `${w} unitOptions`)
-      )
-      : [str(u.unitSlug, `${w} unitSlug`)];
-    if (!slugs.length) bodyFail(`${w} unitOptions`, "at least one option", []);
-    for (const s of slugs) {
-      if (!known.has(s)) bodyFail(w, `a unit of index.json.gz`, s);
-    }
-    return {
-      slugs,
-      // 207 units belong to no thread: they make no thread pair.
-      threads: "threads" in u
-        ? arr(u.threads, `${w} threads`).map((t) =>
-          str(obj(t, w).threadSlug, `${w} threadSlug`)
-        )
-        : [],
-    };
-  };
-  const ordered = (v: unknown, w: string): OakPosition[] =>
-    arr(v, w).map((u, i) => ({
-      order: int(obj(u, `${w}[${i}]`).unitOrder, `${w}[${i}].unitOrder`),
-      p: position(u, `${w}[${i}]`),
-    })).sort((a, b) => a.order - b.order).map((x) => x.p);
-  // A year holds units, tiers, or exam subjects that hold units or tiers.
-  type Block = { all: OakPosition[] } | {
-    variants: Map<string, OakPosition[]>;
-  };
-  const blocks = (q: string): Block[] => {
-    const w = `${dir}/sequences/${q}.json.gz`;
-    return arr(gunzipJson([w])[0], w).map((y, i) => {
-      const yw = `${w}[${i}]`, b = obj(y, yw);
-      const kinds = ["units", "tiers", "examSubjects"].filter((k) => k in b);
-      if (kinds.length !== 1) {
-        bodyFail(yw, "one of units, tiers, or examSubjects", kinds);
-      }
-      onlyKeys(b, ["year", "title", ...kinds], yw);
-      if ("units" in b) return { all: ordered(b.units, `${yw}.units`) };
-      const variants = new Map<string, OakPosition[]>();
-      const add = (k: string, units: unknown, vw: string) => {
-        if (variants.has(k)) bodyFail(vw, "a variant named once", k);
-        variants.set(k, ordered(units, `${vw}.units`));
-      };
-      // A slug holds no space, so "biology foundation" names one variant.
-      const tiers = (v: unknown, prefix: string, tw: string) => {
-        for (const [j, t] of arr(v, tw).entries()) {
-          const o = obj(t, `${tw}[${j}]`);
-          add(
-            prefix + str(o.tierSlug, `${tw}[${j}].tierSlug`),
-            o.units,
-            `${tw}[${j}]`,
-          );
-        }
-      };
-      if ("tiers" in b) tiers(b.tiers, "", `${yw}.tiers`);
-      else if ("examSubjects" in b) {
-        for (
-          const [j, e] of arr(b.examSubjects, `${yw}.examSubjects`)
-            .entries()
-        ) {
-          const ew = `${yw}.examSubjects[${j}]`, o = obj(e, ew);
-          const s = str(o.examSubjectSlug, `${ew}.examSubjectSlug`);
-          if ("tiers" in o) tiers(o.tiers, `${s} `, `${ew}.tiers`);
-          else add(s, o.units, ew);
-        }
-      } else bodyFail(yw, "units, tiers, or examSubjects", Object.keys(b));
-      if (!variants.size) bodyFail(yw, "at least one tier or exam subject", []);
-      return { variants };
-    });
-  };
-  const flatten = (q: string): OakPosition[][] => {
-    const bs = blocks(q);
-    const keys = new Set(
-      bs.flatMap((b) => "variants" in b ? [...b.variants.keys()] : []),
-    );
-    return (keys.size ? [...keys] : [""]).map((k) =>
-      bs.flatMap((b) => {
-        if ("all" in b) return b.all;
-        const v = b.variants.get(k);
-        // Every tiered year of one sequence names the same variants.
-        return v ?? bodyFail(`${dir}/sequences/${q}.json.gz`, `variant ${k}`, [
-          ...b.variants.keys(),
-        ]);
-      })
-    );
-  };
-  const tracks: OakPosition[][] = [];
-  for (const [subject, v] of Object.entries(bySubject)) {
-    const seqs = arr(v, `${dir}/index.json.gz ${subject}`).map((q) =>
-      str(q, `${dir}/index.json.gz ${subject}`)
-    );
-    const primary = seqs.filter((q) => q.endsWith("-primary"))
-      .flatMap(flatten);
-    if (primary.length > 1) {
-      bodyFail(`${dir}/index.json.gz ${subject}`, "one primary track", seqs);
-    }
-    const secondary = seqs.filter((q) => !q.endsWith("-primary"))
-      .flatMap(flatten);
-    const lead = primary[0] ?? [];
-    if (secondary.length) {
-      for (const t of secondary) tracks.push([...lead, ...t]);
-    } else tracks.push(lead);
-  }
-  return { units, tracks };
 }
 
 // Unit slug → the skill that carries its oak:<slug> tag.
@@ -534,32 +402,10 @@ export function oakPriorNames(
   tagged: { id: string; tags: string }[],
 ): { dep: string; name: string }[] {
   const bySlug = oakSkillOf(tagged);
-  return readOak().units.flatMap((u) => {
+  return readOak().flatMap((u) => {
     const dep = bySlug.get(u.slug);
     return dep ? u.prior.map((name) => ({ dep, name })) : [];
   });
-}
-
-// Within one track, a unit precedes the next unit that shares one of its
-// threads. Each option of a position pairs with each option of the next.
-export function oakThreadPairs(
-  tracks: OakPosition[][],
-): { src: string; dst: string }[] {
-  const out = new Map<string, { src: string; dst: string }>();
-  for (const track of tracks) {
-    const last = new Map<string, string[]>();
-    for (const p of track) {
-      for (const t of p.threads) {
-        for (const src of last.get(t) ?? []) {
-          for (const dst of p.slugs) {
-            if (src !== dst) out.set(`${src}>${dst}`, { src, dst });
-          }
-        }
-        last.set(t, p.slugs);
-      }
-    }
-  }
-  return [...out.values()];
 }
 
 // ---------- Skills England (apprenticeship standards) ----------
@@ -1792,10 +1638,10 @@ export function stageList() {
     console.log(`  bncc: ${rows.length} objectives`);
   }
 
-  // Oak: one skill per unit. The oak:<slug> tag lets stage seed-edges find
-  // the unit's skill, as khan:<slug> does for a Khan exercise.
+  // Oak: one skill per unit. The oak:<slug> tag lets stage snap find
+  // the unit's skill for its prior-knowledge statements.
   {
-    const { units } = readOak();
+    const units = readOak();
     for (const u of units) {
       // England's Year 1 starts at age 5, as US kindergarten does.
       const grade = u.year === 1 ? "K" : String(u.year - 1);
@@ -2619,26 +2465,6 @@ export async function stageSeedEdges() {
     }
   }
 
-  const oakDropped: string[] = [];
-  // Oak: thread order within a track. A unit resolves through its oak:<slug>
-  // tag. Its prior-knowledge statements are free text: stage snap matches them.
-  {
-    const bySlug = oakSkillOf(tagged);
-    for (const p of oakThreadPairs(readOak().tracks)) {
-      const src = bySlug.get(p.src), dst = bySlug.get(p.dst);
-      const raw = `${p.src}->${p.dst}`;
-      // A unit with no skill (stage list dropped it, or a merge hit the tag
-      // cap) goes to quarantine as no-skill, like a Learning Commons node.
-      if (src && dst) addRaw(src, dst, "oak_thread", raw);
-      else {
-        oakDropped.push(
-          `${p.src}\t${p.dst}\toak_thread\t${raw}\tno-skill\tno-skill`,
-        );
-        (perSource.oak_thread ??= { total: 0, resolved: 0 }).total++;
-      }
-    }
-  }
-
   // AL-CPL — per readme: "*.preqs: concept pairs with prerequisite relations.
   // The second concept (2nd column) is a prerequisite of the first concept (1st column)."
   for (const domain of ["data_mining", "geometry", "physics", "precalculus"]) {
@@ -2947,7 +2773,6 @@ export async function stageSeedEdges() {
       });
     }
   }
-  quarantine.push(...oakDropped);
   // Course edges whose code has no sure title carry no label to resolve.
   (perSource.courses ??= { total: 0, resolved: 0 }).total +=
     courses.dropped.length;
@@ -3028,8 +2853,6 @@ export async function stageSeedEdges() {
     learningcommons: 0.71,
     // Ids from tags, so every pair resolves.
     digcomp: 0.9,
-    // Ids from tags, as for DigComp.
-    oak_thread: 0.9,
   };
   const short = Object.entries(perSource).flatMap(([src, s]) => {
     const floor = SEED_FLOORS[src];

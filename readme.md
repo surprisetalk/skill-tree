@@ -401,8 +401,6 @@ smoothing), ranks prerequisites via Claude Haiku 5.5, breaks cycles, and emits
   `learningcommons:coherence` and skips the long-title drop. Other sources keep
   `<…>` as text.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, course prerequisites,
-  Oak (`oak_thread`: within one track — primary, then one exam board, exam
-  subject, and tier — a unit precedes the next unit of each of its threads),
   OpenSALT within-framework grade ordering, Learning Commons `buildsTowards`,
   DigComp level order (within one competence, each outcome of a level precedes
   each outcome of the next; a merged outcome sits at its lowest level). Learning
@@ -523,7 +521,7 @@ Caches for per-stage resumption. Key files:
   `1e_opensalt_desc.tsv`, `1g_bncc_translate.tsv` — LLM enrichment caches,
   `key<TAB>value`.
 - `1e_seed_edges.tsv` — resolved expert-labeled prereq pairs from
-  Khan/AL-CPL/Metacademy/courses/Oak/OpenSALT/Learning Commons/DigComp.
+  Khan/AL-CPL/Metacademy/courses/OpenSALT/Learning Commons/DigComp.
 - `1e_unresolved.tsv` — seed pairs that failed to resolve, with a reason per
   label (below-cos / no-token-overlap / no-match).
 - `1j_lcsh_tree.tsv`, `1k_dbpedia_tree.tsv` — SKOS broader-chain caches:
@@ -599,13 +597,6 @@ Evidence for each note: `research.md`.
   4. French and Spanish titles: `TODO:` at `stageEnrich`, `sources.ts`.
   5. Testable classes: `TODO:` in `stagePrereq`, `prereq.ts`.
   6. The readme items below.
-- TODO: A unit sequence is not a prereq chain. Fact: `oak_thread` seed edges
-  carry confidence 1.00, so `rotary-engine` needs `it-like-to-live-in-tanzania`
-  and `change-startup-behavior` needs `introduction-to-vector-graphics`.
-  1. Measure the share of `oak_thread` edges that an LLM judge accepts on a
-     sample of 200.
-  2. Below 80%, send `oak_thread` pairs to stage `prereq` as candidates, not as
-     seed edges.
 - TODO: You see the badge that each skill counts toward, and the skills a badge
   still needs.
   1. NOTE: A badge is a topic that holds 10 to 100 skills. Alternative: cluster
