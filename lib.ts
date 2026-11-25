@@ -84,6 +84,7 @@ const STAGE_OF: Record<string, string> = {
   [`${BUILD}/4_stats.json`]: "difficulty",
   [`${BUILD}/5_prereqs.tsv`]: "prereq",
   [`${BUILD}/5b_expand.tsv`]: "prereq",
+  [`${BUILD}/5d_testable.tsv`]: "prereq",
   [`${BUILD}/5c_snap.tsv`]: "prereq",
   [`${BUILD}/6_edges.tsv`]: "postproc",
   "skills.tsv": "finalize",
@@ -1339,6 +1340,20 @@ export const SNAP = table({
     match: {
       as: '"none" or a slug',
       parse: (v: string) => v === "none" || SLUG.parse(v) ? v : undefined,
+    },
+  },
+});
+// Stage prereq's testable step: Claude's class of each skill.
+export const TESTABLE_CLASSES = ["task", "knowledge", "area", "other"];
+export const TESTABLE = table({
+  path: `${BUILD}/5d_testable.tsv`,
+  key: "skill",
+  headerless: true,
+  columns: {
+    skill: SLUG,
+    class: {
+      as: TESTABLE_CLASSES.join(", "),
+      parse: (v: string) => TESTABLE_CLASSES.includes(v) ? v : undefined,
     },
   },
 });

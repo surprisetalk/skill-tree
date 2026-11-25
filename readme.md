@@ -537,6 +537,8 @@ Caches for per-stage resumption. Key files:
 - `5_prereqs.tsv` — LLM picks: `skill<TAB>p1,p2` or `skill<TAB>none`.
 - `5b_expand.tsv` — named prereqs: `skill<TAB>name; name` or `skill<TAB>none`.
   `5c_snap.tsv` — `name-slug<TAB>skill-id` or `name-slug<TAB>none`.
+  `5d_testable.tsv` — `skill<TAB>class`: task, knowledge, area, or other. The
+  first two are testable. No stage reads it yet (`TODO:` in `stagePrereq`).
 - `6_edges.tsv` — post-processed DAG edges (skill_id, prereq_id), transitively
   reduced: no edge is implied by a path of other edges.
 
@@ -595,7 +597,8 @@ Evidence for each note: `research.md`.
   3. Guessed occupations and oversized topics: two `TODO:` items in `stageTag`,
      `graph.ts`.
   4. French and Spanish titles: `TODO:` at `stageEnrich`, `sources.ts`.
-  5. The three readme items below.
+  5. Testable classes: `TODO:` in `stagePrereq`, `prereq.ts`.
+  6. The readme items below.
 - TODO: A unit sequence is not a prereq chain. Fact: `oak_thread` seed edges
   carry confidence 1.00, so `rotary-engine` needs `it-like-to-live-in-tanzania`
   and `change-startup-behavior` needs `introduction-to-vector-graphics`.
@@ -603,23 +606,13 @@ Evidence for each note: `research.md`.
      sample of 200.
   2. Below 80%, send `oak_thread` pairs to stage `prereq` as candidates, not as
      seed edges.
-- TODO: Every skill is a task that an assessor can grade pass or fail. Fact:
-  topic nouns are nodes today: `hotel-industry`, `water-quality`,
-  `computer-systems`, `people-management`.
-  1. NOTE: "Testable" means that a pass/fail task with an observable result
-     exists in principle. Alternative: require an existing exam per skill. It
-     gives ground truth but covers a small share of the catalogue.
-  2. Run after the dedupe fix, so the paid pass grades fewer rows. Judge each
-     skill with Claude Batches into a build table keyed by id.
-  3. A skill that fails becomes a topic, not a deleted row. Stage `finalize`
-     moves its prereq edges to the skills under that topic, or drops them.
 - TODO: You see the badge that each skill counts toward, and the skills a badge
   still needs.
   1. NOTE: A badge is a topic that holds 10 to 100 skills. Alternative: cluster
      the embeddings into badges. It adds a noun and a clustering step, and a
      cluster has no name.
-  2. Start after the topic `TODO:` in `stageTag` and the testable filter: both
-     change which skills a topic holds.
+  2. Start after the topic `TODO:` in `stageTag` and the testable `TODO:` in
+     `stagePrereq`: both change which skills a topic holds.
   3. Add a status condition for the share of skills in at least one badge.
 - TODO: The readme has no `## Pending design` section.
   1. Move each note to its place as a `NOTE:` mark: a note about one function

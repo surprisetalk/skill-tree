@@ -38,6 +38,8 @@ import {
   stronglyConnected,
   TAGGED_DEDUPED,
   tagGrades,
+  TESTABLE,
+  TESTABLE_CLASSES,
   topoOrder,
   WIKI_CAT_RE,
   writeTable,
@@ -598,6 +600,7 @@ export async function stagePrereq() {
       (ps === "none" || ps.split(",").every((p) => easier(dOf.get(p), ds)));
   });
   prune(EXPAND, (s) => dOf.has(s));
+  prune(TESTABLE, (s) => dOf.has(s));
   // SKIP_LLM=1 reuses the caches, less stale rows: a regression build needs no
   // generator.
   if (Deno.env.get("SKIP_LLM") === "1") {
@@ -667,6 +670,39 @@ export async function stagePrereq() {
       clean: (raw) => {
         const names = parseExpand(raw);
         return names === null ? "" : names.join("; ") || "none";
+      },
+    },
+  );
+
+  // NOTE: Claude sorts each skill into four classes, and "task" and
+  // "knowledge" are testable: an assessor can grade the learner pass or fail.
+  // Alternative: one yes/no question. On 70 skills Haiku then failed 41,
+  // "test-wind-turbine-blades" among them; with four classes it failed 8 and
+  // agreed with Sonnet 5.5 on 65. Alternative: require an existing exam per
+  // skill. It gives ground truth but covers a small share of the catalogue.
+  // TODO: A skill of class "area" or "other" is a topic, not a node of the
+  // graph. No stage reads 5d_testable.tsv yet.
+  //   1. Print the class counts per source, and read 50 "area" and 50 "other"
+  //      skills. Stop and report if over 10% are wrong.
+  //   2. Stage finalize drops each such skill from skills.tsv and adds its id
+  //      as a topic of each dependent. An edge through it drops: do not
+  //      reconnect its prereqs to its dependents.
+  //   3. Add a status condition for the share of skills.tsv rows of class
+  //      "area" or "other": it passes at 0.
+  await resumableClaude(
+    "prereq:testable",
+    TESTABLE.path,
+    skills,
+    (s) =>
+      `${TESTABLE_PROMPT}\n\nItem: ${s.title}${
+        s.description ? `\nDescription: ${s.description.slice(0, 500)}` : ""
+      }`,
+    {
+      numPredict: 20,
+      schema: TESTABLE_SCHEMA,
+      clean: (raw) => {
+        const c = (JSON.parse(raw) as { class?: unknown })?.class;
+        return typeof c === "string" && TESTABLE_CLASSES.includes(c) ? c : "";
       },
     },
   );
@@ -1872,6 +1908,20 @@ const EXPAND_SCHEMA = {
   type: "object",
   properties: { prereqs: { type: "array", items: { type: "string" } } },
   required: ["prereqs"],
+  additionalProperties: false,
+};
+
+const TESTABLE_PROMPT =
+  `Classify one item from a catalogue of skills. Judge the item as written, not what it could become.
+- task: the item says what a learner does, and an assessor can watch or read the result and grade it pass or fail. "Test wind turbine blades", "Add two fractions", "Describe American expansion between 1776 and 1900", "Addition".
+- knowledge: a concept, fact, rule, or method that a few exam questions can cover. "Ohm's law", "Redox reactions", "Noun phrase".
+- area: a field, industry, subject, course, unit, or a bundle of many skills, too broad for one section of an exam. "Mining engineering", "Hotel industry", "People management", "Computer systems".
+- other: an attitude, a disposition, a statement about a teacher or a programme, or no skill at all. "Appreciate cultural diversity".`;
+
+const TESTABLE_SCHEMA = {
+  type: "object",
+  properties: { class: { type: "string", enum: TESTABLE_CLASSES } },
+  required: ["class"],
   additionalProperties: false,
 };
 

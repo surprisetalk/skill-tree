@@ -35,9 +35,9 @@ build files.
   `3b_tagged_deduped.tsv`. A new build table gets a schema; a new id goes
   through `slugify`.
 - `SKIP_LLM=1` reuses the caches, less the stale rows, for a regression build
-  without the generator. It rewrites the three caches without the stale rows;
+  without the generator. It rewrites the four caches without the stale rows;
   before a commit, restore the paid rows with
-  `jj restore build/5_prereqs.tsv build/5b_expand.tsv build/5c_snap.tsv`.
+  `jj restore build/5_prereqs.tsv build/5b_expand.tsv build/5c_snap.tsv build/5d_testable.tsv`.
 - The version sits in one constant, `LC_VERSION`, in `data/download.ts`.
 - Git tracks the gzips, because jj refuses a new file over 1 MiB. (BNCC.)
 - Uncompressed .csv files are gitignored. (`data/courses/`.)

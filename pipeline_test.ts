@@ -706,7 +706,8 @@ const staleP = early(() =>
     "build/5_prereqs.tsv": "addition\tcounting\nmultiplication\tghost\n",
     "build/5b_expand.tsv": "ghost\tCounting\naddition\tCounting\n",
     "build/5c_snap.tsv": "number-sense\tghost\ncounting\tcounting\n",
-  }, ["build/5_prereqs.tsv", "build/5b_expand.tsv"])
+    "build/5d_testable.tsv": "ghost\tarea\naddition\ttask\n",
+  }, ["build/5_prereqs.tsv", "build/5b_expand.tsv", "build/5d_testable.tsv"])
 );
 // Stage snap drops a match to a gone id, and keeps one that an alias renames.
 const staleSnapP = early(() =>
@@ -750,6 +751,7 @@ Deno.test("prereq: a cache row that names a gone id drops and asks again", async
   const { files, stderr } = await staleP();
   assertEquals(files["build/5_prereqs.tsv"], "addition\tcounting\n", stderr);
   assertEquals(files["build/5b_expand.tsv"], "addition\tCounting\n");
+  assertEquals(files["build/5d_testable.tsv"], "addition\ttask\n");
   const snap = await staleSnapP();
   assertEquals(
     snap.files["build/5c_snap.tsv"],
