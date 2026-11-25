@@ -587,3 +587,33 @@ Evidence for each note: `research.md`.
   1. Find the bottleneck before you change the suite.
   2. Fix the suite. Do not split it or park it. When the cheap cuts are spent,
      record the floor and its bottleneck in claude.md once.
+- TODO: A goal closure lists each pre-K skill once. Fact: in a closure audit of
+  20 occupational skills, 71% of closure members sat in bands 1 and 2, mostly
+  one infant milestone restated by many state frameworks.
+  1. Count the band 1 groups that stage `dedupe` leaves apart at cosine above
+     its merge threshold, and find the rule that blocks each merge.
+  2. Fix that rule. Do not lower the threshold for every band.
+- TODO: A unit sequence is not a prereq chain. Fact: `oak_thread` seed edges
+  carry confidence 1.00, so `rotary-engine` needs `it-like-to-live-in-tanzania`
+  and `change-startup-behavior` needs `introduction-to-vector-graphics`.
+  1. Measure the share of `oak_thread` edges that an LLM judge accepts on a
+     sample of 200.
+  2. Below 80%, send `oak_thread` pairs to stage `prereq` as candidates, not as
+     seed edges.
+- TODO: A direct prereq shares more than one word with its skill. Fact:
+  `initiates-explorations-investigations-and-interactions` (band 1) is a direct
+  prereq of `conduct-or-oversee-the-conduct-of-investigations-on-matters` (band
+  12), and `scene-size-up` (an EMT skill) of `identify-props`.
+  1. Count the direct edges that span more than 8 bands, and read 50.
+  2. If most are wrong, add a status condition for the share, then fix the
+     candidate retrieval or the judge prompt that lets them through.
+- TODO: Every skill is a task that an assessor can grade pass or fail. Fact:
+  topic nouns are nodes today: `hotel-industry`, `water-quality`,
+  `computer-systems`, `people-management`.
+  1. NOTE: "Testable" means that a pass/fail task with an observable result
+     exists in principle. Alternative: require an existing exam per skill. It
+     gives ground truth but covers a small share of the catalogue.
+  2. Run after the dedupe fix, so the paid pass grades fewer rows. Judge each
+     skill with Claude Batches into a build table keyed by id.
+  3. A skill that fails becomes a topic, not a deleted row. Stage `finalize`
+     moves its prereq edges to the skills under that topic, or drops them.
