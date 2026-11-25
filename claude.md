@@ -60,6 +60,11 @@ build files.
 - Stage `enrich` translates each `texto` with Claude into
   `build/1g_bncc_translate.tsv`, keyed by code. Stage `list` throws on a code
   with no translation.
+- Stage `enrich` asks Claude whether each CSP set reads as English
+  (`build/1h_csp_english.tsv`, keyed by set id) and translates the standards of
+  each set that does not (`build/1i_csp_translate.tsv`, keyed by standard id).
+  Stage `list` throws on a set with no answer, or a standard with no
+  translation.
 - A source that gives both A → B and B → A loses both, as does a course pair
   inside a seed cycle (`contested-order`): expert sources outrank course
   catalogs.

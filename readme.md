@@ -401,18 +401,21 @@ smoothing), ranks prerequisites via Claude Haiku 5.5, breaks cycles, and emits
   `learningcommons:coherence` and skips the long-title drop. Other sources keep
   `<…>` as text.
 - Stage `seed-edges`: Khan Academy, AL-CPL, Metacademy, course prerequisites,
-  OpenSALT within-framework grade ordering, Learning Commons `buildsTowards`,
-  DigComp level order (within one competence, each outcome of a level precedes
-  each outcome of the next; a merged outcome sits at its lowest level). Learning
-  Commons resolves through `build/1m_lc_ids.tsv` and `3b_aliases.tsv`, not by
-  label. A pair with an end that stage `list` dropped goes to
-  `build/1e_unresolved.tsv` with reason `no-skill`. Pairs resolve to skill IDs
-  by exact match (case, plurals, and -ing/-ed folded, unless two skills share
-  the fold), then by embedding (cosine ≥ 0.90 and a shared token). An exact
-  scan, split across one worker per core, finds each label's nearest skill.
-  Unresolved pairs go to `build/1e_unresolved.tsv` with a reason per label. A
-  source that gives both A → B and B → A loses both, as does a course pair
-  inside a seed cycle (`contested-order`): expert sources outrank course
+  Oak (`oak_thread`: within one track — primary, then one exam board, exam
+  subject, and tier — a unit precedes the next unit of each of its threads, and
+  the pair is a seed edge only when Claude judged it a prereq in stage `enrich`,
+  `1f_oak_thread.tsv`), OpenSALT within-framework grade ordering, Learning
+  Commons `buildsTowards`, DigComp level order (within one competence, each
+  outcome of a level precedes each outcome of the next; a merged outcome sits at
+  its lowest level). Learning Commons resolves through `build/1m_lc_ids.tsv` and
+  `3b_aliases.tsv`, not by label. A pair with an end that stage `list` dropped
+  goes to `build/1e_unresolved.tsv` with reason `no-skill`. Pairs resolve to
+  skill IDs by exact match (case, plurals, and -ing/-ed folded, unless two
+  skills share the fold), then by embedding (cosine ≥ 0.90 and a shared token).
+  An exact scan, split across one worker per core, finds each label's nearest
+  skill. Unresolved pairs go to `build/1e_unresolved.tsv` with a reason per
+  label. A source that gives both A → B and B → A loses both, as does a course
+  pair inside a seed cycle (`contested-order`): expert sources outrank course
   catalogs. Each Khan exercise resolves through the `khan:<slug>` tag of its
   OpenSALT item.
 - Stage `trees`: LCSH (gunzip) and DBpedia (bzcat) SKOS broader chains, cached
@@ -518,10 +521,11 @@ Caches for per-stage resumption. Key files:
 - `1m_lc_ids.tsv` — Learning Commons node id to skill id (`node_id, skill_id`),
   written by stage `list`.
 - `1b_infill.tsv`, `1c_summarize.tsv`, `1d_onet_desc.tsv`,
-  `1e_opensalt_desc.tsv`, `1g_bncc_translate.tsv` — LLM enrichment caches,
+  `1e_opensalt_desc.tsv`, `1f_oak_thread.tsv`, `1g_bncc_translate.tsv`,
+  `1h_csp_english.tsv`, `1i_csp_translate.tsv` — LLM enrichment caches,
   `key<TAB>value`.
 - `1e_seed_edges.tsv` — resolved expert-labeled prereq pairs from
-  Khan/AL-CPL/Metacademy/courses/OpenSALT/Learning Commons/DigComp.
+  Khan/AL-CPL/Metacademy/courses/Oak/OpenSALT/Learning Commons/DigComp.
 - `1e_unresolved.tsv` — seed pairs that failed to resolve, with a reason per
   label (below-cos / no-token-overlap / no-match).
 - `1j_lcsh_tree.tsv`, `1k_dbpedia_tree.tsv` — SKOS broader-chain caches:
@@ -594,9 +598,8 @@ Evidence for each note: `research.md`.
      conditions at the end of `stageStatus`, `pipeline.ts`.
   3. Guessed occupations and oversized topics: two `TODO:` items in `stageTag`,
      `graph.ts`.
-  4. French and Spanish titles: `TODO:` at `stageEnrich`, `sources.ts`.
-  5. Testable classes: `TODO:` in `stagePrereq`, `prereq.ts`.
-  6. The readme items below.
+  4. Testable classes: `TODO:` in `stagePrereq`, `prereq.ts`.
+  5. The readme items below.
 - TODO: You see the badge that each skill counts toward, and the skills a badge
   still needs.
   1. NOTE: A badge is a topic that holds 10 to 100 skills. Alternative: cluster

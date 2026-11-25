@@ -134,7 +134,7 @@ const listDir = (own = ""): string => {
   // The enrich caches that stage list applies: copies, since a stage writes
   // build files in place.
   for (const f of Deno.readDirSync("build")) {
-    if (/^1[b-g]_[a-z_]+\.tsv$/.test(f.name)) {
+    if (/^1[b-i]_[a-z_]+\.tsv$/.test(f.name)) {
       Deno.copyFileSync(`build/${f.name}`, `${dir}/build/${f.name}`);
     }
   }
@@ -2232,6 +2232,61 @@ Deno.test(
   }),
 );
 
+Deno.test(
+  "list: a CSP set that is not English takes its translations, and a missing one stops the stage",
+  early(async () => {
+    const set = await gz(JSON.stringify({
+      id: "SETFR",
+      educationLevels: ["09"],
+      standards: {
+        a: { id: "STA", description: "Décrire les façons d'obtenir une cote" },
+        b: { id: "STB", description: "Expliquer le rôle des banques" },
+      },
+    }));
+    const runWith = async (translations: string) => {
+      const dir = listDir("csp");
+      for (const f of Deno.readDirSync(`${dir}/data/csp`)) {
+        Deno.removeSync(`${dir}/data/csp/${f.name}`);
+      }
+      Deno.writeFileSync(`${dir}/data/csp/SETFR.json.gz`, set);
+      Deno.writeTextFileSync(`${dir}/build/1h_csp_english.tsv`, "SETFR\tno\n");
+      Deno.writeTextFileSync(`${dir}/build/1i_csp_translate.tsv`, translations);
+      const out = await run(["list"], dir, LIST_BOUND_MS);
+      const titles = out.success
+        ? Deno.readTextFileSync(`${dir}/build/1_skills.tsv`).split("\n").map((
+          l,
+        ) => l.split("\t")).filter((c) => c[3] === "csp").map((c) => c[1])
+        : [];
+      Deno.removeSync(dir, { recursive: true });
+      return {
+        code: out.code,
+        stderr: new TextDecoder().decode(out.stderr) +
+          new TextDecoder().decode(out.stdout).split("\n").filter((l) =>
+            l.includes("csp:")
+          ).join("\n"),
+        titles,
+      };
+    };
+    const [good, missing] = await Promise.all([
+      runWith(
+        "STA\tCompare three ways to get a credit rating\nSTB\tCompare the roles of banks and credit unions\n",
+      ),
+      runWith("STA\tCompare three ways to get a credit rating\n"),
+    ]);
+    assertEquals(good.code, 0, good.stderr);
+    assertEquals(good.titles.sort(), [
+      "Compare the roles of banks and credit unions",
+      "Compare three ways to get a credit rating",
+    ]);
+    assert(missing.code !== 0, "exit 0 with a missing translation");
+    assert(
+      missing.stderr.includes("CSP standard STB of set SETFR") &&
+        missing.stderr.includes("expected an English translation"),
+      missing.stderr,
+    );
+  }),
+);
+
 const exam = (over: Record<string, unknown> = {}, objective: unknown = {
   title: "Security controls",
   sub: [],
@@ -2657,11 +2712,64 @@ Deno.test("digcompSeedEdges: each level of a competence is a prereq of the next;
   assert(msg.includes("digcomp:competence:*"), msg);
 });
 
-Deno.test("readOak: every unit of the index has a title and a year", async () => {
-  const { readOak } = await import("./sources.ts");
-  const units = readOak();
-  assertGreater(units.length, 1000, "too few units");
-  assertEquals(units.filter((u) => !u.title || !u.slug), []);
+Deno.test("oakThreadPairs: a unit precedes the next unit of each of its threads; options pair each way", async () => {
+  const { oakThreadPairs } = await import("./sources.ts");
+  const pairs = oakThreadPairs([
+    [
+      { slugs: ["a"], threads: ["number"] },
+      { slugs: ["b"], threads: ["shape"] },
+      { slugs: ["c1", "c2"], threads: ["number", "shape"] },
+      { slugs: ["d"], threads: [] },
+      { slugs: ["e"], threads: ["number"] },
+    ],
+    // A second track repeats a→c1: one pair.
+    [{ slugs: ["a"], threads: ["number"] }, {
+      slugs: ["c1"],
+      threads: ["number"],
+    }],
+  ]);
+  assertEquals(pairs.map((p) => `${p.src}>${p.dst}`).sort(), [
+    "a>c1",
+    "a>c2",
+    "b>c1",
+    "b>c2",
+    "c1>e",
+    "c2>e",
+  ]);
+});
+
+Deno.test("oakJudgedPairs: a pair Claude accepted stays, a rejected one drops, an unjudged one throws", async () => {
+  const { oakJudgedPairs } = await import("./sources.ts");
+  const pairs = [{ src: "a", dst: "b" }, { src: "b", dst: "c" }];
+  assertEquals(
+    oakJudgedPairs(pairs, new Map([["a>b", "yes"], ["b>c", "no"]])),
+    [{ src: "a", dst: "b" }],
+  );
+  let msg = "";
+  try {
+    oakJudgedPairs(pairs, new Map([["a>b", "yes"]]));
+  } catch (e) {
+    msg = (e as Error).message;
+  }
+  assert(
+    msg.includes("Oak thread pair b>c") && msg.includes("stage enrich"),
+    msg,
+  );
+});
+
+Deno.test("readOak: every subject yields a track, and each thread pair names a known unit", async () => {
+  const { readOak, oakThreadPairs } = await import("./sources.ts");
+  const { units, tracks } = readOak();
+  const slugs = new Set(units.map((u) => u.slug));
+  const placed = new Set(tracks.flat().flatMap((p) => p.slugs));
+  // Every unit sits in some track.
+  assertEquals([...slugs].filter((s) => !placed.has(s)), []);
+  const pairs = oakThreadPairs(tracks);
+  assertGreater(pairs.length, 2000, "too few thread pairs");
+  assertEquals(
+    pairs.filter((p) => !slugs.has(p.src) || !slugs.has(p.dst)),
+    [],
+  );
 });
 
 Deno.test("resolveConcept: a plural or -ing form finds its skill, and a fold two skills share finds none", () => {

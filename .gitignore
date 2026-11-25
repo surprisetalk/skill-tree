@@ -18,7 +18,10 @@ build/*
 !build/1c_summarize.tsv
 !build/1d_onet_desc.tsv
 !build/1e_opensalt_desc.tsv
+!build/1f_oak_thread.tsv
 !build/1g_bncc_translate.tsv
+!build/1h_csp_english.tsv
+!build/1i_csp_translate.tsv
 !build/3b_aliases.tsv
 !build/5_prereqs.tsv
 !build/5b_expand.tsv

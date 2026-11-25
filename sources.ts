@@ -137,6 +137,73 @@ const isSummary = (t: string) =>
 const ONET_DESC_CACHE = `${BUILD}/1d_onet_desc.tsv`;
 const OPENSALT_DESC_CACHE = `${BUILD}/1e_opensalt_desc.tsv`;
 
+// ---------- CSP (Common Standards Project) ----------
+
+// Stage enrich asks Claude whether each set reads as English (keyed by set
+// id), then translates the standards of each set that does not (keyed by
+// standard id). Stage list titles such a standard by its translation.
+// NOTE: Claude names the language, one prompt per set. Alternative: a
+// language-detection library. It costs nothing per run but adds a
+// dependency, and a short statement misleads it. Alternative: one prompt per
+// standard. It finds a mixed set's English statements, at about 40 times the
+// prompts.
+const CSP_ENGLISH_CACHE = `${BUILD}/1h_csp_english.tsv`;
+const CSP_TRANSLATE_CACHE = `${BUILD}/1i_csp_translate.tsv`;
+
+// deno-lint-ignore no-explicit-any -- CSP standards, read field by field
+type CspStandard = any;
+// Plain text: a JavaScript standard names "<script>" as text.
+const cspText = (st: CspStandard): string =>
+  unmojibake(String(st.description ?? "")).replace(/\s+/g, " ").trim();
+
+// Calls `each` with every current set's leaf standards: a standard that
+// parents another is a heading. Each file is one JSON line.
+function forEachCspSet(
+  each: (
+    set: { id: string; levels: string[]; leaves: CspStandard[] },
+  ) => void,
+): { sets: number; deprecated: number; headings: number } {
+  const files = readDirSorted("data/csp").filter((e) =>
+    e.name.endsWith(".json.gz")
+  ).map((e) => `data/csp/${e.name}`);
+  let sets = 0, deprecated = 0, headings = 0;
+  for (let c = 0; c < files.length; c += 2000) {
+    const chunk = files.slice(c, c + 2000);
+    gunzipJson(chunk).forEach((body, k) => {
+      const path = chunk[k];
+      // deno-lint-ignore no-explicit-any -- CSP sets, read field by field
+      const set = body as any;
+      if (
+        typeof set?.standards !== "object" || !set.standards ||
+        typeof set.id !== "string" || !set.id
+      ) {
+        throw new Error(
+          `${path}: expected a CSP set with an id and a standards object, received keys ${
+            JSON.stringify(Object.keys(set ?? {}))
+          }. Re-download it: deno run -A data/download.ts`,
+        );
+      }
+      sets++;
+      if (set.document?.publicationStatus === "Deprecated") {
+        deprecated++;
+        return;
+      }
+      const stds = Object.values(set.standards) as CspStandard[];
+      const parents = new Set(stds.map((st) => st.parentId));
+      const leaves = stds.filter((st) => !parents.has(st.id));
+      headings += stds.length - leaves.length;
+      each({
+        id: set.id,
+        levels: Array.isArray(set.educationLevels)
+          ? set.educationLevels.map(String)
+          : [],
+        leaves,
+      });
+    });
+  }
+  return { sets, deprecated, headings };
+}
+
 // ---------- BNCC (Brazil's national curriculum) ----------
 
 const BNCC_TRANSLATE_CACHE = `${BUILD}/1g_bncc_translate.tsv`;
@@ -312,6 +379,14 @@ const str = (v: unknown, where: string): string =>
 const int = (v: unknown, where: string): number =>
   Number.isInteger(v) ? v as number : bodyFail(where, "an integer", v);
 // A key outside the known set means the API renamed or added a field.
+const onlyKeys = (
+  o: Record<string, unknown>,
+  keys: string[],
+  where: string,
+) => {
+  const extra = Object.keys(o).filter((k) => !keys.includes(k));
+  if (extra.length) bodyFail(where, `only the keys ${keys.join(", ")}`, extra);
+};
 const unique = (xs: string[], where: string): string[] => {
   const seen = new Set<string>();
   for (const x of xs) {
@@ -346,19 +421,25 @@ type OakUnit = {
   year: number;
   prior: string[];
 };
-export function readOak(): OakUnit[] {
+// A position holds one unit, or the options a school picks one unit from.
+type OakPosition = { slugs: string[]; threads: string[] };
+
+// A track is one path through a subject: the primary sequence, then one
+// secondary sequence (exam board), one exam subject, and one tier.
+export function readOak(): { units: OakUnit[]; tracks: OakPosition[][] } {
   const dir = "data/oak";
   const index = obj(
     gunzipJson([`${dir}/index.json.gz`])[0],
     `${dir}/index.json.gz`,
   );
+  const bySubject = obj(index.sequences, `${dir}/index.json.gz sequences`);
   const unitSlugs = unique(
     arr(index.units, `${dir}/index.json.gz units`).map((u) =>
       str(u, `${dir}/index.json.gz units`)
     ),
     `${dir}/index.json.gz units`,
   );
-  return gunzipJson(unitSlugs.map((u) => `${dir}/units/${u}.json.gz`))
+  const units = gunzipJson(unitSlugs.map((u) => `${dir}/units/${u}.json.gz`))
     .map((body, i): OakUnit => {
       const w = `${dir}/units/${unitSlugs[i]}.json.gz`;
       const u = obj(body, w);
@@ -379,6 +460,124 @@ export function readOak(): OakUnit[] {
         ),
       };
     });
+  const known = new Set(unitSlugs);
+  const position = (v: unknown, w: string): OakPosition => {
+    const u = obj(v, w);
+    onlyKeys(u, [
+      "unitTitle",
+      "unitOrder",
+      "unitSlug",
+      "unitOptions",
+      "threads",
+      "categories",
+    ], w);
+    if ("unitOptions" in u === "unitSlug" in u) {
+      bodyFail(w, "unitSlug or unitOptions, not both", Object.keys(u));
+    }
+    const slugs = "unitOptions" in u
+      ? arr(u.unitOptions, `${w} unitOptions`).map((o) =>
+        str(obj(o, w).unitSlug, `${w} unitOptions`)
+      )
+      : [str(u.unitSlug, `${w} unitSlug`)];
+    if (!slugs.length) bodyFail(`${w} unitOptions`, "at least one option", []);
+    for (const s of slugs) {
+      if (!known.has(s)) bodyFail(w, `a unit of index.json.gz`, s);
+    }
+    return {
+      slugs,
+      // 207 units belong to no thread: they make no thread pair.
+      threads: "threads" in u
+        ? arr(u.threads, `${w} threads`).map((t) =>
+          str(obj(t, w).threadSlug, `${w} threadSlug`)
+        )
+        : [],
+    };
+  };
+  const ordered = (v: unknown, w: string): OakPosition[] =>
+    arr(v, w).map((u, i) => ({
+      order: int(obj(u, `${w}[${i}]`).unitOrder, `${w}[${i}].unitOrder`),
+      p: position(u, `${w}[${i}]`),
+    })).sort((a, b) => a.order - b.order).map((x) => x.p);
+  // A year holds units, tiers, or exam subjects that hold units or tiers.
+  type Block = { all: OakPosition[] } | {
+    variants: Map<string, OakPosition[]>;
+  };
+  const blocks = (q: string): Block[] => {
+    const w = `${dir}/sequences/${q}.json.gz`;
+    return arr(gunzipJson([w])[0], w).map((y, i) => {
+      const yw = `${w}[${i}]`, b = obj(y, yw);
+      const kinds = ["units", "tiers", "examSubjects"].filter((k) => k in b);
+      if (kinds.length !== 1) {
+        bodyFail(yw, "one of units, tiers, or examSubjects", kinds);
+      }
+      onlyKeys(b, ["year", "title", ...kinds], yw);
+      if ("units" in b) return { all: ordered(b.units, `${yw}.units`) };
+      const variants = new Map<string, OakPosition[]>();
+      const add = (k: string, units: unknown, vw: string) => {
+        if (variants.has(k)) bodyFail(vw, "a variant named once", k);
+        variants.set(k, ordered(units, `${vw}.units`));
+      };
+      // A slug holds no space, so "biology foundation" names one variant.
+      const tiers = (v: unknown, prefix: string, tw: string) => {
+        for (const [j, t] of arr(v, tw).entries()) {
+          const o = obj(t, `${tw}[${j}]`);
+          add(
+            prefix + str(o.tierSlug, `${tw}[${j}].tierSlug`),
+            o.units,
+            `${tw}[${j}]`,
+          );
+        }
+      };
+      if ("tiers" in b) tiers(b.tiers, "", `${yw}.tiers`);
+      else if ("examSubjects" in b) {
+        for (
+          const [j, e] of arr(b.examSubjects, `${yw}.examSubjects`)
+            .entries()
+        ) {
+          const ew = `${yw}.examSubjects[${j}]`, o = obj(e, ew);
+          const s = str(o.examSubjectSlug, `${ew}.examSubjectSlug`);
+          if ("tiers" in o) tiers(o.tiers, `${s} `, `${ew}.tiers`);
+          else add(s, o.units, ew);
+        }
+      } else bodyFail(yw, "units, tiers, or examSubjects", Object.keys(b));
+      if (!variants.size) bodyFail(yw, "at least one tier or exam subject", []);
+      return { variants };
+    });
+  };
+  const flatten = (q: string): OakPosition[][] => {
+    const bs = blocks(q);
+    const keys = new Set(
+      bs.flatMap((b) => "variants" in b ? [...b.variants.keys()] : []),
+    );
+    return (keys.size ? [...keys] : [""]).map((k) =>
+      bs.flatMap((b) => {
+        if ("all" in b) return b.all;
+        const v = b.variants.get(k);
+        // Every tiered year of one sequence names the same variants.
+        return v ?? bodyFail(`${dir}/sequences/${q}.json.gz`, `variant ${k}`, [
+          ...b.variants.keys(),
+        ]);
+      })
+    );
+  };
+  const tracks: OakPosition[][] = [];
+  for (const [subject, v] of Object.entries(bySubject)) {
+    const seqs = arr(v, `${dir}/index.json.gz ${subject}`).map((q) =>
+      str(q, `${dir}/index.json.gz ${subject}`)
+    );
+    const primary = seqs.filter((q) => q.endsWith("-primary"))
+      .flatMap(flatten);
+    if (primary.length > 1) {
+      bodyFail(`${dir}/index.json.gz ${subject}`, "one primary track", seqs);
+    }
+    const secondary = seqs.filter((q) => !q.endsWith("-primary"))
+      .flatMap(flatten);
+    const lead = primary[0] ?? [];
+    if (secondary.length) {
+      for (const t of secondary) tracks.push([...lead, ...t]);
+    } else tracks.push(lead);
+  }
+  return { units, tracks };
 }
 
 // Unit slug → the skill that carries its oak:<slug> tag.
@@ -402,9 +601,57 @@ export function oakPriorNames(
   tagged: { id: string; tags: string }[],
 ): { dep: string; name: string }[] {
   const bySlug = oakSkillOf(tagged);
-  return readOak().flatMap((u) => {
+  return readOak().units.flatMap((u) => {
     const dep = bySlug.get(u.slug);
     return dep ? u.prior.map((name) => ({ dep, name })) : [];
+  });
+}
+
+// NOTE: A thread pair is a seed edge only when Claude judges the first unit
+// a prereq of the second (stage enrich, Sonnet 5.5, keyed by "src>dst"). On a
+// sample of 200 pairs it accepted 27: a thread is a strand such as "Number",
+// so "Trigonometry" precedes "Percentages". Alternative: every pair is a seed
+// edge. Then `rotary-engine` needs `it-like-to-live-in-tanzania`. Alternative:
+// drop thread order. Stage prereq picked only 8 of the 27 true pairs itself.
+const OAK_THREAD_CACHE = `${BUILD}/1f_oak_thread.tsv`;
+
+// Within one track, a unit precedes the next unit that shares one of its
+// threads. Each option of a position pairs with each option of the next.
+export function oakThreadPairs(
+  tracks: OakPosition[][],
+): { src: string; dst: string }[] {
+  const out = new Map<string, { src: string; dst: string }>();
+  for (const track of tracks) {
+    const last = new Map<string, string[]>();
+    for (const p of track) {
+      for (const t of p.threads) {
+        for (const src of last.get(t) ?? []) {
+          for (const dst of p.slugs) {
+            if (src !== dst) out.set(`${src}>${dst}`, { src, dst });
+          }
+        }
+        last.set(t, p.slugs);
+      }
+    }
+  }
+  return [...out.values()];
+}
+
+// The thread pairs that Claude judged prereqs.
+export function oakJudgedPairs(
+  pairs: { src: string; dst: string }[],
+  judged: Map<string, string>,
+): { src: string; dst: string }[] {
+  return pairs.filter((p) => {
+    const verdict = judged.get(`${p.src}>${p.dst}`);
+    if (verdict !== "yes" && verdict !== "no") {
+      throw new Error(
+        `Oak thread pair ${p.src}>${p.dst}: expected "yes" or "no" in ${OAK_THREAD_CACHE}, received ${
+          JSON.stringify(verdict)
+        }. Run stage enrich: deno run -A pipeline.ts enrich`,
+      );
+    }
+    return verdict === "yes";
   });
 }
 
@@ -1259,100 +1506,85 @@ export function stageList() {
     );
   }
 
-  // Common Standards Project: one skill per leaf standard of a current set. A
-  // standard that parents another is a heading. Each file is one JSON line.
+  // Common Standards Project: one skill per leaf standard of a current set.
   // REVIEW: A set's grades tag its standards only when it names at most 4
   // grades, as for Learning Commons components; a K-6 set would anchor its
   // grade-6 standards at K. Alternative: tag every set's grades.
   {
-    const files = readDirSorted("data/csp").filter((e) =>
-      e.name.endsWith(".json.gz")
-    ).map((e) => `data/csp/${e.name}`);
-    let n = 0,
-      sets = 0,
-      deprecated = 0,
-      headings = 0,
-      scaff = 0,
-      dup = 0,
-      listCodes = 0;
-    for (let c = 0; c < files.length; c += 2000) {
-      const chunk = files.slice(c, c + 2000);
-      gunzipJson(chunk).forEach((body, k) => {
-        const path = chunk[k];
-        // deno-lint-ignore no-explicit-any -- CSP sets, read field by field
-        const set = body as any;
-        if (typeof set?.standards !== "object" || !set.standards) {
-          throw new Error(
-            `${path}: expected a CSP set with a standards object, received keys ${
-              JSON.stringify(Object.keys(set ?? {}))
-            }. Re-download it: deno run -A data/download.ts`,
-          );
+    const english = loadTsvCache(CSP_ENGLISH_CACHE);
+    const translated = loadTsvCache(CSP_TRANSLATE_CACHE);
+    let n = 0, scaff = 0, dup = 0, listCodes = 0, foreign = 0;
+    const { sets, deprecated, headings } = forEachCspSet((set) => {
+      const grades = set.levels.length <= 4
+        ? set.levels.map((g) => normGrade(g)).filter(Boolean).map((g) =>
+          `grade:${g}`
+        )
+        : [];
+      const seen = new Set<string>();
+      for (const st of set.leaves) {
+        if (st.statementLabel && SCAFFOLDING_TYPES.has(st.statementLabel)) {
+          scaff++;
+          continue;
         }
-        sets++;
-        if (set.document?.publicationStatus === "Deprecated") {
-          deprecated++;
-          return;
+        let text = cspText(st);
+        if (text) {
+          const e = english.get(set.id);
+          if (e !== "yes" && e !== "no") {
+            throw new Error(
+              `CSP set ${set.id}: expected "yes" or "no" in ${CSP_ENGLISH_CACHE}, received ${
+                JSON.stringify(e)
+              }. Run stage enrich: deno run -A pipeline.ts enrich`,
+            );
+          }
+          if (e === "no") {
+            const t = translated.get(String(st.id));
+            if (!t) {
+              throw new Error(
+                `CSP standard ${st.id} of set ${set.id}: expected an English translation in ${CSP_TRANSLATE_CACHE}, received none for "${
+                  text.slice(0, 80)
+                }". Run stage enrich: deno run -A pipeline.ts enrich`,
+              );
+            }
+            text = t;
+            foreign++;
+          }
         }
-        const levels: string[] = Array.isArray(set.educationLevels)
-          ? set.educationLevels.map(String)
-          : [];
-        const grades = levels.length <= 4
-          ? levels.map((g) => normGrade(g)).filter(Boolean).map((g) =>
-            `grade:${g}`
-          )
-          : [];
-        // deno-lint-ignore no-explicit-any -- CSP standards
-        const stds = Object.values(set.standards) as any[];
-        const parents = new Set(stds.map((st) => st.parentId));
-        const seen = new Set<string>();
-        for (const st of stds) {
-          if (parents.has(st.id)) {
-            headings++;
-            continue;
-          }
-          if (st.statementLabel && SCAFFOLDING_TYPES.has(st.statementLabel)) {
-            scaff++;
-            continue;
-          }
-          const cleaned = cleanStandard(
-            // Plain text: a JavaScript standard names "<script>" as text.
-            unmojibake(String(st.description ?? "")).replace(/\s+/g, " ")
-              .trim(),
-            "",
-            "",
-            Boolean(st.statementLabel),
-          );
-          if (cleaned === "scaffPat" || cleaned === "pureVerb") {
-            scaff++;
-            continue;
-          }
-          const key = cleaned.title.toLowerCase();
-          if (seen.has(key)) {
-            dup++;
-            continue;
-          }
-          seen.add(key);
-          const tags = ["csp", ...grades];
-          // A notation can list several codes ("6.EE.B.6, MS-ESS3-1"): no tag.
-          const code = String(st.statementNotation ?? "").trim();
-          if (/[\s,()]/.test(code)) listCodes++;
-          else {
-            const t = code && codeTag(code);
-            if (t) tags.push(t);
-          }
-          raw.push({
-            id: "",
-            title: cleaned.title,
-            description: cleaned.description,
-            sources: ["csp"],
-            tags,
-          });
-          n++;
+        const cleaned = cleanStandard(
+          text,
+          "",
+          "",
+          Boolean(st.statementLabel),
+        );
+        if (cleaned === "scaffPat" || cleaned === "pureVerb") {
+          scaff++;
+          continue;
         }
-      });
-    }
+        const key = cleaned.title.toLowerCase();
+        if (seen.has(key)) {
+          dup++;
+          continue;
+        }
+        seen.add(key);
+        const tags = ["csp", ...grades];
+        // A notation can list several codes ("6.EE.B.6, MS-ESS3-1"): no tag.
+        const code = String(st.statementNotation ?? "").trim();
+        if (/[\s,()]/.test(code)) listCodes++;
+        else {
+          const t = code && codeTag(code);
+          if (t) tags.push(t);
+        }
+        raw.push({
+          id: "",
+          title: cleaned.title,
+          description: cleaned.description,
+          sources: ["csp"],
+          tags,
+        });
+        n++;
+      }
+    });
     console.log(
-      `  csp: ${n} (sets=${sets}, deprecated=${deprecated}, headings=${headings}, scaffolding=${scaff}, dup=${dup}, list_codes=${listCodes})`,
+      `  csp: ${n} (sets=${sets}, deprecated=${deprecated}, headings=${headings}, scaffolding=${scaff}, dup=${dup}, list_codes=${listCodes}, translated=${foreign})`,
     );
   }
 
@@ -1638,10 +1870,10 @@ export function stageList() {
     console.log(`  bncc: ${rows.length} objectives`);
   }
 
-  // Oak: one skill per unit. The oak:<slug> tag lets stage snap find
-  // the unit's skill for its prior-knowledge statements.
+  // Oak: one skill per unit. The oak:<slug> tag lets stage seed-edges find
+  // the unit's skill, as khan:<slug> does for a Khan exercise.
   {
-    const units = readOak();
+    const { units } = readOak();
     for (const u of units) {
       // England's Year 1 starts at age 5, as US kindergarten does.
       const grade = u.year === 1 ? "K" : String(u.year - 1);
@@ -1972,19 +2204,6 @@ export function stageList() {
 
 // ---------- stage enrich: Ollama infill + summarize + onet-desc ----------
 
-// TODO: Every skill title is English. Fact (25 Nov): about 3,400 CSP skills
-// keep a French title and about 240 a Spanish one (a count of ids with two
-// function words, such as "-des-" and "-les-"), for example
-// `decrire-les-facons-d-obtenir-une-cote-de-credit`. Stage dedupe cannot
-// merge one with its English twin: the CSP rule needs a word Jaccard of 0.5.
-//   1. Find the language of a CSP set in data/csp (a field of the set or of
-//      its jurisdiction). If none exists, stop and report: do not detect a
-//      language by hand.
-//   2. Translate each non-English title and description as BNCC does below,
-//      into a cache keyed by skill id. You: this step pays for about 3,700
-//      Batches prompts.
-//   3. Stage list titles the skill by its translation, and throws on a
-//      non-English set with no translation.
 export async function stageEnrich() {
   // First, because stage list throws without these and the rest reads its output.
   await resumableClaude(
@@ -1999,6 +2218,105 @@ export async function stageEnrich() {
       clean: (raw) => {
         const c = raw.replace(/^["“]|["”]$/g, "").trim();
         return isBnccTranslation(c) ? c : "";
+      },
+    },
+  );
+  const langTargets: { id: string; sample: string[] }[] = [];
+  forEachCspSet((set) => {
+    const texts = set.leaves.map(cspText).filter(Boolean);
+    if (texts.length) {
+      langTargets.push({
+        id: set.id,
+        // 8 statements of 200 characters name the language.
+        sample: texts.slice(0, 8).map((t) => t.slice(0, 200)),
+      });
+    }
+  });
+  await resumableClaude(
+    "enrich:csp-english",
+    CSP_ENGLISH_CACHE,
+    langTargets,
+    (t) =>
+      `These statements come from one set of curriculum standards. Is the set written in English? Answer "no" when the statements are in another language. A statement in English that quotes foreign words, as in a language course, counts as English.\n\n${
+        t.sample.map((x) => `- ${x}`).join("\n")
+      }`,
+    {
+      numPredict: 20,
+      schema: {
+        type: "object",
+        properties: { english: { type: "string", enum: ["yes", "no"] } },
+        required: ["english"],
+        additionalProperties: false,
+      },
+      clean: (raw) => {
+        const e = (JSON.parse(raw) as { english?: unknown })?.english;
+        return e === "yes" || e === "no" ? e : "";
+      },
+    },
+  );
+  const cspEnglish = loadTsvCache(CSP_ENGLISH_CACHE);
+  const foreign: { id: string; text: string }[] = [];
+  forEachCspSet((set) => {
+    if (cspEnglish.get(set.id) !== "no") return;
+    for (const st of set.leaves) {
+      const text = cspText(st);
+      if (text) foreign.push({ id: String(st.id), text });
+    }
+  });
+  await resumableClaude(
+    "enrich:csp-translate",
+    CSP_TRANSLATE_CACHE,
+    foreign,
+    (t) =>
+      `Translate this curriculum standard into plain English. Keep every idea and add none. If it is already English, output it unchanged. Output only the translation.\n\nStandard: ${t.text}\n\nEnglish:`,
+    {
+      // The longest standard is a few thousand characters.
+      numPredict: 1500,
+      // The schema leaves no room for a preamble: without it, about 1 reply
+      // in 100 began "The standard is in French, so here is the translation".
+      schema: {
+        type: "object",
+        properties: { translation: { type: "string" } },
+        required: ["translation"],
+        additionalProperties: false,
+      },
+      clean: (raw) => {
+        const t = (JSON.parse(raw) as { translation?: unknown })?.translation;
+        return typeof t === "string" ? t.replace(/\s+/g, " ").trim() : "";
+      },
+    },
+  );
+  const oak = readOak();
+  const oakUnit = new Map(oak.units.map((u) => [u.slug, u]));
+  const oakCard = (slug: string) => {
+    const u = oakUnit.get(slug)!;
+    return `${u.title} (Year ${u.year})${
+      u.description ? `\n  Description: ${u.description.slice(0, 400)}` : ""
+    }`;
+  };
+  await resumableClaude(
+    "enrich:oak-thread",
+    OAK_THREAD_CACHE,
+    oakThreadPairs(oak.tracks).map((p) => ({ id: `${p.src}>${p.dst}`, ...p })),
+    (p) =>
+      `Two units of a school curriculum sit in one thread, and unit A is taught before unit B. Decide if A is a prerequisite of B: a learner must master what A teaches before they can learn B. Answer no when the units only share a theme, and a learner could take B first.\n\nUnit A: ${
+        oakCard(p.src)
+      }\n\nUnit B: ${oakCard(p.dst)}`,
+    {
+      numPredict: 20,
+      // The judge decides which edges are seeds, so it gets the stronger
+      // model and thinking; the pairs number under 3,000.
+      model: "claude-sonnet-5-5",
+      think: true,
+      schema: {
+        type: "object",
+        properties: { prereq: { type: "string", enum: ["yes", "no"] } },
+        required: ["prereq"],
+        additionalProperties: false,
+      },
+      clean: (raw) => {
+        const v = (JSON.parse(raw) as { prereq?: unknown })?.prereq;
+        return v === "yes" || v === "no" ? v : "";
       },
     },
   );
@@ -2465,6 +2783,32 @@ export async function stageSeedEdges() {
     }
   }
 
+  const oakDropped: string[] = [];
+  // Oak: the thread pairs that Claude judged prereqs. A unit resolves through
+  // its oak:<slug>
+  // tag. Its prior-knowledge statements are free text: stage snap matches them.
+  {
+    const bySlug = oakSkillOf(tagged);
+    for (
+      const p of oakJudgedPairs(
+        oakThreadPairs(readOak().tracks),
+        loadTsvCache(OAK_THREAD_CACHE),
+      )
+    ) {
+      const src = bySlug.get(p.src), dst = bySlug.get(p.dst);
+      const raw = `${p.src}->${p.dst}`;
+      // A unit with no skill (stage list dropped it, or a merge hit the tag
+      // cap) goes to quarantine as no-skill, like a Learning Commons node.
+      if (src && dst) addRaw(src, dst, "oak_thread", raw);
+      else {
+        oakDropped.push(
+          `${p.src}\t${p.dst}\toak_thread\t${raw}\tno-skill\tno-skill`,
+        );
+        (perSource.oak_thread ??= { total: 0, resolved: 0 }).total++;
+      }
+    }
+  }
+
   // AL-CPL — per readme: "*.preqs: concept pairs with prerequisite relations.
   // The second concept (2nd column) is a prerequisite of the first concept (1st column)."
   for (const domain of ["data_mining", "geometry", "physics", "precalculus"]) {
@@ -2773,6 +3117,7 @@ export async function stageSeedEdges() {
       });
     }
   }
+  quarantine.push(...oakDropped);
   // Course edges whose code has no sure title carry no label to resolve.
   (perSource.courses ??= { total: 0, resolved: 0 }).total +=
     courses.dropped.length;
@@ -2853,6 +3198,8 @@ export async function stageSeedEdges() {
     learningcommons: 0.71,
     // Ids from tags, so every pair resolves.
     digcomp: 0.9,
+    // Ids from tags, as for DigComp.
+    oak_thread: 0.9,
   };
   const short = Object.entries(perSource).flatMap(([src, s]) => {
     const floor = SEED_FLOORS[src];
