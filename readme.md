@@ -600,6 +600,11 @@ Evidence for each note: `research.md`.
      `graph.ts`.
   4. Testable classes: `TODO:` in `stagePrereq`, `prereq.ts`.
   5. The readme items below.
+- TODO: `deno task status` finishes in under 30 s. Fact (25 Nov): it takes 74 to
+  87 s with the default V8 heap and 32 s with
+  `--v8-flags=--max-old-space-size=16384`, as `build/chain/chain.sh` runs it.
+  1. Add the flag to the `status` task in `deno.json`, if host `pc` has the RAM.
+  2. Find the last 2 s: time each condition, and fix the slowest.
 - TODO: You see the badge that each skill counts toward, and the skills a badge
   still needs.
   1. NOTE: A badge is a topic that holds 10 to 100 skills. Alternative: cluster
