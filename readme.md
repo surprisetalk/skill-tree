@@ -618,3 +618,27 @@ Evidence for each note: `research.md`.
      goes next to that function, and a note that spans files goes in an
      architecture paragraph of this readme.
   2. Change no decision and no wording beyond the `NOTE:` prefix.
+- TODO: You give an expert skill, and Sonnet returns its prerequisite tree down
+  to kindergarten, with the same skills on each run. Fact (25 Nov):
+  `decompose/decompose.ts` ran 3 starts, 3 runs each, into `decompose/runs/`;
+  `deno run -A decompose/decompose.ts cmp` prints the comparison (needs Ollama).
+  - Every run reaches grade 0 with no dead end; depth 12 to 16.
+  - Two runs of one start share 7% of exact titles, no exact edge, and 41% to
+    67% of skills by meaning (cosine 0.85). Node counts range 163 to 349 for one
+    start.
+  - Runs of different starts share 46% of K–2 skills, 19% of grades 3–5, and
+    nothing above grade 8. This shared base is the goal, not a fault.
+  - 59% to 88% of each tree sits in K–2: one grade 1 layer grew a tree from 89
+    to 173 skills.
+  - The rule "each prerequisite has a lower grade" drops same-grade steps: the
+    blood culture start never names "perform a venipuncture".
+  1. Allow a prerequisite of the same grade at grade 13 and above; keep the tree
+     acyclic with a check on the path to the root.
+  2. Give grades 0 to 5 as a fixed list that the model picks from, and reject a
+     title outside it. NOTE: The list comes from the catalogue skills of bands 2
+     to 7. Alternative: merge the K–5 skills of many runs by embedding. It needs
+     a threshold, and pairs at cosine 0.84 are still one skill.
+  3. Rerun the 9 runs. Goal: two runs of one start share 80% of K–5 skills by
+     exact title, and K–2 holds under half of each tree.
+  4. Compare each tree with the closure of the nearest catalogue skill in
+     `skills.tsv`: the share of tree skills with a catalogue match, per grade.

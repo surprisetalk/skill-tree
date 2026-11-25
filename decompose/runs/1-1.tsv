@@ -1,0 +1,763 @@
+Perform a boundary survey of a land parcel and compute its area	16	Operate a total station or theodolite to measure horizontal angles and distances in the field	14
+Perform a boundary survey of a land parcel and compute its area	16	Compute traverse closure and adjust angular and linear misclosure using the compass rule	15
+Perform a boundary survey of a land parcel and compute its area	16	Calculate polygon area from coordinates using the coordinate (shoelace) method	12
+Perform a boundary survey of a land parcel and compute its area	16	Interpret a legal property description including metes and bounds and locate boundary monuments	15
+Interpret a legal property description including metes and bounds and locate boundary monuments	15	Convert between bearings and azimuths and compute traverse directions from angles	13
+Interpret a legal property description including metes and bounds and locate boundary monuments	15	Operate a total station or theodolite to measure horizontal angles and distances in the field	14
+Interpret a legal property description including metes and bounds and locate boundary monuments	15	Calculate polygon area from coordinates using the coordinate (shoelace) method	12
+Interpret a legal property description including metes and bounds and locate boundary monuments	15	Compute latitudes and departures and traverse misclosure for a closed boundary	14
+Compute traverse closure and adjust angular and linear misclosure using the compass rule	15	Operate a total station or theodolite to measure horizontal angles and distances in the field	14
+Compute traverse closure and adjust angular and linear misclosure using the compass rule	15	Compute latitudes and departures of traverse legs from bearings or azimuths and distances	13
+Compute traverse closure and adjust angular and linear misclosure using the compass rule	15	Compute the angular misclosure of a closed traverse and distribute it equally among the interior angles	14
+Compute traverse closure and adjust angular and linear misclosure using the compass rule	15	Compute the sum of interior angles of a polygon using (n-2)*180 degrees	8
+Compute latitudes and departures and traverse misclosure for a closed boundary	14	Compute latitudes and departures of traverse legs from bearings or azimuths and distances	13
+Compute latitudes and departures and traverse misclosure for a closed boundary	14	Convert between bearings and azimuths and compute traverse directions from angles	13
+Operate a total station or theodolite to measure horizontal angles and distances in the field	14	Convert between bearings and azimuths and compute traverse directions from angles	13
+Operate a total station or theodolite to measure horizontal angles and distances in the field	14	Set up and level a tripod-mounted surveying instrument over a ground point using a plumb bob or optical plummet	13
+Operate a total station or theodolite to measure horizontal angles and distances in the field	14	Read and record angle measurements in degrees, minutes and seconds from an instrument circle or digital display	12
+Operate a total station or theodolite to measure horizontal angles and distances in the field	14	Measure distances with a steel tape or EDM and apply basic corrections	12
+Compute the angular misclosure of a closed traverse and distribute it equally among the interior angles	14	Compute the sum of interior angles of a polygon using (n-2)*180 degrees	8
+Compute the angular misclosure of a closed traverse and distribute it equally among the interior angles	14	Convert between bearings and azimuths and compute traverse directions from angles	13
+Compute the angular misclosure of a closed traverse and distribute it equally among the interior angles	14	Convert angle measurements between decimal degrees and degrees-minutes-seconds and add and subtract them	10
+Compute the angular misclosure of a closed traverse and distribute it equally among the interior angles	14	Divide a total error equally among a set of measurements and apply the correction to each	6
+Convert between bearings and azimuths and compute traverse directions from angles	13	Convert angle measurements between decimal degrees and degrees-minutes-seconds and add and subtract them	10
+Convert between bearings and azimuths and compute traverse directions from angles	13	Read and record angle measurements in degrees, minutes and seconds from an instrument circle or digital display	12
+Convert between bearings and azimuths and compute traverse directions from angles	13	Compute the sum of interior angles of a polygon using (n-2)*180 degrees	8
+Set up and level a tripod-mounted surveying instrument over a ground point using a plumb bob or optical plummet	13	Read and record angle measurements in degrees, minutes and seconds from an instrument circle or digital display	12
+Set up and level a tripod-mounted surveying instrument over a ground point using a plumb bob or optical plummet	13	Adjust the legs of a tripod to a comfortable working height and firmly set the feet in the ground	11
+Set up and level a tripod-mounted surveying instrument over a ground point using a plumb bob or optical plummet	13	Use a plumb bob to mark a vertical line from a suspended point to the ground	9
+Set up and level a tripod-mounted surveying instrument over a ground point using a plumb bob or optical plummet	13	Read a circular (bull's-eye) bubble and a tubular spirit level to judge whether a surface is level	9
+Compute latitudes and departures of traverse legs from bearings or azimuths and distances	13	Convert angle measurements between decimal degrees and degrees-minutes-seconds and add and subtract them	10
+Compute latitudes and departures of traverse legs from bearings or azimuths and distances	13	Solve right triangles for unknown sides using sine and cosine ratios	10
+Compute latitudes and departures of traverse legs from bearings or azimuths and distances	13	Convert between azimuths and quadrant bearings	12
+Compute latitudes and departures of traverse legs from bearings or azimuths and distances	13	Determine the sign of north-south and east-west components in each quadrant of the coordinate plane	9
+Calculate polygon area from coordinates using the coordinate (shoelace) method	12	Plot and read the (x, y) coordinates of points in the coordinate plane, including negative values	8
+Calculate polygon area from coordinates using the coordinate (shoelace) method	12	Evaluate a 2 by 2 determinant, computing x1*y2 - x2*y1	10
+Calculate polygon area from coordinates using the coordinate (shoelace) method	12	Add and subtract signed numbers and take the absolute value of a result	7
+Calculate polygon area from coordinates using the coordinate (shoelace) method	12	Calculate the area of a triangle or trapezoid from base and height	7
+Read and record angle measurements in degrees, minutes and seconds from an instrument circle or digital display	12	Convert angle measurements between decimal degrees and degrees-minutes-seconds and add and subtract them	10
+Read and record angle measurements in degrees, minutes and seconds from an instrument circle or digital display	12	Read a vernier scale to the nearest division	9
+Read and record angle measurements in degrees, minutes and seconds from an instrument circle or digital display	12	Measure an angle with a protractor to the nearest degree	4
+Convert between azimuths and quadrant bearings	12	Convert angle measurements between decimal degrees and degrees-minutes-seconds and add and subtract them	10
+Convert between azimuths and quadrant bearings	12	Determine the sign of north-south and east-west components in each quadrant of the coordinate plane	9
+Convert between azimuths and quadrant bearings	12	Find the complement and supplement of an angle and compute angles as differences from 90, 180, and 360 degrees	7
+Measure distances with a steel tape or EDM and apply basic corrections	12	Solve right triangles for unknown sides using sine and cosine ratios	10
+Measure distances with a steel tape or EDM and apply basic corrections	12	Use a plumb bob to mark a vertical line from a suspended point to the ground	9
+Measure distances with a steel tape or EDM and apply basic corrections	12	Read a metric ruler or tape measure to the nearest millimetre	6
+Measure distances with a steel tape or EDM and apply basic corrections	12	Compute a percentage or parts-per-million correction and apply it to a measured value	9
+Adjust the legs of a tripod to a comfortable working height and firmly set the feet in the ground	11	Read a circular (bull's-eye) bubble and a tubular spirit level to judge whether a surface is level	9
+Adjust the legs of a tripod to a comfortable working height and firmly set the feet in the ground	11	Read a metric ruler or tape measure to the nearest millimetre	6
+Convert angle measurements between decimal degrees and degrees-minutes-seconds and add and subtract them	10	Find the complement and supplement of an angle and compute angles as differences from 90, 180, and 360 degrees	7
+Convert angle measurements between decimal degrees and degrees-minutes-seconds and add and subtract them	10	Measure an angle with a protractor to the nearest degree	4
+Convert angle measurements between decimal degrees and degrees-minutes-seconds and add and subtract them	10	Convert between fractions and decimals and between units using a conversion factor of 60	6
+Convert angle measurements between decimal degrees and degrees-minutes-seconds and add and subtract them	10	Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying)	5
+Evaluate a 2 by 2 determinant, computing x1*y2 - x2*y1	10	Add and subtract signed numbers and take the absolute value of a result	7
+Evaluate a 2 by 2 determinant, computing x1*y2 - x2*y1	10	Multiply signed numbers (integers and rational numbers)	7
+Evaluate a 2 by 2 determinant, computing x1*y2 - x2*y1	10	Evaluate an algebraic expression by substituting values for variables, following the order of operations	7
+Solve right triangles for unknown sides using sine and cosine ratios	10	Identify the hypotenuse, opposite side, and adjacent side of a right triangle relative to a given acute angle	9
+Solve right triangles for unknown sides using sine and cosine ratios	10	Write the sine and cosine ratios of an acute angle as ratios of side lengths in a right triangle	9
+Solve right triangles for unknown sides using sine and cosine ratios	10	Solve one-step equations of the form a = b/x and a = bx for the unknown variable using multiplication and division	8
+Solve right triangles for unknown sides using sine and cosine ratios	10	Use a calculator to find the sine and cosine of an angle given in degrees	9
+Use a plumb bob to mark a vertical line from a suspended point to the ground	9	Measure an angle with a protractor to the nearest degree	4
+Use a plumb bob to mark a vertical line from a suspended point to the ground	9	Read a metric ruler or tape measure to the nearest millimetre	6
+Determine the sign of north-south and east-west components in each quadrant of the coordinate plane	9	Plot and read the (x, y) coordinates of points in the coordinate plane, including negative values	8
+Determine the sign of north-south and east-west components in each quadrant of the coordinate plane	9	Add and subtract signed numbers and take the absolute value of a result	7
+Read a vernier scale to the nearest division	9	Read a metric ruler or tape measure to the nearest millimetre	6
+Read a vernier scale to the nearest division	9	Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying)	5
+Read a circular (bull's-eye) bubble and a tubular spirit level to judge whether a surface is level	9	Measure an angle with a protractor to the nearest degree	4
+Read a circular (bull's-eye) bubble and a tubular spirit level to judge whether a surface is level	9	Read a metric ruler or tape measure to the nearest millimetre	6
+Read a circular (bull's-eye) bubble and a tubular spirit level to judge whether a surface is level	9	Add and subtract signed numbers and take the absolute value of a result	7
+Identify the hypotenuse, opposite side, and adjacent side of a right triangle relative to a given acute angle	9	Identify a right triangle and its right angle, acute angles, and the sides that form each	6
+Identify the hypotenuse, opposite side, and adjacent side of a right triangle relative to a given acute angle	9	Find the complement and supplement of an angle and compute angles as differences from 90, 180, and 360 degrees	7
+Compute a percentage or parts-per-million correction and apply it to a measured value	9	Evaluate an algebraic expression by substituting values for variables, following the order of operations	7
+Compute a percentage or parts-per-million correction and apply it to a measured value	9	Multiply signed numbers (integers and rational numbers)	7
+Compute a percentage or parts-per-million correction and apply it to a measured value	9	Add and subtract signed numbers and take the absolute value of a result	7
+Compute a percentage or parts-per-million correction and apply it to a measured value	9	Convert between fractions and decimals and between units using a conversion factor of 60	6
+Write the sine and cosine ratios of an acute angle as ratios of side lengths in a right triangle	9	Write a ratio of two quantities as a fraction in simplest form	6
+Write the sine and cosine ratios of an acute angle as ratios of side lengths in a right triangle	9	Identify the hypotenuse and the legs of a right triangle	8
+Write the sine and cosine ratios of an acute angle as ratios of side lengths in a right triangle	9	Label the sides of a right triangle as opposite or adjacent relative to a chosen acute angle	8
+Write the sine and cosine ratios of an acute angle as ratios of side lengths in a right triangle	9	Find the complement and supplement of an angle and compute angles as differences from 90, 180, and 360 degrees	7
+Use a calculator to find the sine and cosine of an angle given in degrees	9	Measure an angle with a protractor to the nearest degree	4
+Use a calculator to find the sine and cosine of an angle given in degrees	9	Evaluate an algebraic expression by substituting values for variables, following the order of operations	7
+Use a calculator to find the sine and cosine of an angle given in degrees	9	Convert between fractions and decimals and between units using a conversion factor of 60	6
+Identify the hypotenuse and the legs of a right triangle	8	Identify a right triangle and its right angle, acute angles, and the sides that form each	6
+Label the sides of a right triangle as opposite or adjacent relative to a chosen acute angle	8	Identify a right triangle and its right angle, acute angles, and the sides that form each	6
+Plot and read the (x, y) coordinates of points in the coordinate plane, including negative values	8	Add and subtract signed numbers and take the absolute value of a result	7
+Plot and read the (x, y) coordinates of points in the coordinate plane, including negative values	8	Plot and read ordered pairs of non-negative numbers in the first quadrant of a coordinate grid	5
+Plot and read the (x, y) coordinates of points in the coordinate plane, including negative values	8	Place and compare positive and negative integers on a number line	6
+Compute the sum of interior angles of a polygon using (n-2)*180 degrees	8	Evaluate an algebraic expression by substituting values for variables, following the order of operations	7
+Compute the sum of interior angles of a polygon using (n-2)*180 degrees	8	Find the complement and supplement of an angle and compute angles as differences from 90, 180, and 360 degrees	7
+Compute the sum of interior angles of a polygon using (n-2)*180 degrees	8	Identify a right triangle and its right angle, acute angles, and the sides that form each	6
+Solve one-step equations of the form a = b/x and a = bx for the unknown variable using multiplication and division	8	Multiply signed numbers (integers and rational numbers)	7
+Solve one-step equations of the form a = b/x and a = bx for the unknown variable using multiplication and division	8	Evaluate an algebraic expression by substituting values for variables, following the order of operations	7
+Solve one-step equations of the form a = b/x and a = bx for the unknown variable using multiplication and division	8	Solve one-step equations of the form x + a = b and x - a = b using addition and subtraction	7
+Solve one-step equations of the form a = b/x and a = bx for the unknown variable using multiplication and division	8	Divide fractions and decimals	6
+Add and subtract signed numbers and take the absolute value of a result	7	Place and compare positive and negative integers on a number line	6
+Add and subtract signed numbers and take the absolute value of a result	7	Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying)	5
+Multiply signed numbers (integers and rational numbers)	7	Place and compare positive and negative integers on a number line	6
+Multiply signed numbers (integers and rational numbers)	7	Divide fractions and decimals	6
+Multiply signed numbers (integers and rational numbers)	7	Multiply fractions and decimals	6
+Calculate the area of a triangle or trapezoid from base and height	7	Calculate the area of a rectangle and a parallelogram from base and height	6
+Calculate the area of a triangle or trapezoid from base and height	7	Multiply fractions and decimals	6
+Calculate the area of a triangle or trapezoid from base and height	7	Identify the base and corresponding perpendicular height of a triangle or trapezoid	6
+Calculate the area of a triangle or trapezoid from base and height	7	Evaluate numerical expressions with parentheses using the order of operations	6
+Solve one-step equations of the form x + a = b and x - a = b using addition and subtraction	7	Place and compare positive and negative integers on a number line	6
+Solve one-step equations of the form x + a = b and x - a = b using addition and subtraction	7	Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3
+Solve one-step equations of the form x + a = b and x - a = b using addition and subtraction	7	Evaluate an algebraic expression with a variable by substituting a given value	6
+Solve one-step equations of the form x + a = b and x - a = b using addition and subtraction	7	Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying)	5
+Find the complement and supplement of an angle and compute angles as differences from 90, 180, and 360 degrees	7	Measure an angle with a protractor to the nearest degree	4
+Find the complement and supplement of an angle and compute angles as differences from 90, 180, and 360 degrees	7	Identify a right triangle and its right angle, acute angles, and the sides that form each	6
+Find the complement and supplement of an angle and compute angles as differences from 90, 180, and 360 degrees	7	Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying)	5
+Evaluate an algebraic expression by substituting values for variables, following the order of operations	7	Evaluate numerical expressions with multiple operations and parentheses using the order of operations	5
+Evaluate an algebraic expression by substituting values for variables, following the order of operations	7	Identify a variable as a letter that stands for an unknown or changing number and write simple algebraic expressions	6
+Evaluate an algebraic expression by substituting values for variables, following the order of operations	7	Add, subtract, multiply, and divide positive and negative integers	6
+Evaluate an algebraic expression by substituting values for variables, following the order of operations	7	Evaluate expressions with whole-number exponents	6
+Write a ratio of two quantities as a fraction in simplest form	6	Write a fraction in simplest form by dividing the numerator and denominator by their greatest common factor	5
+Write a ratio of two quantities as a fraction in simplest form	6	Write a ratio relationship between two quantities using words and the colon notation a:b	5
+Write a ratio of two quantities as a fraction in simplest form	6	Interpret a fraction as division of the numerator by the denominator	5
+Divide a total error equally among a set of measurements and apply the correction to each	6	Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying)	5
+Divide a total error equally among a set of measurements and apply the correction to each	6	Divide a decimal by a whole number	5
+Divide a total error equally among a set of measurements and apply the correction to each	6	Find the difference between a measured total and an expected total to determine the error	4
+Divide a total error equally among a set of measurements and apply the correction to each	6	Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3
+Identify a right triangle and its right angle, acute angles, and the sides that form each	6	Measure an angle with a protractor to the nearest degree	4
+Identify a right triangle and its right angle, acute angles, and the sides that form each	6	Classify an angle as acute, right, obtuse, or straight by comparing it with a right angle	4
+Identify a right triangle and its right angle, acute angles, and the sides that form each	6	Identify the vertex and the two sides (rays) that form an angle	4
+Identify a right triangle and its right angle, acute angles, and the sides that form each	6	Identify and name the sides and vertices of a triangle	3
+Place and compare positive and negative integers on a number line	6	Place and order whole numbers, fractions, and decimals on a number line	4
+Place and compare positive and negative integers on a number line	6	Compare and order whole numbers using greater than, less than, and equal to symbols	2
+Place and compare positive and negative integers on a number line	6	Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3
+Place and compare positive and negative integers on a number line	6	Interpret negative numbers in real-world contexts such as temperature below zero and debt	5
+Read a metric ruler or tape measure to the nearest millimetre	6	Read and write decimals to tenths and hundredths	4
+Read a metric ruler or tape measure to the nearest millimetre	6	Convert between centimetres and millimetres using the 10-to-1 relationship	4
+Read a metric ruler or tape measure to the nearest millimetre	6	Measure the length of an object to the nearest centimetre using a ruler	2
+Read a metric ruler or tape measure to the nearest millimetre	6	Place decimals on a number line and locate them between tenths	4
+Convert between fractions and decimals and between units using a conversion factor of 60	6	Convert a fraction with denominator 10 or 100 to its decimal form	4
+Convert between fractions and decimals and between units using a conversion factor of 60	6	Multiply and divide whole numbers and decimals by 60	5
+Convert between fractions and decimals and between units using a conversion factor of 60	6	Convert a quantity from a larger unit to a smaller unit by multiplying by a conversion factor	4
+Convert between fractions and decimals and between units using a conversion factor of 60	6	Write a fraction of a unit (such as a part of an hour) as a decimal	5
+Evaluate numerical expressions with parentheses using the order of operations	6	Evaluate numerical expressions with multiple operations and parentheses using the order of operations	5
+Evaluate numerical expressions with parentheses using the order of operations	6	Multiply and divide whole numbers fluently using multi-digit algorithms	5
+Divide fractions and decimals	6	Multiply a fraction by a fraction or whole number	5
+Divide fractions and decimals	6	Divide a whole number by a unit fraction and a unit fraction by a whole number	5
+Divide fractions and decimals	6	Multiply decimals to hundredths	5
+Divide fractions and decimals	6	Divide multi-digit whole numbers using the standard algorithm	5
+Identify the base and corresponding perpendicular height of a triangle or trapezoid	6	Identify perpendicular lines and right angles in a figure	4
+Identify the base and corresponding perpendicular height of a triangle or trapezoid	6	Identify parallel sides of a quadrilateral and name triangles and trapezoids by their properties	4
+Identify the base and corresponding perpendicular height of a triangle or trapezoid	6	Identify the sides and vertices of a polygon	3
+Multiply fractions and decimals	6	Multiply a whole number by a fraction and a fraction by a fraction using visual models	5
+Multiply fractions and decimals	6	Multiply multi-digit whole numbers using the standard algorithm	5
+Multiply fractions and decimals	6	Explain place value of decimals to thousandths and write decimals as fractions	5
+Multiply fractions and decimals	6	Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying)	5
+Calculate the area of a rectangle and a parallelogram from base and height	6	Multiply whole numbers up to three digits by two-digit numbers	5
+Calculate the area of a rectangle and a parallelogram from base and height	6	Find the area of a rectangle by counting unit squares or using repeated rows	3
+Calculate the area of a rectangle and a parallelogram from base and height	6	Identify rectangles and parallelograms and name their base and height	4
+Calculate the area of a rectangle and a parallelogram from base and height	6	Draw a perpendicular height from a side of a parallelogram to its opposite side	5
+Evaluate an algebraic expression with a variable by substituting a given value	6	Evaluate numerical expressions with multiple operations and parentheses using the order of operations	5
+Evaluate an algebraic expression with a variable by substituting a given value	6	Identify a letter as a variable standing for an unknown number in an expression	5
+Evaluate an algebraic expression with a variable by substituting a given value	6	Write a numerical expression with a missing number represented by a symbol or letter	4
+Evaluate expressions with whole-number exponents	6	Multiply multi-digit whole numbers using the standard algorithm	5
+Evaluate expressions with whole-number exponents	6	Write repeated multiplication of the same factor as a product of equal factors (e.g., 3 × 3 × 3)	4
+Evaluate expressions with whole-number exponents	6	Evaluate numerical expressions with multiple operations and parentheses using the order of operations	5
+Identify a variable as a letter that stands for an unknown or changing number and write simple algebraic expressions	6	Evaluate numerical expressions with multiple operations and parentheses using the order of operations	5
+Identify a variable as a letter that stands for an unknown or changing number and write simple algebraic expressions	6	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Identify a variable as a letter that stands for an unknown or changing number and write simple algebraic expressions	6	Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4
+Add, subtract, multiply, and divide positive and negative integers	6	Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying) (grade 5)	5
+Add, subtract, multiply, and divide positive and negative integers	6	Evaluate numerical expressions with multiple operations and parentheses using the order of operations (grade 5)	5
+Add, subtract, multiply, and divide positive and negative integers	6	Locate and place negative integers on a number line and compare them to zero and to other integers	5
+Add, subtract, multiply, and divide positive and negative integers	6	Multiply and divide multi-digit whole numbers using standard algorithms	5
+Write a ratio relationship between two quantities using words and the colon notation a:b	5	Write a numerical expression with a missing number represented by a symbol or letter	4
+Write a ratio relationship between two quantities using words and the colon notation a:b	5	Compare and order whole numbers using greater than, less than, and equal to symbols	2
+Interpret a fraction as division of the numerator by the denominator	5	Place and order whole numbers, fractions, and decimals on a number line	4
+Interpret a fraction as division of the numerator by the denominator	5	Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4
+Interpret a fraction as division of the numerator by the denominator	5	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Evaluate numerical expressions with multiple operations and parentheses using the order of operations	5	Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4
+Evaluate numerical expressions with multiple operations and parentheses using the order of operations	5	Write a numerical expression with a missing number represented by a symbol or letter	4
+Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying)	5	Read and write decimals to tenths and hundredths	4
+Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying)	5	Convert a quantity from a larger unit to a smaller unit by multiplying by a conversion factor	4
+Plot and read ordered pairs of non-negative numbers in the first quadrant of a coordinate grid	5	Place and order whole numbers, fractions, and decimals on a number line	4
+Plot and read ordered pairs of non-negative numbers in the first quadrant of a coordinate grid	5	Identify perpendicular lines and right angles in a figure	4
+Plot and read ordered pairs of non-negative numbers in the first quadrant of a coordinate grid	5	Measure the length of an object to the nearest centimetre using a ruler	2
+Write a fraction in simplest form by dividing the numerator and denominator by their greatest common factor	5	Find the greatest common factor of two whole numbers by listing their factors	4
+Write a fraction in simplest form by dividing the numerator and denominator by their greatest common factor	5	Divide a whole number by a one-digit or two-digit divisor with no remainder	4
+Write a fraction in simplest form by dividing the numerator and denominator by their greatest common factor	5	Identify equivalent fractions using models and number lines	4
+Write a fraction in simplest form by dividing the numerator and denominator by their greatest common factor	5	Generate an equivalent fraction by multiplying or dividing the numerator and denominator by the same number	4
+Write a fraction of a unit (such as a part of an hour) as a decimal	5	Convert a fraction with denominator 10 or 100 to its decimal form	4
+Write a fraction of a unit (such as a part of an hour) as a decimal	5	Read and write decimals to tenths and hundredths	4
+Divide a decimal by a whole number	5	Read and write decimals to tenths and hundredths	4
+Divide a decimal by a whole number	5	Divide a multi-digit whole number by a one-digit whole number using the standard algorithm	4
+Divide a decimal by a whole number	5	Convert a fraction with denominator 10 or 100 to its decimal form	4
+Interpret negative numbers in real-world contexts such as temperature below zero and debt	5	Place and order whole numbers, fractions, and decimals on a number line	4
+Interpret negative numbers in real-world contexts such as temperature below zero and debt	5	Compare and order whole numbers using greater than, less than, and equal to symbols	2
+Interpret negative numbers in real-world contexts such as temperature below zero and debt	5	Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3
+Multiply and divide whole numbers and decimals by 60	5	Convert a quantity from a larger unit to a smaller unit by multiplying by a conversion factor	4
+Multiply and divide whole numbers and decimals by 60	5	Read and write decimals to tenths and hundredths	4
+Multiply and divide whole numbers fluently using multi-digit algorithms	5	Multiply a multi-digit whole number by a one-digit number using place value strategies	4
+Multiply and divide whole numbers fluently using multi-digit algorithms	5	Divide a multi-digit whole number by a one-digit number with remainders	4
+Multiply and divide whole numbers fluently using multi-digit algorithms	5	Recall multiplication and division facts to 100	3
+Multiply a fraction by a fraction or whole number	5	Multiply a whole number by a fraction using repeated addition of unit fractions	4
+Multiply a fraction by a fraction or whole number	5	Multiply a whole number by a whole number using the standard algorithm	4
+Multiply a fraction by a fraction or whole number	5	Write equivalent fractions using multiplication by a fraction equal to one	4
+Divide a whole number by a unit fraction and a unit fraction by a whole number	5	Place and order whole numbers, fractions, and decimals on a number line	4
+Divide a whole number by a unit fraction and a unit fraction by a whole number	5	Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4
+Divide a whole number by a unit fraction and a unit fraction by a whole number	5	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Multiply decimals to hundredths	5	Read and write decimals to tenths and hundredths	4
+Multiply decimals to hundredths	5	Convert a fraction with denominator 10 or 100 to its decimal form	4
+Multiply decimals to hundredths	5	Find the area of a rectangle by counting unit squares or using repeated rows	3
+Multiply a whole number by a fraction and a fraction by a fraction using visual models	5	Place and order whole numbers, fractions, and decimals on a number line	4
+Multiply a whole number by a fraction and a fraction by a fraction using visual models	5	Find the area of a rectangle by counting unit squares or using repeated rows	3
+Multiply multi-digit whole numbers using the standard algorithm	5	Find the area of a rectangle by counting unit squares or using repeated rows	3
+Multiply multi-digit whole numbers using the standard algorithm	5	Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4
+Divide multi-digit whole numbers using the standard algorithm	5	Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3
+Divide multi-digit whole numbers using the standard algorithm	5	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Divide multi-digit whole numbers using the standard algorithm	5	Divide a multi-digit whole number by a one-digit number with a remainder	4
+Divide multi-digit whole numbers using the standard algorithm	5	Multiply a multi-digit whole number by a one-digit number	4
+Explain place value of decimals to thousandths and write decimals as fractions	5	Read and write decimals to tenths and hundredths	4
+Explain place value of decimals to thousandths and write decimals as fractions	5	Convert a fraction with denominator 10 or 100 to its decimal form	4
+Draw a perpendicular height from a side of a parallelogram to its opposite side	5	Identify rectangles and parallelograms and name their base and height	4
+Draw a perpendicular height from a side of a parallelogram to its opposite side	5	Identify perpendicular lines and right angles in a figure	4
+Draw a perpendicular height from a side of a parallelogram to its opposite side	5	Identify parallel sides of a quadrilateral and name triangles and trapezoids by their properties	4
+Multiply whole numbers up to three digits by two-digit numbers	5	Multiply a multi-digit whole number by a one-digit number	4
+Multiply whole numbers up to three digits by two-digit numbers	5	Multiply a whole number by multiples of 10 (e.g., 34 × 20)	4
+Multiply whole numbers up to three digits by two-digit numbers	5	Explain place value of digits in whole numbers up to 1,000,000	4
+Identify a letter as a variable standing for an unknown number in an expression	5	Write a numerical expression with a missing number represented by a symbol or letter	4
+Identify a letter as a variable standing for an unknown number in an expression	5	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Identify a letter as a variable standing for an unknown number in an expression	5	Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4
+Evaluate numerical expressions with multiple operations and parentheses using the order of operations (grade 5)	5	Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4
+Evaluate numerical expressions with multiple operations and parentheses using the order of operations (grade 5)	5	Write a numerical expression with a missing number represented by a symbol or letter	4
+Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying) (grade 5)	5	Read and write decimals to tenths and hundredths	4
+Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying) (grade 5)	5	Convert a quantity from a larger unit to a smaller unit by multiplying by a conversion factor	4
+Add and subtract decimals and mixed-unit quantities with regrouping (borrowing and carrying) (grade 5)	5	Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3
+Locate and place negative integers on a number line and compare them to zero and to other integers	5	Place and order whole numbers, fractions, and decimals on a number line	4
+Locate and place negative integers on a number line and compare them to zero and to other integers	5	Compare and order whole numbers using greater than, less than, and equal to symbols	2
+Multiply and divide multi-digit whole numbers using standard algorithms	5	Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4
+Multiply and divide multi-digit whole numbers using standard algorithms	5	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Multiply and divide multi-digit whole numbers using standard algorithms	5	Find the area of a rectangle by counting unit squares or using repeated rows	3
+Identify the vertex and the two sides (rays) that form an angle	4	Identify the sides and vertices of a polygon	3
+Identify the vertex and the two sides (rays) that form an angle	4	Identify and name the sides and vertices of a triangle	3
+Measure an angle with a protractor to the nearest degree	4	Measure the length of an object to the nearest centimetre using a ruler	2
+Measure an angle with a protractor to the nearest degree	4	Identify the sides and vertices of a polygon	3
+Measure an angle with a protractor to the nearest degree	4	Identify and describe angles as right, acute, or obtuse by comparing to a right angle	3
+Classify an angle as acute, right, obtuse, or straight by comparing it with a right angle	4	Identify a right angle as a square corner in shapes and objects	3
+Classify an angle as acute, right, obtuse, or straight by comparing it with a right angle	4	Identify an angle as two rays or sides meeting at a shared endpoint (vertex)	3
+Classify an angle as acute, right, obtuse, or straight by comparing it with a right angle	4	Identify the sides and vertices of a polygon	3
+Read and write decimals to tenths and hundredths	4	Read and write whole numbers to 1000 using place value	2
+Read and write decimals to tenths and hundredths	4	Represent and name unit fractions and fractions with denominators 10 and 100	3
+Read and write decimals to tenths and hundredths	4	Explain the place value of each digit in a three-digit number	2
+Find the difference between a measured total and an expected total to determine the error	4	Subtract two multi-digit whole numbers with and without regrouping	3
+Find the difference between a measured total and an expected total to determine the error	4	Compare and order whole numbers using greater than, less than, and equal to symbols	2
+Find the difference between a measured total and an expected total to determine the error	4	Measure the length of an object to the nearest centimetre using a ruler	2
+Place and order whole numbers, fractions, and decimals on a number line	4	Compare and order whole numbers using greater than, less than, and equal to symbols	2
+Place and order whole numbers, fractions, and decimals on a number line	4	Identify and write unit fractions and fractions of a whole using models	3
+Place and order whole numbers, fractions, and decimals on a number line	4	Place and read whole numbers on a number line	2
+Place and order whole numbers, fractions, and decimals on a number line	4	Read and write decimals to tenths and hundredths using place value	3
+Convert between centimetres and millimetres using the 10-to-1 relationship	4	Measure the length of an object to the nearest centimetre using a ruler	2
+Convert between centimetres and millimetres using the 10-to-1 relationship	4	Recall multiplication and division facts to 100	3
+Convert between centimetres and millimetres using the 10-to-1 relationship	4	Multiply a whole number by 10 using place value patterns	3
+Place decimals on a number line and locate them between tenths	4	Place fractions with denominators 2, 3, 4, 6, and 8 on a number line	3
+Place decimals on a number line and locate them between tenths	4	Place and compare whole numbers on a number line	2
+Convert a quantity from a larger unit to a smaller unit by multiplying by a conversion factor	4	Recall multiplication and division facts to 100	3
+Convert a quantity from a larger unit to a smaller unit by multiplying by a conversion factor	4	Measure the length of an object to the nearest centimetre using a ruler	2
+Convert a quantity from a larger unit to a smaller unit by multiplying by a conversion factor	4	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Identify parallel sides of a quadrilateral and name triangles and trapezoids by their properties	4	Identify the sides and vertices of a polygon	3
+Identify parallel sides of a quadrilateral and name triangles and trapezoids by their properties	4	Identify and name the sides and vertices of a triangle	3
+Identify parallel sides of a quadrilateral and name triangles and trapezoids by their properties	4	Describe parallel and intersecting lines using everyday examples	3
+Convert a fraction with denominator 10 or 100 to its decimal form	4	Identify the numerator and denominator of a fraction and read it aloud	3
+Convert a fraction with denominator 10 or 100 to its decimal form	4	Read and write a three-digit whole number using place value of hundreds, tens, and ones	2
+Identify perpendicular lines and right angles in a figure	4	Identify the sides and vertices of a polygon	3
+Identify perpendicular lines and right angles in a figure	4	Identify and name the sides and vertices of a triangle	3
+Identify perpendicular lines and right angles in a figure	4	Identify straight lines and line segments in a figure	2
+Identify perpendicular lines and right angles in a figure	4	Identify square corners in everyday objects and shapes	2
+Identify rectangles and parallelograms and name their base and height	4	Identify the sides and vertices of a polygon	3
+Identify rectangles and parallelograms and name their base and height	4	Find the area of a rectangle by counting unit squares or using repeated rows	3
+Identify rectangles and parallelograms and name their base and height	4	Identify right angles, and parallel and perpendicular lines in shapes	3
+Identify rectangles and parallelograms and name their base and height	4	Describe and classify quadrilaterals by the number of sides and the length of sides	3
+Write a numerical expression with a missing number represented by a symbol or letter	4	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Write a numerical expression with a missing number represented by a symbol or letter	4	Recall multiplication and division facts to 100	3
+Write a numerical expression with a missing number represented by a symbol or letter	4	Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3
+Find the greatest common factor of two whole numbers by listing their factors	4	Recall multiplication and division facts to 100	3
+Find the greatest common factor of two whole numbers by listing their factors	4	Compare and order whole numbers using greater than, less than, and equal to symbols	2
+Write repeated multiplication of the same factor as a product of equal factors (e.g., 3 × 3 × 3)	4	Recall multiplication and division facts to 100	3
+Write repeated multiplication of the same factor as a product of equal factors (e.g., 3 × 3 × 3)	4	Write a multiplication sentence to represent repeated addition of equal groups	3
+Divide a whole number by a one-digit or two-digit divisor with no remainder	4	Recall multiplication and division facts to 100	3
+Divide a whole number by a one-digit or two-digit divisor with no remainder	4	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Divide a whole number by a one-digit or two-digit divisor with no remainder	4	Multiply a one-digit whole number by a multiple of 10 or a two-digit number	3
+Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4	Solve one-step addition and subtraction word problems within 100	2
+Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4	Solve one-step multiplication and division word problems within 100	3
+Write a number sentence or equation with an operation symbol to represent a word problem with one or two steps	4	Recall multiplication and division facts to 100	3
+Identify equivalent fractions using models and number lines	4	Identify and write unit fractions and fractions of a whole using models	3
+Identify equivalent fractions using models and number lines	4	Locate and place fractions on a number line	3
+Identify equivalent fractions using models and number lines	4	Compare fractions with the same numerator or the same denominator using models	3
+Identify equivalent fractions using models and number lines	4	Recall multiplication and division facts to 100	3
+Multiply a multi-digit whole number by a one-digit number using place value strategies	4	Recall multiplication and division facts to 100	3
+Multiply a multi-digit whole number by a one-digit number using place value strategies	4	Write a three-digit number in expanded form using hundreds, tens, and ones	2
+Multiply a multi-digit whole number by a one-digit number using place value strategies	4	Multiply a one-digit number by a multiple of 10 using place value	3
+Multiply a multi-digit whole number by a one-digit number using place value strategies	4	Add two- and three-digit whole numbers with regrouping	3
+Generate an equivalent fraction by multiplying or dividing the numerator and denominator by the same number	4	Recall multiplication and division facts to 100	3
+Generate an equivalent fraction by multiplying or dividing the numerator and denominator by the same number	4	Identify and write a fraction as part of a whole using a numerator and denominator	3
+Generate an equivalent fraction by multiplying or dividing the numerator and denominator by the same number	4	Represent a unit fraction or a fraction with a number line or area model	3
+Divide a multi-digit whole number by a one-digit whole number using the standard algorithm	4	Recall multiplication and division facts to 100	3
+Divide a multi-digit whole number by a one-digit whole number using the standard algorithm	4	Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3
+Divide a multi-digit whole number by a one-digit whole number using the standard algorithm	4	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Divide a multi-digit whole number by a one-digit number with remainders	4	Recall multiplication and division facts to 100	3
+Divide a multi-digit whole number by a one-digit number with remainders	4	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Divide a multi-digit whole number by a one-digit number with remainders	4	Divide a two-digit whole number by a one-digit number with a remainder	3
+Divide a multi-digit whole number by a one-digit number with remainders	4	Subtract multi-digit whole numbers with regrouping	3
+Multiply a whole number by a fraction using repeated addition of unit fractions	4	Recall multiplication and division facts to 100	3
+Multiply a whole number by a fraction using repeated addition of unit fractions	4	Identify a unit fraction as one equal part of a whole and name it (e.g., 1/4)	3
+Multiply a whole number by a fraction using repeated addition of unit fractions	4	Add fractions with the same denominator using fraction models or number lines	3
+Multiply a whole number by a fraction using repeated addition of unit fractions	4	Write a multiplication sentence to show repeated addition of equal groups	2
+Write equivalent fractions using multiplication by a fraction equal to one	4	Recall multiplication and division facts to 100	3
+Write equivalent fractions using multiplication by a fraction equal to one	4	Identify fractions equivalent to one whole using models	3
+Write equivalent fractions using multiplication by a fraction equal to one	4	Represent equivalent fractions using fraction models or number lines	3
+Divide a multi-digit whole number by a one-digit number with a remainder	4	Recall multiplication and division facts to 100	3
+Divide a multi-digit whole number by a one-digit number with a remainder	4	Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3
+Divide a multi-digit whole number by a one-digit number with a remainder	4	Divide a whole number by a one-digit number using place value and partial quotients with no remainder	3
+Multiply a whole number by multiples of 10 (e.g., 34 × 20)	4	Recall multiplication and division facts to 100	3
+Multiply a whole number by multiples of 10 (e.g., 34 × 20)	4	Multiply a one-digit whole number by 10, 100, or 1000 using place value patterns	3
+Multiply a whole number by multiples of 10 (e.g., 34 × 20)	4	Multiply a two-digit number by a one-digit number	3
+Multiply a whole number by a whole number using the standard algorithm	4	Recall multiplication and division facts to 100	3
+Multiply a whole number by a whole number using the standard algorithm	4	Add multi-digit whole numbers using the standard algorithm with regrouping	3
+Multiply a whole number by a whole number using the standard algorithm	4	Multiply a one-digit whole number by a multiple of 10, 100, or 1000	3
+Multiply a whole number by a whole number using the standard algorithm	4	Write a multi-digit whole number in expanded form using place value	2
+Explain place value of digits in whole numbers up to 1,000,000	4	Explain place value of digits in three-digit whole numbers	2
+Explain place value of digits in whole numbers up to 1,000,000	4	Read and write whole numbers up to 10,000 in standard form and word form	3
+Explain place value of digits in whole numbers up to 1,000,000	4	Recall multiplication and division facts to 100	3
+Multiply a multi-digit whole number by a one-digit number	4	Recall multiplication and division facts to 100	3
+Multiply a multi-digit whole number by a one-digit number	4	Add multi-digit whole numbers with regrouping	3
+Multiply a multi-digit whole number by a one-digit number	4	Write a whole number in expanded form using place value	3
+Identify the sides and vertices of a polygon	3	Identify straight lines and line segments in a figure	2
+Identify the sides and vertices of a polygon	3	Identify square corners in everyday objects and shapes	2
+Identify the sides and vertices of a polygon	3	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3	Solve one-step addition and subtraction word problems within 100	2
+Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Find the unknown number in a one-step addition, subtraction, multiplication, or division equation using a symbol or box for the unknown	3	Add and subtract whole numbers within 100 using the relationship between addition and subtraction	2
+Identify and name the sides and vertices of a triangle	3	Identify straight lines and line segments in a figure	2
+Identify and name the sides and vertices of a triangle	3	Identify square corners in everyday objects and shapes	2
+Identify and name the sides and vertices of a triangle	3	Recognize and name common two-dimensional shapes including triangles	1
+Find the area of a rectangle by counting unit squares or using repeated rows	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Find the area of a rectangle by counting unit squares or using repeated rows	3	Identify square corners in everyday objects and shapes	2
+Find the area of a rectangle by counting unit squares or using repeated rows	3	Count by 2s, 5s, and 10s to 100 using skip counting	2
+Find the area of a rectangle by counting unit squares or using repeated rows	3	Partition a rectangle into rows and columns of equal-size squares and count the squares	2
+Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3	Solve one-step addition and subtraction word problems within 100	2
+Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3	Write a number sentence to represent an addition or subtraction situation within 20	1
+Explain that addition and subtraction are inverse operations and use one to undo the other in a number sentence	3	Add and subtract within 100 using place value strategies	2
+Recall multiplication and division facts to 100	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Recall multiplication and division facts to 100	3	Skip count by 2s, 5s, and 10s to 100	2
+Recall multiplication and division facts to 100	3	Solve one-step addition and subtraction word problems within 100	2
+Identify and describe angles as right, acute, or obtuse by comparing to a right angle	3	Identify square corners in everyday objects and shapes	2
+Identify and describe angles as right, acute, or obtuse by comparing to a right angle	3	Identify straight lines and line segments in a figure	2
+Identify a right angle as a square corner in shapes and objects	3	Identify square corners in everyday objects and shapes	2
+Identify a right angle as a square corner in shapes and objects	3	Identify straight lines and line segments in a figure	2
+Identify an angle as two rays or sides meeting at a shared endpoint (vertex)	3	Identify straight lines and line segments in a figure	2
+Identify an angle as two rays or sides meeting at a shared endpoint (vertex)	3	Identify square corners in everyday objects and shapes	2
+Represent and name unit fractions and fractions with denominators 10 and 100	3	Partition a circle or rectangle into 2, 3, or 4 equal shares and name them halves, thirds, and fourths	2
+Represent and name unit fractions and fractions with denominators 10 and 100	3	Explain place value of digits in three-digit whole numbers	2
+Represent and name unit fractions and fractions with denominators 10 and 100	3	Place and read whole numbers on a number line	2
+Subtract two multi-digit whole numbers with and without regrouping	3	Explain the place value of each digit in a three-digit number	2
+Subtract two multi-digit whole numbers with and without regrouping	3	Subtract a one-digit or two-digit number from a two-digit number within 100	2
+Subtract two multi-digit whole numbers with and without regrouping	3	Subtract single-digit numbers fluently within 20	1
+Subtract two multi-digit whole numbers with and without regrouping	3	Write a three-digit number in expanded form using hundreds, tens, and ones	2
+Identify and write unit fractions and fractions of a whole using models	3	Partition circles and rectangles into two, three, or four equal shares and name them halves, thirds, and fourths	2
+Identify and write unit fractions and fractions of a whole using models	3	Describe a whole as made of two, three, or four equal shares	2
+Identify and write unit fractions and fractions of a whole using models	3	Count objects to 100 and write the number that tells how many	1
+Read and write decimals to tenths and hundredths using place value	3	Read and write whole numbers to 1000 using place value	2
+Read and write decimals to tenths and hundredths using place value	3	Explain the place value of each digit in a three-digit number	2
+Read and write decimals to tenths and hundredths using place value	3	Identify halves, fourths, and tenths of a whole as equal parts of a shape	2
+Describe parallel and intersecting lines using everyday examples	3	Identify straight lines and line segments in a figure	2
+Describe parallel and intersecting lines using everyday examples	3	Identify square corners in everyday objects and shapes	2
+Place fractions with denominators 2, 3, 4, 6, and 8 on a number line	3	Place and read whole numbers on a number line	2
+Place fractions with denominators 2, 3, 4, 6, and 8 on a number line	3	Partition a shape into 2, 3, or 4 equal parts and name the parts as halves, thirds, or fourths	2
+Place fractions with denominators 2, 3, 4, 6, and 8 on a number line	3	Measure the length of an object to the nearest centimetre using a ruler	2
+Multiply a whole number by 10 using place value patterns	3	Explain the place value of each digit in a three-digit number	2
+Multiply a whole number by 10 using place value patterns	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Multiply a whole number by 10 using place value patterns	3	Write a three-digit number in expanded form using hundreds, tens, and ones	2
+Identify right angles, and parallel and perpendicular lines in shapes	3	Identify straight lines and line segments in a figure	2
+Identify right angles, and parallel and perpendicular lines in shapes	3	Identify square corners in everyday objects and shapes	2
+Identify right angles, and parallel and perpendicular lines in shapes	3	Name common two-dimensional shapes and describe their sides and corners	2
+Identify the numerator and denominator of a fraction and read it aloud	3	Partition a shape into 2, 3, or 4 equal parts and name the parts as halves, thirds, or fourths	2
+Identify the numerator and denominator of a fraction and read it aloud	3	Count and write whole numbers to 100	1
+Identify the numerator and denominator of a fraction and read it aloud	3	Describe a whole as made of equal parts and tell whether parts are equal or unequal	2
+Describe and classify quadrilaterals by the number of sides and the length of sides	3	Identify straight lines and line segments in a figure	2
+Describe and classify quadrilaterals by the number of sides and the length of sides	3	Measure the length of an object to the nearest centimetre using a ruler	2
+Describe and classify quadrilaterals by the number of sides and the length of sides	3	Name and describe two-dimensional shapes by their number of sides and corners	1
+Describe and classify quadrilaterals by the number of sides and the length of sides	3	Compare the lengths of two objects as longer, shorter, or equal	1
+Multiply a one-digit whole number by a multiple of 10 or a two-digit number	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Multiply a one-digit whole number by a multiple of 10 or a two-digit number	3	Explain the place value of each digit in a three-digit number	2
+Multiply a one-digit whole number by a multiple of 10 or a two-digit number	3	Write a three-digit number in expanded form using hundreds, tens, and ones	2
+Solve one-step multiplication and division word problems within 100	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Solve one-step multiplication and division word problems within 100	3	Solve one-step addition and subtraction word problems within 100	2
+Solve one-step multiplication and division word problems within 100	3	Divide a set of objects into equal groups by sharing or grouping	2
+Write a multiplication sentence to represent repeated addition of equal groups	3	Write a repeated addition sentence for equal groups of objects	2
+Write a multiplication sentence to represent repeated addition of equal groups	3	Count equal groups of objects to find the total	2
+Write a multiplication sentence to represent repeated addition of equal groups	3	Skip count by 2s, 5s, and 10s	2
+Locate and place fractions on a number line	3	Place and read whole numbers on a number line	2
+Locate and place fractions on a number line	3	Identify halves, thirds, and fourths as equal parts of a whole shape	2
+Locate and place fractions on a number line	3	Partition a line segment into equal-length parts	2
+Multiply a one-digit number by a multiple of 10 using place value	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Multiply a one-digit number by a multiple of 10 using place value	3	Explain the place value of each digit in a three-digit number	2
+Compare fractions with the same numerator or the same denominator using models	3	Partition a circle or rectangle into 2, 3, or 4 equal shares and name the shares as halves, thirds, or fourths	2
+Compare fractions with the same numerator or the same denominator using models	3	Describe a whole as made of 2, 3, or 4 equal shares	2
+Compare fractions with the same numerator or the same denominator using models	3	Compare and order whole numbers using greater than, less than, and equal to symbols	2
+Add two- and three-digit whole numbers with regrouping	3	Explain the place value of each digit in a three-digit number	2
+Add two- and three-digit whole numbers with regrouping	3	Add two two-digit whole numbers with regrouping within 100	2
+Add two- and three-digit whole numbers with regrouping	3	Add two-digit and one-digit whole numbers without regrouping	2
+Add two- and three-digit whole numbers with regrouping	3	Write a three-digit number in expanded form using hundreds, tens, and ones	2
+Represent a unit fraction or a fraction with a number line or area model	3	Place and read whole numbers on a number line	2
+Represent a unit fraction or a fraction with a number line or area model	3	Partition a rectangle or circle into 2, 3, or 4 equal shares and name the shares as halves, thirds, or fourths	2
+Represent a unit fraction or a fraction with a number line or area model	3	Describe a whole as made of two, three, or four equal shares	2
+Divide a two-digit whole number by a one-digit number with a remainder	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Divide a two-digit whole number by a one-digit number with a remainder	3	Share a set of up to 20 objects equally among groups and state how many are left over	2
+Divide a two-digit whole number by a one-digit number with a remainder	3	Subtract a two-digit whole number from a two-digit whole number within 100	2
+Divide a two-digit whole number by a one-digit number with a remainder	3	Skip count by 2, 3, 4, 5, and 10 to find the number of objects in equal groups	2
+Identify and write a fraction as part of a whole using a numerator and denominator	3	Partition a circle or rectangle into 2, 3, or 4 equal shares	2
+Identify and write a fraction as part of a whole using a numerator and denominator	3	Name equal shares of a whole as halves, thirds, and fourths	2
+Identify and write a fraction as part of a whole using a numerator and denominator	3	Count and write whole numbers to 100	1
+Identify and write a fraction as part of a whole using a numerator and denominator	3	Count the parts in a set or shape and write the count as a number	1
+Subtract multi-digit whole numbers with regrouping	3	Explain the place value of each digit in a three-digit number	2
+Subtract multi-digit whole numbers with regrouping	3	Subtract two-digit whole numbers within 100 with regrouping	2
+Subtract multi-digit whole numbers with regrouping	3	Subtract single-digit numbers from numbers within 20 using subtraction facts	1
+Identify a unit fraction as one equal part of a whole and name it (e.g., 1/4)	3	Partition a circle or rectangle into 2, 3, or 4 equal shares	2
+Identify a unit fraction as one equal part of a whole and name it (e.g., 1/4)	3	Describe equal shares using the words halves, thirds, and fourths	2
+Identify a unit fraction as one equal part of a whole and name it (e.g., 1/4)	3	Identify whether a shape is divided into equal or unequal parts	1
+Identify fractions equivalent to one whole using models	3	Partition circles and rectangles into two, three, or four equal shares	2
+Identify fractions equivalent to one whole using models	3	Name halves, thirds, and fourths as equal shares of a whole	2
+Identify fractions equivalent to one whole using models	3	Count equal parts of a partitioned shape	1
+Add fractions with the same denominator using fraction models or number lines	3	Place and read whole numbers on a number line	2
+Add fractions with the same denominator using fraction models or number lines	3	Partition a circle or rectangle into equal parts and name the parts as halves, thirds, and fourths	2
+Add fractions with the same denominator using fraction models or number lines	3	Add two whole numbers within 20 fluently	2
+Add fractions with the same denominator using fraction models or number lines	3	Count by ones using a number line or objects to find the total	1
+Represent equivalent fractions using fraction models or number lines	3	Partition circles and rectangles into two, three, or four equal shares and name them halves, thirds, and fourths	2
+Represent equivalent fractions using fraction models or number lines	3	Place and read whole numbers on a number line	2
+Represent equivalent fractions using fraction models or number lines	3	Describe a whole as made of equal shares using the words halves, thirds, fourths, and quarters	2
+Multiply a one-digit whole number by 10, 100, or 1000 using place value patterns	3	Explain the place value of each digit in a three-digit number	2
+Multiply a one-digit whole number by 10, 100, or 1000 using place value patterns	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Multiply a one-digit whole number by 10, 100, or 1000 using place value patterns	3	Read and write whole numbers to 1000 using place value	2
+Divide a whole number by a one-digit number using place value and partial quotients with no remainder	3	Explain the place value of each digit in a three-digit number	2
+Divide a whole number by a one-digit number using place value and partial quotients with no remainder	3	Write a three-digit number in expanded form using hundreds, tens, and ones	2
+Divide a whole number by a one-digit number using place value and partial quotients with no remainder	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Divide a whole number by a one-digit number using place value and partial quotients with no remainder	3	Share a set of objects equally into groups and state how many are in each group	2
+Multiply a two-digit number by a one-digit number	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Multiply a two-digit number by a one-digit number	3	Explain the place value of each digit in a three-digit number	2
+Multiply a two-digit number by a one-digit number	3	Recall multiplication facts for products up to 5 times 5	2
+Add multi-digit whole numbers using the standard algorithm with regrouping	3	Explain the place value of each digit in a three-digit number	2
+Add multi-digit whole numbers using the standard algorithm with regrouping	3	Write a three-digit number in expanded form using hundreds, tens, and ones	2
+Add multi-digit whole numbers using the standard algorithm with regrouping	3	Add two two-digit numbers with regrouping using place value	2
+Multiply a one-digit whole number by a multiple of 10, 100, or 1000	3	Write a multiplication sentence to show repeated addition of equal groups	2
+Multiply a one-digit whole number by a multiple of 10, 100, or 1000	3	Explain the place value of each digit in a three-digit number	2
+Multiply a one-digit whole number by a multiple of 10, 100, or 1000	3	Write a three-digit number in expanded form using hundreds, tens, and ones	2
+Read and write whole numbers up to 10,000 in standard form and word form	3	Read and write whole numbers to 1000 using place value	2
+Read and write whole numbers up to 10,000 in standard form and word form	3	Explain the place value of each digit in a three-digit number	2
+Add multi-digit whole numbers with regrouping	3	Explain the place value of each digit in a three-digit number	2
+Add multi-digit whole numbers with regrouping	3	Add two two-digit numbers without regrouping	2
+Add multi-digit whole numbers with regrouping	3	Recall addition facts within 20 fluently	2
+Add multi-digit whole numbers with regrouping	3	Write a three-digit number in expanded form using hundreds, tens, and ones	2
+Write a whole number in expanded form using place value	3	Write a three-digit number in expanded form using hundreds, tens, and ones	2
+Write a whole number in expanded form using place value	3	Explain the place value of each digit in a three-digit number	2
+Write a whole number in expanded form using place value	3	Read and write whole numbers to 1000 using place value	2
+Read and write whole numbers to 1000 using place value	2	Count and write whole numbers to 100	1
+Read and write whole numbers to 1000 using place value	2	Count objects to 100 and write the number that tells how many	1
+Read and write whole numbers to 1000 using place value	2	Understand that the two digits of a two-digit number represent amounts of tens and ones	1
+Place and read whole numbers on a number line	2	Count and write whole numbers to 100	1
+Place and read whole numbers on a number line	2	Count by ones using a number line or objects to find the total	1
+Place and read whole numbers on a number line	2	Compare the lengths of two objects as longer, shorter, or equal	1
+Explain the place value of each digit in a three-digit number	2	Count and write whole numbers to 100	1
+Explain the place value of each digit in a three-digit number	2	Explain the place value of tens and ones digits in a two-digit number	1
+Measure the length of an object to the nearest centimetre using a ruler	2	Compare the lengths of two objects as longer, shorter, or equal	1
+Measure the length of an object to the nearest centimetre using a ruler	2	Count and write whole numbers to 100	1
+Measure the length of an object to the nearest centimetre using a ruler	2	Measure the length of an object using non-standard units placed end to end	1
+Place and compare whole numbers on a number line	2	Count and write whole numbers to 100	1
+Place and compare whole numbers on a number line	2	Count by ones using a number line or objects to find the total	1
+Place and compare whole numbers on a number line	2	Compare the lengths of two objects as longer, shorter, or equal	1
+Compare and order whole numbers using greater than, less than, and equal to symbols	2	Count and write whole numbers to 100	1
+Compare and order whole numbers using greater than, less than, and equal to symbols	2	Count objects to 100 and write the number that tells how many	1
+Compare and order whole numbers using greater than, less than, and equal to symbols	2	Compare the lengths of two objects as longer, shorter, or equal	1
+Read and write a three-digit whole number using place value of hundreds, tens, and ones	2	Count and write whole numbers to 100	1
+Read and write a three-digit whole number using place value of hundreds, tens, and ones	2	Read and write two-digit numbers using tens and ones	1
+Identify straight lines and line segments in a figure	2	Name and describe two-dimensional shapes by their number of sides and corners	1
+Identify straight lines and line segments in a figure	2	Compare the lengths of two objects as longer, shorter, or equal	1
+Identify square corners in everyday objects and shapes	2	Name and describe two-dimensional shapes by their number of sides and corners	1
+Identify square corners in everyday objects and shapes	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Solve one-step addition and subtraction word problems within 100	2	Write a number sentence to represent an addition or subtraction situation within 20	1
+Solve one-step addition and subtraction word problems within 100	2	Subtract single-digit numbers fluently within 20	1
+Solve one-step addition and subtraction word problems within 100	2	Count and write whole numbers to 100	1
+Write a three-digit number in expanded form using hundreds, tens, and ones	2	Count and write whole numbers to 100	1
+Write a three-digit number in expanded form using hundreds, tens, and ones	2	Identify the tens digit and ones digit in a two-digit number	1
+Write a three-digit number in expanded form using hundreds, tens, and ones	2	Write a two-digit number in expanded form using tens and ones	1
+Write a multiplication sentence to show repeated addition of equal groups	2	Write a number sentence to represent an addition or subtraction situation within 20	1
+Write a multiplication sentence to show repeated addition of equal groups	2	Count objects to 100 and write the number that tells how many	1
+Explain place value of digits in three-digit whole numbers	2	Count and write whole numbers to 100	1
+Explain place value of digits in three-digit whole numbers	2	Count objects to 100 and write the number that tells how many	1
+Explain place value of digits in three-digit whole numbers	2	Explain place value of digits in two-digit whole numbers as tens and ones	1
+Count by 2s, 5s, and 10s to 100 using skip counting	2	Count and write whole numbers to 100	1
+Count by 2s, 5s, and 10s to 100 using skip counting	2	Count objects to 100 and write the number that tells how many	1
+Add and subtract whole numbers within 100 using the relationship between addition and subtraction	2	Subtract single-digit numbers fluently within 20	1
+Add and subtract whole numbers within 100 using the relationship between addition and subtraction	2	Write a number sentence to represent an addition or subtraction situation within 20	1
+Add and subtract whole numbers within 100 using the relationship between addition and subtraction	2	Count and write whole numbers to 100	1
+Write a multi-digit whole number in expanded form using place value	2	Identify the tens digit and ones digit in a two-digit number and state the value of each	1
+Write a multi-digit whole number in expanded form using place value	2	Compose and decompose two-digit numbers as tens and ones	1
+Write a multi-digit whole number in expanded form using place value	2	Count and write whole numbers to 100	1
+Write a multi-digit whole number in expanded form using place value	2	Add a multiple of ten and a single-digit number within 100	1
+Partition a rectangle into rows and columns of equal-size squares and count the squares	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition a rectangle into rows and columns of equal-size squares and count the squares	2	Identify whether a shape is divided into equal or unequal parts	1
+Partition a rectangle into rows and columns of equal-size squares and count the squares	2	Count objects to 100 and write the number that tells how many	1
+Partition a rectangle into rows and columns of equal-size squares and count the squares	2	Compare the lengths of two objects as longer, shorter, or equal	1
+Add and subtract within 100 using place value strategies	2	Add single-digit numbers fluently within 20	1
+Add and subtract within 100 using place value strategies	2	Subtract single-digit numbers fluently within 20	1
+Add and subtract within 100 using place value strategies	2	Represent two-digit numbers as tens and ones using objects or drawings	1
+Add and subtract within 100 using place value strategies	2	Add or subtract 10 from a two-digit number mentally	1
+Skip count by 2s, 5s, and 10s to 100	2	Count and write whole numbers to 100	1
+Skip count by 2s, 5s, and 10s to 100	2	Count objects to 100 and write the number that tells how many	1
+Partition a circle or rectangle into 2, 3, or 4 equal shares and name them halves, thirds, and fourths	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition a circle or rectangle into 2, 3, or 4 equal shares and name them halves, thirds, and fourths	2	Identify whether a shape is divided into equal or unequal parts	1
+Partition a circle or rectangle into 2, 3, or 4 equal shares and name them halves, thirds, and fourths	2	Count equal parts of a partitioned shape	1
+Subtract a one-digit or two-digit number from a two-digit number within 100	2	Subtract single-digit numbers fluently within 20	1
+Subtract a one-digit or two-digit number from a two-digit number within 100	2	Count and write whole numbers to 100	1
+Subtract a one-digit or two-digit number from a two-digit number within 100	2	Subtract multiples of 10 from multiples of 10 within 100	1
+Subtract a one-digit or two-digit number from a two-digit number within 100	2	Identify the tens digit and ones digit in a two-digit number	1
+Partition circles and rectangles into two, three, or four equal shares and name them halves, thirds, and fourths	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition circles and rectangles into two, three, or four equal shares and name them halves, thirds, and fourths	2	Identify whether a shape is divided into equal or unequal parts	1
+Partition circles and rectangles into two, three, or four equal shares and name them halves, thirds, and fourths	2	Count equal parts of a partitioned shape	1
+Describe a whole as made of two, three, or four equal shares	2	Identify whether a shape is divided into equal or unequal parts	1
+Describe a whole as made of two, three, or four equal shares	2	Count equal parts of a partitioned shape	1
+Describe a whole as made of two, three, or four equal shares	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Identify halves, fourths, and tenths of a whole as equal parts of a shape	2	Identify whether a shape is divided into equal or unequal parts	1
+Identify halves, fourths, and tenths of a whole as equal parts of a shape	2	Count equal parts of a partitioned shape	1
+Identify halves, fourths, and tenths of a whole as equal parts of a shape	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition a shape into 2, 3, or 4 equal parts and name the parts as halves, thirds, or fourths	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition a shape into 2, 3, or 4 equal parts and name the parts as halves, thirds, or fourths	2	Identify whether a shape is divided into equal or unequal parts	1
+Partition a shape into 2, 3, or 4 equal parts and name the parts as halves, thirds, or fourths	2	Count equal parts of a partitioned shape	1
+Describe a whole as made of equal parts and tell whether parts are equal or unequal	2	Identify whether a shape is divided into equal or unequal parts	1
+Describe a whole as made of equal parts and tell whether parts are equal or unequal	2	Count equal parts of a partitioned shape	1
+Describe a whole as made of equal parts and tell whether parts are equal or unequal	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Divide a set of objects into equal groups by sharing or grouping	2	Count objects to 100 and write the number that tells how many	1
+Divide a set of objects into equal groups by sharing or grouping	2	Identify whether a shape is divided into equal or unequal parts	1
+Divide a set of objects into equal groups by sharing or grouping	2	Subtract single-digit numbers fluently within 20	1
+Name common two-dimensional shapes and describe their sides and corners	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Name common two-dimensional shapes and describe their sides and corners	2	Name and describe two-dimensional shapes by their number of sides and corners	1
+Name common two-dimensional shapes and describe their sides and corners	2	Count the parts in a set or shape and write the count as a number	1
+Write a repeated addition sentence for equal groups of objects	2	Write a number sentence to represent an addition or subtraction situation within 20	1
+Write a repeated addition sentence for equal groups of objects	2	Count objects to 100 and write the number that tells how many	1
+Write a repeated addition sentence for equal groups of objects	2	Identify equal groups of objects	1
+Count equal groups of objects to find the total	2	Count objects to 100 and write the number that tells how many	1
+Count equal groups of objects to find the total	2	Count by ones using a number line or objects to find the total	1
+Count equal groups of objects to find the total	2	Identify whether a shape is divided into equal or unequal parts	1
+Skip count by 2s, 5s, and 10s	2	Count and write whole numbers to 100	1
+Skip count by 2s, 5s, and 10s	2	Count objects to 100 and write the number that tells how many	1
+Identify halves, thirds, and fourths as equal parts of a whole shape	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Identify halves, thirds, and fourths as equal parts of a whole shape	2	Identify whether a shape is divided into equal or unequal parts	1
+Identify halves, thirds, and fourths as equal parts of a whole shape	2	Count equal parts of a partitioned shape	1
+Partition a line segment into equal-length parts	2	Compare the lengths of two objects as longer, shorter, or equal	1
+Partition a line segment into equal-length parts	2	Identify whether a shape is divided into equal or unequal parts	1
+Partition a line segment into equal-length parts	2	Count equal parts of a partitioned shape	1
+Describe a whole as made of 2, 3, or 4 equal shares	2	Identify whether a shape is divided into equal or unequal parts	1
+Describe a whole as made of 2, 3, or 4 equal shares	2	Count equal parts of a partitioned shape	1
+Describe a whole as made of 2, 3, or 4 equal shares	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition a circle or rectangle into 2, 3, or 4 equal shares and name the shares as halves, thirds, or fourths	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition a circle or rectangle into 2, 3, or 4 equal shares and name the shares as halves, thirds, or fourths	2	Identify whether a shape is divided into equal or unequal parts	1
+Partition a circle or rectangle into 2, 3, or 4 equal shares and name the shares as halves, thirds, or fourths	2	Count equal parts of a partitioned shape	1
+Add two two-digit whole numbers with regrouping within 100	2	Add a one-digit number to a two-digit number within 100 without regrouping	1
+Add two two-digit whole numbers with regrouping within 100	2	Add single-digit numbers fluently within 20	1
+Add two two-digit whole numbers with regrouping within 100	2	Add multiples of ten within 100	1
+Add two two-digit whole numbers with regrouping within 100	2	Explain two-digit numbers as tens and ones using place value	1
+Add two-digit and one-digit whole numbers without regrouping	2	Add single-digit numbers fluently within 20	1
+Add two-digit and one-digit whole numbers without regrouping	2	Identify the tens digit and ones digit in a two-digit number	1
+Add two-digit and one-digit whole numbers without regrouping	2	Count and write whole numbers to 100	1
+Partition a rectangle or circle into 2, 3, or 4 equal shares and name the shares as halves, thirds, or fourths	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition a rectangle or circle into 2, 3, or 4 equal shares and name the shares as halves, thirds, or fourths	2	Identify whether a shape is divided into equal or unequal parts	1
+Partition a rectangle or circle into 2, 3, or 4 equal shares and name the shares as halves, thirds, or fourths	2	Count equal parts of a partitioned shape	1
+Share a set of up to 20 objects equally among groups and state how many are left over	2	Count objects to 100 and write the number that tells how many	1
+Share a set of up to 20 objects equally among groups and state how many are left over	2	Subtract single-digit numbers fluently within 20	1
+Share a set of up to 20 objects equally among groups and state how many are left over	2	Identify whether a shape is divided into equal or unequal parts	1
+Skip count by 2, 3, 4, 5, and 10 to find the number of objects in equal groups	2	Count objects to 100 and write the number that tells how many	1
+Skip count by 2, 3, 4, 5, and 10 to find the number of objects in equal groups	2	Count and write whole numbers to 100	1
+Partition a circle or rectangle into 2, 3, or 4 equal shares	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition a circle or rectangle into 2, 3, or 4 equal shares	2	Identify whether a shape is divided into equal or unequal parts	1
+Partition a circle or rectangle into 2, 3, or 4 equal shares	2	Count equal parts of a partitioned shape	1
+Subtract a two-digit whole number from a two-digit whole number within 100	2	Subtract single-digit numbers fluently within 20	1
+Subtract a two-digit whole number from a two-digit whole number within 100	2	Count and write whole numbers to 100	1
+Subtract a two-digit whole number from a two-digit whole number within 100	2	Understand that the digits of a two-digit number represent tens and ones	1
+Subtract a two-digit whole number from a two-digit whole number within 100	2	Subtract a multiple of 10 from a multiple of 10 within 100	1
+Name equal shares of a whole as halves, thirds, and fourths	2	Identify whether a shape is divided into equal or unequal parts	1
+Name equal shares of a whole as halves, thirds, and fourths	2	Count equal parts of a partitioned shape	1
+Name equal shares of a whole as halves, thirds, and fourths	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Subtract two-digit whole numbers within 100 with regrouping	2	Subtract single-digit numbers fluently within 20	1
+Subtract two-digit whole numbers within 100 with regrouping	2	Count and write whole numbers to 100	1
+Subtract two-digit whole numbers within 100 with regrouping	2	Subtract a one-digit or multiple of ten from a two-digit whole number without regrouping within 100	1
+Subtract two-digit whole numbers within 100 with regrouping	2	Represent two-digit numbers as tens and ones	1
+Describe equal shares using the words halves, thirds, and fourths	2	Identify whether a shape is divided into equal or unequal parts	1
+Describe equal shares using the words halves, thirds, and fourths	2	Count equal parts of a partitioned shape	1
+Describe equal shares using the words halves, thirds, and fourths	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Name halves, thirds, and fourths as equal shares of a whole	2	Identify whether a shape is divided into equal or unequal parts	1
+Name halves, thirds, and fourths as equal shares of a whole	2	Count equal parts of a partitioned shape	1
+Name halves, thirds, and fourths as equal shares of a whole	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition circles and rectangles into two, three, or four equal shares	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition circles and rectangles into two, three, or four equal shares	2	Identify whether a shape is divided into equal or unequal parts	1
+Partition circles and rectangles into two, three, or four equal shares	2	Count equal parts of a partitioned shape	1
+Partition a circle or rectangle into equal parts and name the parts as halves, thirds, and fourths	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Partition a circle or rectangle into equal parts and name the parts as halves, thirds, and fourths	2	Identify whether a shape is divided into equal or unequal parts	1
+Partition a circle or rectangle into equal parts and name the parts as halves, thirds, and fourths	2	Count equal parts of a partitioned shape	1
+Add two whole numbers within 20 fluently	2	Count by ones using a number line or objects to find the total	1
+Add two whole numbers within 20 fluently	2	Count and write whole numbers to 100	1
+Add two whole numbers within 20 fluently	2	Write a number sentence to represent an addition or subtraction situation within 20	1
+Describe a whole as made of equal shares using the words halves, thirds, fourths, and quarters	2	Identify whether a shape is divided into equal or unequal parts	1
+Describe a whole as made of equal shares using the words halves, thirds, fourths, and quarters	2	Count equal parts of a partitioned shape	1
+Describe a whole as made of equal shares using the words halves, thirds, fourths, and quarters	2	Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1
+Add two two-digit numbers without regrouping	2	Identify the tens digit and ones digit in a two-digit number	1
+Add two two-digit numbers without regrouping	2	Add single-digit numbers fluently within 20	1
+Add two two-digit numbers without regrouping	2	Add a multiple of ten to a two-digit number	1
+Add two two-digit numbers with regrouping using place value	2	Add a one-digit number to a two-digit number within 100	1
+Add two two-digit numbers with regrouping using place value	2	Add single-digit numbers fluently within 20	1
+Add two two-digit numbers with regrouping using place value	2	Add multiples of ten to a two-digit number within 100	1
+Add two two-digit numbers with regrouping using place value	2	Explain that a two-digit number is made of tens and ones	1
+Recall multiplication facts for products up to 5 times 5	2	Add equal groups using repeated addition within 25	1
+Recall multiplication facts for products up to 5 times 5	2	Count objects to 100 and write the number that tells how many	1
+Share a set of objects equally into groups and state how many are in each group	2	Count objects to 100 and write the number that tells how many	1
+Share a set of objects equally into groups and state how many are in each group	2	Subtract single-digit numbers fluently within 20	1
+Share a set of objects equally into groups and state how many are in each group	2	Identify whether a shape is divided into equal or unequal parts	1
+Recall addition facts within 20 fluently	2	Add two single-digit numbers within 20 using counting strategies	1
+Recall addition facts within 20 fluently	2	Count by ones using a number line or objects to find the total	1
+Recall addition facts within 20 fluently	2	Write a number sentence to represent an addition or subtraction situation within 20	1
+Recognize and name common two-dimensional shapes including triangles	1	Match identical shapes by sorting them into groups	0
+Recognize and name common two-dimensional shapes including triangles	1	Describe shapes using words such as sides, corners, round, and straight	0
+Recognize and name common two-dimensional shapes including triangles	1	Identify and name a circle	0
+Count and write whole numbers to 100	1	Count aloud in order from 1 to 20	0
+Count and write whole numbers to 100	1	Write the numerals 0 to 9	0
+Count and write whole numbers to 100	1	Count a set of up to 20 objects and say how many	0
+Subtract single-digit numbers fluently within 20	1	Subtract within 10 by taking away objects and counting what remains	0
+Subtract single-digit numbers fluently within 20	1	Count backward from 20 by ones	0
+Subtract single-digit numbers fluently within 20	1	Compose and decompose numbers up to 10 into pairs	0
+Subtract single-digit numbers fluently within 20	1	Read and write numerals from 0 to 20	0
+Count objects to 100 and write the number that tells how many	1	Count aloud in order from 1 to 100	0
+Count objects to 100 and write the number that tells how many	1	Count a set of up to 20 objects using one-to-one correspondence and say how many	0
+Count objects to 100 and write the number that tells how many	1	Write the numerals 0 to 20	0
+Count objects to 100 and write the number that tells how many	1	Count forward by tens to 100	0
+Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1	Match shapes that are the same size and form	0
+Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1	Sort objects by shape	0
+Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1	Describe the number of sides and corners of a shape	0
+Name common two-dimensional shapes such as triangles, rectangles, squares, and circles	1	Identify round, curved shapes versus shapes with straight edges	0
+Write a number sentence to represent an addition or subtraction situation within 20	1	Solve addition word problems within 10 using objects or drawings	0
+Write a number sentence to represent an addition or subtraction situation within 20	1	Solve subtraction word problems within 10 using objects or drawings	0
+Write a number sentence to represent an addition or subtraction situation within 20	1	Read and write the numerals 0 to 20	0
+Write a number sentence to represent an addition or subtraction situation within 20	1	Explain that the plus sign means putting together and the minus sign means taking away	0
+Name and describe two-dimensional shapes by their number of sides and corners	1	Count objects in a set up to 10	0
+Name and describe two-dimensional shapes by their number of sides and corners	1	Identify and name basic two-dimensional shapes (circle, triangle, square, rectangle)	0
+Name and describe two-dimensional shapes by their number of sides and corners	1	Distinguish a straight side from a curved side on a shape	0
+Name and describe two-dimensional shapes by their number of sides and corners	1	Point to the corners of a shape	0
+Identify whether a shape is divided into equal or unequal parts	1	Identify and name basic shapes such as circles, squares, rectangles, and triangles	0
+Identify whether a shape is divided into equal or unequal parts	1	Compare two objects to tell whether they are the same size	0
+Identify whether a shape is divided into equal or unequal parts	1	Describe parts of a whole object using words such as part, piece, and whole	0
+Count the parts in a set or shape and write the count as a number	1	Say the number words in order from one to ten	0
+Count the parts in a set or shape and write the count as a number	1	Count a set of up to ten objects by pointing to each object once and saying one number word per object	0
+Count the parts in a set or shape and write the count as a number	1	Recognize and name the written digits 0 to 9	0
+Count the parts in a set or shape and write the count as a number	1	Write the digits 0 to 9	0
+Compare the lengths of two objects as longer, shorter, or equal	1	Identify the length of an object as the measurable distance from one end to the other	0
+Compare the lengths of two objects as longer, shorter, or equal	1	Compare two objects using the words longer and shorter by placing them side by side	0
+Compare the lengths of two objects as longer, shorter, or equal	1	Align the endpoints of two objects at a common starting line to compare their lengths	0
+Compare the lengths of two objects as longer, shorter, or equal	1	Use the words same and different to describe two objects	0
+Count equal parts of a partitioned shape	1	Count objects in a set up to 10	0
+Count equal parts of a partitioned shape	1	Recognize basic two-dimensional shapes such as circles, squares, and rectangles	0
+Count equal parts of a partitioned shape	1	Identify when two parts of a shape are the same size	0
+Subtract single-digit numbers from numbers within 20 using subtraction facts	1	Subtract within 10 using objects or pictures	0
+Subtract single-digit numbers from numbers within 20 using subtraction facts	1	Count backward from a number within 20	0
+Subtract single-digit numbers from numbers within 20 using subtraction facts	1	Count a set of up to 20 objects	0
+Subtract single-digit numbers from numbers within 20 using subtraction facts	1	Compose and decompose numbers from 11 to 19 into ten ones and some further ones	0
+Understand that the two digits of a two-digit number represent amounts of tens and ones	1	Count objects up to 20	0
+Understand that the two digits of a two-digit number represent amounts of tens and ones	1	Read and write numerals 0 to 20	0
+Understand that the two digits of a two-digit number represent amounts of tens and ones	1	Compose and decompose numbers 11 to 19 into ten ones and some further ones	0
+Understand that the two digits of a two-digit number represent amounts of tens and ones	1	Count by tens to 100	0
+Measure the length of an object using non-standard units placed end to end	1	Compare the lengths of two objects using words such as longer and shorter	0
+Measure the length of an object using non-standard units placed end to end	1	Count objects in a line up to 20	0
+Measure the length of an object using non-standard units placed end to end	1	Line up identical objects end to end without gaps or overlaps	0
+Count by ones using a number line or objects to find the total	1	Count aloud in order from 1 to 20	0
+Count by ones using a number line or objects to find the total	1	Count a set of up to 10 objects by touching each object once and saying one number per object	0
+Count by ones using a number line or objects to find the total	1	State how many objects are in a set by giving the last number counted	0
+Count by ones using a number line or objects to find the total	1	Identify numbers from 0 to 10 on a number line	0
+Read and write two-digit numbers using tens and ones	1	Count objects up to 20 and say the total	0
+Read and write two-digit numbers using tens and ones	1	Read and write numerals from 0 to 20	0
+Read and write two-digit numbers using tens and ones	1	Group 10 objects to make a ten	0
+Read and write two-digit numbers using tens and ones	1	Compose and decompose teen numbers as ten and some ones	0
+Explain the place value of tens and ones digits in a two-digit number	1	Count objects in a group up to 20	0
+Explain the place value of tens and ones digits in a two-digit number	1	Read and write numerals from 0 to 20	0
+Explain the place value of tens and ones digits in a two-digit number	1	Compose and decompose numbers from 11 to 19 into ten ones and some further ones	0
+Explain the place value of tens and ones digits in a two-digit number	1	Group objects into a set of ten and some leftover ones	0
+Identify the tens digit and ones digit in a two-digit number	1	Count objects up to 20 and say how many	0
+Identify the tens digit and ones digit in a two-digit number	1	Read and write numerals from 0 to 20	0
+Identify the tens digit and ones digit in a two-digit number	1	Make groups of ten from a set of objects and count the leftover ones	0
+Identify the tens digit and ones digit in a two-digit number	1	Compose and decompose numbers from 11 to 19 into ten and some ones	0
+Write a two-digit number in expanded form using tens and ones	1	Read and write numerals from 0 to 20	0
+Write a two-digit number in expanded form using tens and ones	1	Compose and decompose teen numbers as ten ones and some further ones	0
+Write a two-digit number in expanded form using tens and ones	1	Count a collection of up to 20 objects and state how many	0
+Write a two-digit number in expanded form using tens and ones	1	Identify the tens digit and the ones digit in a two-digit number	0
+Add a multiple of ten and a single-digit number within 100	1	Count to 100 by tens	0
+Add a multiple of ten and a single-digit number within 100	1	Add two single-digit numbers within 10	0
+Add a multiple of ten and a single-digit number within 100	1	Count on from a given number up to 100	0
+Identify the tens digit and ones digit in a two-digit number and state the value of each	1	Count objects in a group of up to 20 and state how many	0
+Identify the tens digit and ones digit in a two-digit number and state the value of each	1	Read and write numerals from 0 to 20	0
+Identify the tens digit and ones digit in a two-digit number and state the value of each	1	Group ten objects to make one ten and show the leftover ones for a number from 11 to 19	0
+Compose and decompose two-digit numbers as tens and ones	1	Count objects up to 20 and state how many	0
+Compose and decompose two-digit numbers as tens and ones	1	Compose and decompose numbers 11 to 19 as ten and some ones	0
+Compose and decompose two-digit numbers as tens and ones	1	Read and write numerals from 0 to 20	0
+Compose and decompose two-digit numbers as tens and ones	1	Count by tens to 100	0
+Add single-digit numbers fluently within 20	1	Count objects up to 20	0
+Add single-digit numbers fluently within 20	1	Add two groups of objects with sums within 10 by counting all	0
+Add single-digit numbers fluently within 20	1	Recognize and name numerals 0 to 20	0
+Explain place value of digits in two-digit whole numbers as tens and ones	1	Count objects in a set up to 20	0
+Explain place value of digits in two-digit whole numbers as tens and ones	1	Read and write numerals from 0 to 20	0
+Explain place value of digits in two-digit whole numbers as tens and ones	1	Compose and decompose the numbers 11 to 19 as ten ones and some further ones	0
+Explain place value of digits in two-digit whole numbers as tens and ones	1	Group a collection of objects into a set of ten and a set of leftover ones	0
+Represent two-digit numbers as tens and ones using objects or drawings	1	Count a set of up to 20 objects and state how many there are	0
+Represent two-digit numbers as tens and ones using objects or drawings	1	Read and write numerals from 0 to 20	0
+Represent two-digit numbers as tens and ones using objects or drawings	1	Compose and decompose numbers from 11 to 19 as ten ones and some further ones	0
+Represent two-digit numbers as tens and ones using objects or drawings	1	Draw or model a set of objects to match a given number up to 20	0
+Add or subtract 10 from a two-digit number mentally	1	Count forward and backward within 20 by ones	0
+Add or subtract 10 from a two-digit number mentally	1	Add and subtract within 10 using objects or fingers	0
+Add a one-digit number to a two-digit number within 100 without regrouping	1	Add two one-digit numbers with sums within 10	0
+Add a one-digit number to a two-digit number within 100 without regrouping	1	Count forward from any number within 100	0
+Add a one-digit number to a two-digit number within 100 without regrouping	1	Read and write numerals to 100	0
+Identify equal groups of objects	1	Count objects in a group up to 10	0
+Identify equal groups of objects	1	Sort objects into groups by a shared attribute	0
+Identify equal groups of objects	1	Compare two groups of objects to tell which has more, fewer, or the same	0
+Subtract multiples of 10 from multiples of 10 within 100	1	Count by tens to 100	0
+Subtract multiples of 10 from multiples of 10 within 100	1	Subtract within 10	0
+Subtract multiples of 10 from multiples of 10 within 100	1	Identify the number of tens in a multiple of 10	0
+Add multiples of ten within 100	1	Count by tens to 100	0
+Add multiples of ten within 100	1	Add two single-digit numbers within 10	0
+Add multiples of ten within 100	1	Identify the tens digit in a two-digit multiple of ten	0
+Understand that the digits of a two-digit number represent tens and ones	1	Count objects in a set up to 20	0
+Understand that the digits of a two-digit number represent tens and ones	1	Read and write numerals from 0 to 20	0
+Understand that the digits of a two-digit number represent tens and ones	1	Compose and decompose numbers 11 to 19 into ten ones and some further ones	0
+Understand that the digits of a two-digit number represent tens and ones	1	Group objects into a set of ten	0
+Subtract a multiple of 10 from a multiple of 10 within 100	1	Count by tens to 100	0
+Subtract a multiple of 10 from a multiple of 10 within 100	1	Subtract within 10	0
+Subtract a multiple of 10 from a multiple of 10 within 100	1	Read and write multiples of 10 up to 100	0
+Explain two-digit numbers as tens and ones using place value	1	Count objects up to 20 and say how many	0
+Explain two-digit numbers as tens and ones using place value	1	Read and write numerals from 0 to 20	0
+Explain two-digit numbers as tens and ones using place value	1	Compose and decompose teen numbers into ten ones and some further ones using objects	0
+Explain two-digit numbers as tens and ones using place value	1	Group a set of objects into one group of ten and leftover ones	0
+Represent two-digit numbers as tens and ones	1	Count objects up to 20	0
+Represent two-digit numbers as tens and ones	1	Read and write numerals from 11 to 19	0
+Represent two-digit numbers as tens and ones	1	Compose and decompose numbers 11 to 19 as ten ones and some further ones	0
+Represent two-digit numbers as tens and ones	1	Count by tens to 100 using objects grouped in tens	0
+Subtract a one-digit or multiple of ten from a two-digit whole number without regrouping within 100	1	Subtract within 10 using objects or fingers	0
+Subtract a one-digit or multiple of ten from a two-digit whole number without regrouping within 100	1	Count backward by ones from a number within 20	0
+Subtract a one-digit or multiple of ten from a two-digit whole number without regrouping within 100	1	Count by tens to 100	0
+Add a multiple of ten to a two-digit number	1	Count by tens to 100 starting from any multiple of ten	0
+Add a multiple of ten to a two-digit number	1	Add a one-digit number to a number within 20	0
+Add a one-digit number to a two-digit number within 100	1	Add two one-digit numbers with sums within 20	0
+Add a one-digit number to a two-digit number within 100	1	Count forward from any number within 100	0
+Add a one-digit number to a two-digit number within 100	1	Identify the tens and ones digits in a two-digit number	0
+Add multiples of ten to a two-digit number within 100	1	Count by tens to 100 starting from 0	0
+Add multiples of ten to a two-digit number within 100	1	Add two single-digit numbers with a sum up to 10	0
+Add multiples of ten to a two-digit number within 100	1	Count forward by ones from any number within 100	0
+Explain that a two-digit number is made of tens and ones	1	Count objects up to 20 and state how many	0
+Explain that a two-digit number is made of tens and ones	1	Read and write numerals from 0 to 20	0
+Explain that a two-digit number is made of tens and ones	1	Compose and decompose numbers from 11 to 19 as ten and some ones	0
+Explain that a two-digit number is made of tens and ones	1	Group a collection of objects into a set of ten and leftover ones	0
+Add equal groups using repeated addition within 25	1	Add two numbers with sums up to 10	0
+Add equal groups using repeated addition within 25	1	Count objects in a group up to 20	0
+Add equal groups using repeated addition within 25	1	Skip count by 2s, 5s, and 10s to 20	0
+Add two single-digit numbers within 20 using counting strategies	1	Count aloud forward from 1 to 20	0
+Add two single-digit numbers within 20 using counting strategies	1	Count a set of up to 10 objects and state how many there are	0
+Add two single-digit numbers within 20 using counting strategies	1	Recognize and name the numerals 0 to 10	0
+Add two single-digit numbers within 20 using counting strategies	1	Combine two groups of objects to find the total within 10	0
